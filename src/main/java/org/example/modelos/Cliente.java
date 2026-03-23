@@ -3,10 +3,10 @@ package org.example.modelos;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Data
-@AllArgsConstructor
 public class Cliente {
     private static long contadorIds = 1000L;
 
@@ -16,6 +16,24 @@ public class Cliente {
     private String dniNifCliente;
     private String emailCliente;
     private int telefonoCliente;
-    private List<Cuenta> listaCuentasCliente;
-    private String fechaCreacionCliente;
+    private LocalDateTime fechaCreacionCliente;
+
+    public Cliente(String nombreCliente, String apellidosCliente, String dniNifCliente,
+                   String emailCliente, int telefonoCliente, LocalDateTime fechaCreacionCliente) {
+        this.nombreCliente = nombreCliente;
+        this.apellidosCliente = apellidosCliente;
+        this.dniNifCliente = dniNifCliente;
+        this.emailCliente = emailCliente;
+        this.telefonoCliente = telefonoCliente;
+        this.fechaCreacionCliente = fechaCreacionCliente;
+    }
+
+    @Override
+    public String toString() {
+        return "Cliente encontrado: \nID: " + idCliente +
+                "\nNombre: " + nombreCliente + " " + apellidosCliente +
+                "\nDNI: " + dniNifCliente +
+                "\nEmail: " + emailCliente +
+                "\nTeléfono: " + telefonoCliente;
+    }
 }

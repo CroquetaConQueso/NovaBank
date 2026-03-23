@@ -19,8 +19,7 @@ public class RepositorioCliente {
     }*/
 
     public void listarClientes(){
-        registroClientes.forEach((a,b)-> System.out.println("ID Cliente: "+a+
-                "\nNombre: "+b.getNombreCliente()+"\nApellidos: "+b.getApellidosCliente()+"\n-------------------"));
+        registroClientes.forEach((a,b)-> System.out.println(a+ " | "+b.getNombreCliente()+" | "+b.getDniNifCliente()+"| "+b.getEmailCliente()+" | "+b.getTelefonoCliente()));
     }
 
     public Cliente buscarIdCliente(Long idBusqueda){
@@ -29,6 +28,6 @@ public class RepositorioCliente {
 
     public Cliente buscarDniCliente(String dniNif){
         return registroClientes.values().stream().filter(b->b.getDniNifCliente().equals(dniNif))
-                .findFirst().orElseThrow(()-> new IllegalArgumentException("No se ha podido encontrar al Cliente con ese dni"));
+                .findFirst().orElse(null);
     }
 }

@@ -15,7 +15,6 @@ import java.util.Scanner;
 public class CuentaServicio {
     private final RepositorioCuenta repoCuenta;
     private final RepositorioCliente repoCliente;
-    private Scanner entrada;
     private static long contadorNumCuentas = 0L;
 
     private void validarNumeroCuenta(String numeroCuenta) {

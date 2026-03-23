@@ -14,6 +14,7 @@ public class MenuCliente {
 
     public void buscarClienteId(){
         try{
+            entrada.nextLine();
             System.out.print("Introduzca la ID del cliente: ");
             Long idBuscar = entrada.nextLong();
 
@@ -42,6 +43,7 @@ public class MenuCliente {
 
     public void registrarCliente(){
         try{
+            entrada.nextLine();
             System.out.print("Nombre: ");
             String nombreCliente = entrada.nextLine().trim();
 

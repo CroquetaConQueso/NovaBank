@@ -4,7 +4,7 @@ import org.example.modelos.Cliente;
 
 import java.util.HashMap;
 
-public class RepositorioUsuarios {
+public class RepositorioCliente {
     private HashMap<Long, Cliente> registroClientes = new HashMap<>();
 
     public void anadirCliente(Cliente nuevoCliente){

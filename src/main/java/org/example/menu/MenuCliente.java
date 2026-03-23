@@ -1,11 +1,9 @@
-package org.example;
+package org.example.menu;
 
 import lombok.AllArgsConstructor;
 import org.example.modelos.Cliente;
 import org.example.servicios.ClienteServicio;
 
-import java.io.IOException;
-import java.time.format.DateTimeFormatter;
 import java.util.Scanner;
 
 @AllArgsConstructor

@@ -1,4 +1,34 @@
 package org.example.repositorio;
 
+import org.example.modelos.Cliente;
+
+import java.util.HashMap;
+
 public class RepositorioUsuarios {
+    private HashMap<Long, Cliente> registroClientes = new HashMap<>();
+
+    public void anadirCliente(Cliente nuevoCliente){
+        if (!registroClientes.containsKey(nuevoCliente.getIdCliente())) {
+            registroClientes.put(nuevoCliente.getIdCliente(), nuevoCliente);
+        }
+    }
+
+    /* En el caso de que se pueda establecer
+    public void eliminarCliente(Cliente antiguoCliente){
+        registroClientes.remove(antiguoCliente.getIdCliente());
+    }*/
+
+    public void listarClientes(){
+        registroClientes.forEach((a,b)-> System.out.println("ID Cliente: "+a+
+                "\nNombre: "+b.getNombreCliente()+"\nApellidos: "+b.getApellidosCliente()+"\n-------------------"));
+    }
+
+    public Cliente buscarIdCliente(Long idBusqueda){
+        return registroClientes.get(idBusqueda);
+    }
+
+    public Cliente buscarDniCliente(String dniNif){
+        return registroClientes.values().stream().filter(b->b.getDniNifCliente().equals(dniNif))
+                .findFirst().orElseThrow(()-> new IllegalArgumentException("No se ha podido encontrar al Cliente con ese dni"));
+    }
 }

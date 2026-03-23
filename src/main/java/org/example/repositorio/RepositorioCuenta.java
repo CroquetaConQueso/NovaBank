@@ -3,6 +3,7 @@ package org.example.repositorio;
 import org.example.modelos.Cuenta;
 
 import java.util.HashMap;
+import java.util.List;
 
 public class RepositorioCuenta {
     //Duda
@@ -13,15 +14,15 @@ public class RepositorioCuenta {
         registroCuentas.put(nuevaCuenta.getNumeroCuenta(), nuevaCuenta);
     }
 
-    public Cuenta buscarNumeroCuenta(Cuenta cuenta){
+    public Cuenta buscarNumeroCuenta(String numeroCuenta){
         return registroCuentas.values().stream().filter(a->a.getNumeroCuenta()
-                .equals(cuenta.getNumeroCuenta())).findFirst()
-                .orElseThrow(()-> new IllegalArgumentException("No se ha podido encontrar la cuenta"));
+                .equals(numeroCuenta)).findFirst()
+                .orElse(null);
     }
     //Duda?
-    public void listarCuentasCliente(Long idBuscar){
-        registroCuentas.values().stream().filter(a -> a.getDueñoCuenta().getIdCliente() == idBuscar)
-                .forEach(System.out::println);
+    public List<Cuenta> listarCuentasCliente(Long idBuscar){
+        return registroCuentas.values().stream().filter(a -> a.getDueñoCuenta().getIdCliente() == idBuscar)
+                .toList();
     }
 
 

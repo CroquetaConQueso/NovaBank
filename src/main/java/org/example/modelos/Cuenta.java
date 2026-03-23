@@ -8,13 +8,19 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 @Data
-@AllArgsConstructor
 public class Cuenta {
+    private static long idCuentas = 0L;
     private long idCuenta;
     private Cliente dueñoCuenta;
     private String numeroCuenta;
     private BigDecimal saldoCuenta;
-    private List<Movimiento> listaMovimientosCuenta;
     private LocalDateTime fechaCreacionCuenta;
 
+    public Cuenta(Cliente cli, String numeroCu, BigDecimal saldoCu,LocalDateTime fechaCre ){
+        this.idCuenta = ++idCuentas;
+        this.dueñoCuenta = cli;
+        this.numeroCuenta = numeroCu;
+        this.saldoCuenta = saldoCu;
+        this.fechaCreacionCuenta = fechaCre;
+    }
 }

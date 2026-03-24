@@ -6,6 +6,7 @@ import org.example.modelos.Movimiento;
 import org.example.servicios.MovimientoServicio;
 
 import java.math.BigDecimal;
+import java.util.InputMismatchException;
 import java.util.Scanner;
 
 @AllArgsConstructor
@@ -23,15 +24,19 @@ public class MenuMovimientos {
 
             System.out.print("Cantidad a transferir: ");
             BigDecimal cantidad = entrada.nextBigDecimal();
+            entrada.nextLine();
 
             movimientoServicio.transferir(numeroCuOrigen, numeroCuDestino, cantidad);
 
-            System.out.println("Transferencia realizada correctamente.");
-            System.out.println("Cuenta origen: " + numeroCuOrigen + " -> -" + cantidad);
-            System.out.println("Cuenta destino: " + numeroCuDestino + " -> +" + cantidad);
+            System.out.println("Transferencia realizada correctamente."
+                    +"\nCuenta origen: " + numeroCuOrigen + " -> -" + cantidad+" €"
+                    +"\nCuenta destino: " + numeroCuDestino + " -> +" + cantidad+" €");
 
-        } catch (IllegalArgumentException ex) {
-            System.out.println("ERROR: " + ex.getMessage());
+        } catch (InputMismatchException inex) {
+            System.err.println("ERROR: La cantidad debe de tener un valor númerico válido");
+            entrada.nextLine();
+        }  catch(RuntimeException ruex){
+            System.err.println("ERROR: " + ruex.getMessage());
         }
     }
 
@@ -42,14 +47,17 @@ public class MenuMovimientos {
 
             System.out.print("Cantidad a retirar: ");
             BigDecimal cantidad = entrada.nextBigDecimal();
+            entrada.nextLine();
 
             Cuenta cuenta = movimientoServicio.retirar(numeroCuenta, cantidad);
 
-            System.out.println("Retiro realizado correctamente.");
-            System.out.println("Depósito realizado correctamente.\nCuenta: " + cuenta.getNumeroCuenta()
-                    +"\nImporte: +" + cantidad+"\nNuevo saldo: " + cuenta.getSaldoCuenta());
-        } catch (IllegalArgumentException ex) {
-            System.out.println("ERROR: " + ex.getMessage());
+            System.out.println("Retiro realizado correctamente.\nCuenta: " + cuenta.getNumeroCuenta()
+                    +"\nImporte: -" + cantidad+" €"+"\nNuevo saldo: " + cuenta.getSaldoCuenta()+" €");
+        } catch (InputMismatchException inex) {
+            System.err.println("ERROR: La cantidad debe de tener un valor numérico");
+            entrada.nextLine();
+        } catch (IllegalArgumentException ex){
+            System.err.println("ERROR: "+ex.getMessage());
         }
     }
 
@@ -60,14 +68,18 @@ public class MenuMovimientos {
 
             System.out.print("Cantidad a depositar: ");
             BigDecimal cantidad = entrada.nextBigDecimal();
+            entrada.nextLine();
 
             Cuenta cuenta = movimientoServicio.depositar(numeroCuento, cantidad);
 
             System.out.println("Depósito realizado correctamente.\nCuenta: " + cuenta.getNumeroCuenta()
-            +"\nImporte: +" + cantidad+"\nNuevo saldo: " + cuenta.getSaldoCuenta());
+                    +"\nImporte: +" + cantidad+" €"+"\nNuevo saldo: " + cuenta.getSaldoCuenta()+" €");
 
-        } catch (IllegalArgumentException ex) {
-            System.out.println("ERROR: " + ex.getMessage());
+        } catch (InputMismatchException inex) {
+            System.err.println("ERROR: La cantidad debe de tener un valor númerico");
+            entrada.nextLine();
+        }catch (IllegalArgumentException ex){
+            System.err.println("ERROR: " + ex.getMessage());
         }
     }
 
@@ -83,6 +95,7 @@ public class MenuMovimientos {
 
             try {
                 int opcionSwitch = entrada.nextInt();
+                entrada.nextLine();
 
                 switch (opcionSwitch) {
                     case 1:
@@ -98,11 +111,14 @@ public class MenuMovimientos {
                         System.out.println("Volviendo al menú principal...");
                         return;
                     default:
-                        System.out.println("Debes escoger una opción encontrada en el menu");
+                        System.err.println("Debes escoger una opción encontrada en el menu");
                 }
 
-            } catch (NumberFormatException ex) {
-                System.out.println("ERROR: Debes introducir un valor numérico.");
+            } catch (InputMismatchException inex) {
+                System.err.println("ERROR: Debes introducir un valor numérico.");
+                entrada.nextLine();
+            } catch (IllegalArgumentException ex){
+                System.err.println("ERROR: Debes de introducir un valor numérico");
             }
         }
     }

@@ -30,4 +30,14 @@ public class RepositorioCliente {
         return registroClientes.values().stream().filter(b->b.getDniNifCliente().equals(dniNif))
                 .findFirst().orElse(null);
     }
+
+    public Cliente buscarEmailCliente(String email){
+        return registroClientes.values().stream().filter(b->b.getEmailCliente().equals(email))
+                .findFirst().orElse(null);
+    }
+    
+    public Cliente buscarTelefonoCliente(int telefonoCli){
+        return registroClientes.values().stream().filter(b->b.getTelefonoCliente() == telefonoCli)
+                .findFirst().orElse(null);
+    }
 }

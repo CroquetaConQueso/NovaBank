@@ -44,7 +44,7 @@ public class ClienteServicio {
             }
         }
     }
-    
+
     private void validarDni(String dniNif){
         if(dniNif.isBlank() || dniNif.isEmpty()){
             throw new IllegalArgumentException("El cliente debe de tener un dni/nif");
@@ -120,15 +120,23 @@ public class ClienteServicio {
 
         validarDni(dniNifCliente);
         if(repoCliente.buscarDniCliente(dniNifCliente)!=null){
-            throw new IllegalArgumentException("Ya existe un usuario con ese dni");
+            throw new IllegalArgumentException("Ya existe un cliente con el DNI "+dniNifCliente);
         }
 
         validarEmail(emailCliente);
-        validarTelefono(telefonoCliente);
+        if(repoCliente.buscarEmailCliente(emailCliente)!=null){
+            throw new IllegalArgumentException("Ya existe un cliente con el email "+emailCliente);
+        }
 
+        validarTelefono(telefonoCliente);
+        if(repoCliente.buscarTelefonoCliente(telefonoCliente)!= null){
+            throw new IllegalArgumentException("Ya existe un cliente con el telefono "+telefonoCliente);
+        }
         Cliente nuevoCliente = new Cliente(nombreCliente,apellidosCliente,dniNifCliente,emailCliente,telefonoCliente, LocalDateTime.now());
 
         repoCliente.anadirCliente(nuevoCliente);
+        System.out.println("Cliente creado correctamente.");
+        System.out.println("ID cliente: "+nuevoCliente.getIdCliente());
     }
 
 }

@@ -19,6 +19,19 @@ public class MenuConsultas {
     private MovimientoServicio moSer;
     private Scanner entrada;
 
+    private LocalDate validacionFecha(String mensaje,DateTimeFormatter dmt) {
+        while (true) {
+            try {
+                System.out.print(mensaje);
+                String entradaFecha = entrada.nextLine().trim();
+                return LocalDate.parse(entradaFecha, dmt);
+            } catch (Exception e) {
+                System.err.println("Formato inválido. El valor debe de tener la estructura: yyyy-MM-dd");
+            }
+        }
+    }
+
+
     //Organización por fecha
     public void historiaRangoFechas(){
         try {
@@ -26,22 +39,17 @@ public class MenuConsultas {
             String numeroCuenta = entrada.nextLine().trim().toUpperCase();
 
             Cuenta cuenta = cuSer.buscarNumero(numeroCuenta);
-            System.out.print("Fecha inicio (yyyy-MM-dd): ");
-            String feIn = entrada.nextLine();
-            System.out.print("Fecha fin (yyyy-MM-dd): ");
-            String feFin = entrada.nextLine();
+            DateTimeFormatter dmt = DateTimeFormatter.ofPattern("yyyy-MM-dd");
 
-            DateTimeFormatter fmt = DateTimeFormatter.ofPattern("yyyy-MM-dd");
-
-            LocalDate feIni = LocalDate.parse(feIn,fmt);
-            LocalDate feFina = LocalDate.parse(feFin,fmt);
+            LocalDate feIni = validacionFecha("Fecha inicio (yyyy-MM-dd): ",dmt);
+            LocalDate feFina = validacionFecha("Fecha fin (yyyy-MM-dd): ",dmt);
 
             List<Movimiento> lista = moSer.obtenerListaFecha(numeroCuenta, feIni, feFina);
             System.out.println("Movimientos del "+feIni+" al "+feFina+":");
             System.out.println("\nFecha               | Tipo                   | Cantidad"+
                     "\n--------------------|------------------------|------------");
             for (Movimiento mo : lista) {
-                String formatoFe = mo.getFechaCreacionMov().format(fmt);
+                String formatoFe = mo.getFechaCreacionMov().format(dmt);
 
                 String tipo;
                 switch (mo.getTipoMov()) {

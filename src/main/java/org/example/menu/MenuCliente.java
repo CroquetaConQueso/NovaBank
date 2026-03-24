@@ -6,6 +6,15 @@ import org.example.servicios.ClienteServicio;
 import java.util.InputMismatchException;
 import java.util.Scanner;
 
+/**
+ * Gestiona la interacción por consola relacionada con los clientes.
+ *
+ * Permite registrar nuevos clientes, buscarlos por ID o DNI
+ * y mostrar el listado completo.
+ *
+ * Actúa como capa de presentación delegando la lógica
+ * en ClienteServicio.
+ */
 public class MenuCliente {
 
     private final ClienteServicio clienteServicio;
@@ -16,6 +25,10 @@ public class MenuCliente {
         this.entrada = entrada;
     }
 
+    /**
+     * Solicita el identificador de un cliente y muestra su información
+     * si existe en el sistema.
+     */
     public void buscarClienteId(){
         try{
             System.out.print("Introduzca la ID del cliente: ");
@@ -32,6 +45,10 @@ public class MenuCliente {
         }
     }
 
+    /**
+     * Solicita el DNI/NIF de un cliente y muestra sus datos
+     * si se encuentra registrado.
+     */
     public void buscarClienteDni(){
         try{
             System.out.print("Introduzca el dni/nif del cliente: ");
@@ -44,6 +61,10 @@ public class MenuCliente {
         }
     }
 
+    /**
+     * Permite seleccionar el criterio de búsqueda de cliente
+     * (por DNI o por ID) y delega en el método correspondiente.
+     */
     public void buscarCliente() {
         System.out.println("Busqueda:");
         System.out.println("1.DNI");
@@ -70,12 +91,19 @@ public class MenuCliente {
         }
     }
 
+    /**
+     * Muestra por consola el listado completo de clientes registrados.
+     */
     private void listarClientes() {
         System.out.println("\n--- LISTADO DE CLIENTES ---");
         System.out.println("ID    | Nombre      | DNI        | Email          | Teléfono");
         clienteServicio.listarClientes();
     }
 
+    /**
+     * Solicita los datos necesarios para registrar un nuevo cliente
+     * y delega la validación y creación al servicio correspondiente.
+     */
     public void registrarCliente(){
         try{
             System.out.print("Nombre: ");
@@ -103,6 +131,13 @@ public class MenuCliente {
         }
     }
 
+    /**
+     * Muestra el menú interactivo de gestión de clientes y
+     * controla la navegación entre sus distintas opciones.
+     *
+     * Permanece activo hasta que el usuario decide volver
+     * al menú principal.
+     */
     public void menuClientes(){
         while(true){
             System.out.println();

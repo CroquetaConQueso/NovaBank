@@ -11,6 +11,15 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 
+/**
+ * Servicio encargado de la gestión de operaciones financieras.
+ *
+ * Contiene la lógica de negocio para depósitos, retiros,
+ * transferencias y consulta de movimientos.
+ *
+ * Garantiza la validación de datos y la integridad
+ * de los saldos antes de registrar cualquier operación.
+ */
 public class MovimientoServicio {
 
     private RepositorioCuenta repoCuenta;
@@ -21,12 +30,29 @@ public class MovimientoServicio {
         this.repoMovi = repoMovi;
     }
 
+    /**
+     * Registra un movimiento financiero asociado a una cuenta.
+     *
+     * @param cuenta cuenta afectada
+     * @param tipoMovimiento tipo de operación realizada
+     * @param cantidad importe de la operación
+     */
     private void registrarMovimiento(Cuenta cuenta, TipoMovimiento tipoMovimiento, BigDecimal cantidad){
         Movimiento nuevoMov = new Movimiento(cuenta, tipoMovimiento,cantidad, LocalDateTime.now());
 
         repoMovi.guardarMovimiento(nuevoMov);
     }
 
+    /**
+     * Realiza un depósito en la cuenta indicada.
+     *
+     * Valida que la cantidad sea positiva y que la cuenta exista
+     * antes de actualizar el saldo y registrar el movimiento.
+     *
+     * @param numeroCuenta cuenta destino
+     * @param cantidad importe a depositar
+     * @return cuenta actualizada
+     */
     public Cuenta depositar(String numeroCuenta, BigDecimal cantidad){
         if(cantidad ==null || cantidad.compareTo(BigDecimal.ZERO)<=0){
             throw new IllegalArgumentException("La cantidad a depositar debe ser mayor que cero");
@@ -43,6 +69,16 @@ public class MovimientoServicio {
         return cuenta;
     }
 
+    /**
+     * Realiza un retiro de fondos de una cuenta.
+     *
+     * Valida que la cantidad sea positiva, que la cuenta exista
+     * y que el saldo sea suficiente antes de efectuar la operación.
+     *
+     * @param numeroCuenta cuenta origen
+     * @param cantidad importe a retirar
+     * @return cuenta actualizada
+     */
     public Cuenta retirar(String numeroCuenta, BigDecimal cantidad){
         if(cantidad ==null || cantidad.compareTo(BigDecimal.ZERO)<=0){
             throw new IllegalArgumentException("La cantidad a retirar debe ser mayor que cero");
@@ -64,6 +100,19 @@ public class MovimientoServicio {
         return cuenta;
     }
 
+    /**
+     * Realiza una transferencia entre dos cuentas distintas.
+     *
+     * Verifica la existencia de ambas cuentas, que no sean la misma
+     * y que el saldo sea suficiente antes de efectuar la operación.
+     *
+     * En caso de error durante el proceso, se revierten los cambios
+     * realizados en memoria.
+     *
+     * @param numeroOrigen cuenta de origen
+     * @param numeroDestino cuenta de destino
+     * @param cantidad importe a transferir
+     */
     public void transferir(String numeroOrigen, String numeroDestino, BigDecimal cantidad){
         if(cantidad ==null || cantidad.compareTo(BigDecimal.ZERO)<=0){
             throw new IllegalArgumentException("La cantidad a depositar debe ser mayor que cero");
@@ -105,6 +154,15 @@ public class MovimientoServicio {
         return repoMovi.obtenerMovimientosCuenta(cuenta.getNumeroCuenta());
     }
 
+
+    /**
+     * Obtiene los movimientos de una cuenta dentro de un rango de fechas.
+     *
+     * @param numeroCuenta número de cuenta
+     * @param fechaIn fecha inicial
+     * @param fechaFin fecha final
+     * @return lista de movimientos dentro del intervalo indicado
+     */
     public List<Movimiento> obtenerListaFecha(String numeroCuenta, LocalDate fechaIn, LocalDate fechaFin){
         Cuenta cuenta = repoCuenta.buscarNumeroCuenta(numeroCuenta);
 

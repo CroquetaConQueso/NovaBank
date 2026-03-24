@@ -8,10 +8,10 @@ public class MenuPrincipal {
     private MenuCliente menuCli;
     private MenuCuenta menuCu;
     private MenuMovimientos menuMov;
-    private MenuConsultas menuCo;
+    private MenuConsulta menuCo;
 
     public MenuPrincipal(Scanner entrada, MenuCliente menuCli, MenuCuenta menuCu,
-                         MenuMovimientos menuMov, MenuConsultas menuCo) {
+                         MenuMovimientos menuMov, MenuConsulta menuCo) {
         this.entrada = entrada;
         this.menuCli = menuCli;
         this.menuCu = menuCu;

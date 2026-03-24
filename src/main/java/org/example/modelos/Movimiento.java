@@ -3,6 +3,11 @@ package org.example.modelos;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
+/**
+ * Representa una operación financiera realizada sobre una cuenta.
+ * ID autogenerado.
+ * Puede ser un depósito, retiro o transferencia.
+ */
 public class Movimiento {
 
     private static Long idMovimientos = 0L;

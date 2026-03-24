@@ -10,18 +10,21 @@ import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Scanner;
 
-public class MenuConsultas {
+public class MenuConsulta {
 
     private CuentaServicio cuSer;
     private MovimientoServicio moSer;
     private Scanner entrada;
 
-    public MenuConsultas(CuentaServicio cuSer, MovimientoServicio moSer, Scanner entrada) {
+    public MenuConsulta(CuentaServicio cuSer, MovimientoServicio moSer, Scanner entrada) {
         this.cuSer = cuSer;
         this.moSer = moSer;
         this.entrada = entrada;
     }
 
+    /*
+        Auxiliar que simplifica la validación de fecha, tomando el formato y devolviendo localdate
+     */
     private LocalDate validacionFecha(String mensaje,DateTimeFormatter dmt) {
         while (true) {
             try {
@@ -35,13 +38,16 @@ public class MenuConsultas {
     }
 
 
-    //Organización por fecha
+    /**
+     * Muestra los movimientos de una cuenta dentro de un rango de fechas
+     * introducidas por el usuario.
+     */
     public void historiaRangoFechas(){
         try {
             System.out.print("Introduzca número de cuenta: ");
             String numeroCuenta = entrada.nextLine().trim().toUpperCase();
 
-            Cuenta cuenta = cuSer.buscarNumero(numeroCuenta);
+            cuSer.buscarNumero(numeroCuenta);
             DateTimeFormatter dmt = DateTimeFormatter.ofPattern("yyyy-MM-dd");
 
             LocalDate feIni = validacionFecha("Fecha inicio (yyyy-MM-dd): ",dmt);
@@ -69,6 +75,10 @@ public class MenuConsultas {
         }
 
     }
+
+    /**
+     * Muestra el historial completo de movimientos de una cuenta específica.
+     */
     public void historialMov(){
         try{
             System.out.print("Introduzca número de cuenta: ");
@@ -109,6 +119,11 @@ public class MenuConsultas {
         System.out.println("Saldo actual: "+cuenta.getSaldoCuenta()+" €");
     }
 
+    /**
+     * Muestra el menú interactivo de consultas y gestiona la navegación entre las distintas opciones.
+     * Utiliza los métodos encontrados en la clase
+     */
+
     public void menuConsultas(){
         while(true) {
 
@@ -118,7 +133,7 @@ public class MenuConsultas {
                 System.out.println("3.Movimientos por rango de fechas");
                 System.out.println("4.Volver");
 
-                System.out.println("Seleccione una opción: ");
+                System.out.print("Seleccione una opción: ");
             try{
                 int opcionSwi = entrada.nextInt();
                 entrada.nextLine();

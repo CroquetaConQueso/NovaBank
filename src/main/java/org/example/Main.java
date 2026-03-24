@@ -25,7 +25,7 @@ public class Main {
         MenuCliente menuCli = new MenuCliente(cliServ, entrada);
         MenuCuenta menuCu = new MenuCuenta(cuServ, entrada);
         MenuMovimientos menuMov = new MenuMovimientos(moviServ, entrada);
-        MenuConsultas menuCo = new MenuConsultas(cuServ,moviServ,entrada);
+        MenuConsulta menuCo = new MenuConsulta(cuServ,moviServ,entrada);
         MenuPrincipal menuPri = new MenuPrincipal(entrada,menuCli,menuCu,menuMov, menuCo);
 
         menuPri.menuPrincipal();

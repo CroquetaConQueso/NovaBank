@@ -13,18 +13,18 @@ public class Cuenta {
     private BigDecimal saldoCuenta;
     private LocalDateTime fechaCreacionCuenta;
 
+    /**
+     * Representa una cuenta bancaria asociada a un cliente.
+     *
+     * Gestiona el número de cuenta, el saldo actual
+     * y la fecha de creación y tiene su id autogenerado
+     */
     public Cuenta(Cliente cli, String numeroCu, BigDecimal saldoCu, LocalDateTime fechaCre) {
         this.idCuenta = ++idCuentas;
         this.dueñoCuenta = cli;
         this.numeroCuenta = numeroCu;
         this.saldoCuenta = saldoCu;
         this.fechaCreacionCuenta = fechaCre;
-    }
-
-    // Getters
-
-    public long getIdCuenta() {
-        return idCuenta;
     }
 
     public Cliente getDueñoCuenta() {

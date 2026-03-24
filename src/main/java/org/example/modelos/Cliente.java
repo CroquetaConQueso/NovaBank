@@ -2,6 +2,11 @@ package org.example.modelos;
 
 import java.time.LocalDateTime;
 
+/**
+ * Representa un cliente del sistema bancario.
+ *
+ * Contiene la información personal, id autogenerado
+ */
 public class Cliente {
 
     private static long contadorIds = 1000L;
@@ -23,8 +28,6 @@ public class Cliente {
         this.telefonoCliente = telefonoCliente;
         this.fechaCreacionCliente = fechaCreacionCliente;
     }
-
-    // Getters
 
     public long getIdCliente() {
         return idCliente;
@@ -50,35 +53,6 @@ public class Cliente {
         return telefonoCliente;
     }
 
-    public LocalDateTime getFechaCreacionCliente() {
-        return fechaCreacionCliente;
-    }
-
-    // Setters (kept to preserve @Data behavior)
-
-    public void setNombreCliente(String nombreCliente) {
-        this.nombreCliente = nombreCliente;
-    }
-
-    public void setApellidosCliente(String apellidosCliente) {
-        this.apellidosCliente = apellidosCliente;
-    }
-
-    public void setDniNifCliente(String dniNifCliente) {
-        this.dniNifCliente = dniNifCliente;
-    }
-
-    public void setEmailCliente(String emailCliente) {
-        this.emailCliente = emailCliente;
-    }
-
-    public void setTelefonoCliente(int telefonoCliente) {
-        this.telefonoCliente = telefonoCliente;
-    }
-
-    public void setFechaCreacionCliente(LocalDateTime fechaCreacionCliente) {
-        this.fechaCreacionCliente = fechaCreacionCliente;
-    }
 
     @Override
     public String toString() {

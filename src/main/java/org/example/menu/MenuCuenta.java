@@ -9,6 +9,15 @@ import java.util.InputMismatchException;
 import java.util.List;
 import java.util.Scanner;
 
+/**
+ * Gestiona la interacción por consola relacionada con las cuentas bancarias.
+ *
+ * Permite crear cuentas, consultar información individual
+ * y listar las cuentas asociadas a un cliente.
+ *
+ * Actúa como capa de presentación delegando la lógica
+ * en CuentaServicio.
+ */
 public class MenuCuenta {
 
     private final CuentaServicio cuentaServicio;
@@ -19,6 +28,12 @@ public class MenuCuenta {
         this.entrada = entrada;
     }
 
+    /**
+     * Solicita un número de cuenta y muestra su información detallada,
+     * incluyendo titular, saldo y fecha de creación.
+     *
+     * La validación de existencia se delega en el servicio.
+     */
     private void verInfoCuenta(){
         try {
             System.out.print("Introduzca número de cuenta: ");
@@ -37,6 +52,12 @@ public class MenuCuenta {
         }
     }
 
+    /**
+     * Muestra todas las cuentas asociadas a un cliente concreto
+     * a partir de su identificador.
+     *
+     * Si el cliente no tiene cuentas registradas, se informa por pantalla.
+     */
     private void listarCuentasCli(){
         try{
             System.out.print("Introduce el ID del cliente: ");
@@ -64,6 +85,13 @@ public class MenuCuenta {
             entrada.nextLine();
         }
     }
+
+    /**
+     * Crea una nueva cuenta bancaria asociada a un cliente existente.
+     *
+     * Solicita el ID del cliente y delega la creación
+     * al servicio correspondiente.
+     */
     private void crearCuenta(){
         try{
             System.out.print("ID del cliente titular de la cuenta: ");
@@ -86,6 +114,13 @@ public class MenuCuenta {
         }
     }
 
+    /**
+     * Muestra el menú interactivo de gestión de cuentas y
+     * controla la navegación entre sus distintas opciones.
+     *
+     * Permanece en ejecución hasta que el usuario decide volver
+     * al menú principal.
+     */
     public void menuCuentas(){
         while(true){
             System.out.println();

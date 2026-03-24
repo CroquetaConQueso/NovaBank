@@ -2,7 +2,6 @@ package org.example.servicios;
 
 import org.example.modelos.Cuenta;
 import org.example.modelos.Movimiento;
-import org.example.modelos.TipoMovimiento;
 import org.example.repositorio.RepositorioCuenta;
 import org.example.repositorio.RepositorioMovimiento;
 import org.junit.jupiter.api.BeforeEach;
@@ -40,6 +39,10 @@ class ConsultasMovimientoTest {
                 BigDecimal.ZERO, LocalDateTime.now());
     }
 
+    /**
+     * Verifica que se lanza excepción cuando
+     * se intentan consultar movimientos de una cuenta inexistente.
+     */
     @Test
     void obtenerLista_cuentaInexistente_debeLanzarExcepcion() {
         when(repoCuenta.buscarNumeroCuenta("ES1")).thenReturn(null);
@@ -48,6 +51,10 @@ class ConsultasMovimientoTest {
                 () -> movimientoServicio.obtenerLista("ES1"));
     }
 
+    /**
+     * Verifica que se retorna correctamente la lista de movimientos
+     * cuando la cuenta existe.
+     */
     @Test
     void obtenerLista_cuentaValida_debeRetornarLista() {
         when(repoCuenta.buscarNumeroCuenta("ES1")).thenReturn(cuenta);
@@ -61,6 +68,10 @@ class ConsultasMovimientoTest {
         verify(repoMovimiento).obtenerMovimientosCuenta("ES1");
     }
 
+    /**
+     * Verifica que se lanza excepción cuando
+     * la cuenta no existe al consultar por rango de fechas.
+     */
     @Test
     void obtenerListaFecha_cuentaInexistente_debeLanzarExcepcion() {
         when(repoCuenta.buscarNumeroCuenta("ES1")).thenReturn(null);
@@ -73,6 +84,10 @@ class ConsultasMovimientoTest {
                 ));
     }
 
+    /**
+     * Verifica que se lanza excepción cuando
+     * la fecha inicial es posterior a la fecha final.
+     */
     @Test
     void obtenerListaFecha_fechasInvalidas_debeLanzarExcepcion() {
         when(repoCuenta.buscarNumeroCuenta("ES1")).thenReturn(cuenta);
@@ -85,27 +100,23 @@ class ConsultasMovimientoTest {
                 ));
     }
 
+    /**
+     * Verifica que se retorna correctamente la lista de movimientos
+     * cuando la cuenta existe y el rango de fechas es válido.
+     */
     @Test
     void obtenerListaFecha_correcto_debeRetornarLista() {
         when(repoCuenta.buscarNumeroCuenta("ES1")).thenReturn(cuenta);
-        when(repoMovimiento.obtenerMovimientosFecha(
-                eq("ES1"),
-                any(),
-                any()
-        )).thenReturn(List.of());
+        when(repoMovimiento.obtenerMovimientosFecha(eq("ES1"), any(), any()))
+                .thenReturn(List.of());
 
         List<Movimiento> lista =
-                movimientoServicio.obtenerListaFecha(
-                        "ES1",
+                movimientoServicio.obtenerListaFecha("ES1",
                         LocalDate.of(2024, 3, 1),
-                        LocalDate.of(2024, 3, 15)
-                );
+                        LocalDate.of(2024, 3, 15));
 
         assertNotNull(lista);
-        verify(repoMovimiento).obtenerMovimientosFecha(
-                eq("ES1"),
-                any(),
-                any()
-        );
+        verify(repoMovimiento)
+                .obtenerMovimientosFecha(eq("ES1"), any(), any());
     }
 }

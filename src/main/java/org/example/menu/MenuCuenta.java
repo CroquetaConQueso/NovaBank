@@ -5,7 +5,9 @@ import org.example.modelos.Cliente;
 import org.example.modelos.Cuenta;
 import org.example.servicios.CuentaServicio;
 
+import java.sql.SQLOutput;
 import java.time.format.DateTimeFormatter;
+import java.util.InputMismatchException;
 import java.util.List;
 import java.util.Scanner;
 
@@ -23,7 +25,7 @@ public class MenuCuenta {
 
             System.out.println("Número de cuenta: " + cuenta.getNumeroCuenta()
                     +"\nTitular: " + cuenta.getDueñoCuenta().getNombreCliente() + " " + cuenta.getDueñoCuenta().getApellidosCliente()
-                    +"\nSaldo: " + cuenta.getSaldoCuenta()+
+                    +"\nSaldo: " + cuenta.getSaldoCuenta()+ " €"+
                     "\nFecha de creación: " + cuenta.getFechaCreacionCuenta().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
             ));
 
@@ -36,38 +38,48 @@ public class MenuCuenta {
         try{
             System.out.print("Introduce el ID del cliente: ");
             Long idCliente = entrada.nextLong();
+            entrada.nextLine();
 
             Cliente cli = cuentaServicio.obtenerTitular(idCliente);
             List<Cuenta> cuentasCliente = cuentaServicio.obtenerCuentas(idCliente);
 
             System.out.println("Cuentas del cliente "+cli.getNombreCliente()+" "+cli.getApellidosCliente());
-            System.out.println("Número de cuenta               | Saldo");
+            System.out.println("Número de cuenta         | Saldo");
+            System.out.println("-------------------------|----------");
 
             if(cuentasCliente.isEmpty()){
                 System.out.println("El cliente no tiene cuentas registradas");
                 return;
             }
             for (Cuenta cu: cuentasCliente){
-                System.out.println(cu.getNumeroCuenta()+" | "+cu.getSaldoCuenta());
+                System.out.println(cu.getNumeroCuenta()+" | "+cu.getSaldoCuenta()+ " €");
             }
         }catch (IllegalArgumentException ex){
+            System.out.println("ERROR: "+ex.getMessage());
+        }catch(InputMismatchException inex){
             System.out.println("El valor debe de ser numérico");
+            entrada.nextLine();
         }
     }
     private void crearCuenta(){
         try{
-            System.out.println("ID del cliente titular de la cuenta: ");
+            System.out.print("ID del cliente titular de la cuenta: ");
             Long idCliente = entrada.nextLong();
+            entrada.nextLine();
 
             Cuenta cuenta = cuentaServicio.crearCuenta(idCliente);
 
             System.out.println("Cuenta creada correctamente.");
             System.out.println("\nNúmero de la cuenta: "+cuenta.getNumeroCuenta()
-                    +"\nTitular: "+cuenta.getDueñoCuenta()+"(ID: "+cuenta.getIdCuenta()+")"
-                    +"\nSaldo inicial: "+cuenta.getSaldoCuenta());
+                    +"\nTitular: "+cuenta.getDueñoCuenta().getNombreCliente()+" "+cuenta.getDueñoCuenta().getApellidosCliente()
+                    +" (ID: "+cuenta.getDueñoCuenta().getIdCliente()+")"
+                    +"\nSaldo inicial: "+cuenta.getSaldoCuenta()+ " €");
             ;
         }catch(IllegalArgumentException ex){
+            System.err.println("ERROR:" +ex.getMessage());
+        }catch(InputMismatchException inex){
             System.err.println("El valor debe de ser númerico");
+            entrada.nextLine();
         }
     }
 
@@ -83,6 +95,7 @@ public class MenuCuenta {
 
             try{
                 int opcionSwitch = entrada.nextInt();
+                entrada.nextLine();
 
                 switch (opcionSwitch) {
                     case 1:
@@ -102,6 +115,9 @@ public class MenuCuenta {
                 }
             }catch (IllegalArgumentException ex){
                 System.out.println("El valor debe de ser númerico");
+            }catch(InputMismatchException inex){
+                System.out.println("Debes de introdducir un valor númerico");
+                entrada.nextLine();
             }
         }
     }

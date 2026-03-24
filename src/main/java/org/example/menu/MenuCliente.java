@@ -129,7 +129,7 @@ public class MenuCliente {
                         System.out.println("Volviendo al menú principal...");
                         return;
                     default:
-                        System.out.println("Debes de escoger una opción encontrada en el menu");
+                        System.err.println("Debes de escoger una opción encontrada en el menu");
                 }
             }catch (IllegalArgumentException ex){
                 System.err.println("Debes de introducir un valor numérico");

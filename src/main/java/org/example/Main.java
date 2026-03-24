@@ -1,8 +1,6 @@
 package org.example;
 
-import org.example.menu.MenuCliente;
-import org.example.menu.MenuCuenta;
-import org.example.menu.MenuMovimientos;
+import org.example.menu.*;
 import org.example.repositorio.RepositorioCliente;
 import org.example.repositorio.RepositorioCuenta;
 import org.example.repositorio.RepositorioMovimiento;
@@ -27,42 +25,11 @@ public class Main {
         MenuCliente menuCli = new MenuCliente(cliServ, entrada);
         MenuCuenta menuCu = new MenuCuenta(cuServ, entrada);
         MenuMovimientos menuMov = new MenuMovimientos(moviServ, entrada);
+        MenuConsultas menuCo = new MenuConsultas(cuServ,moviServ,entrada);
+        MenuPrincipal menuPri = new MenuPrincipal(entrada,menuCli,menuCu,menuMov, menuCo);
 
-        while (true) {
-            System.out.println();
-            System.out.println("====================================");
-            System.out.println("   NOVABANK - SISTEMA DE OPERACIONES");
-            System.out.println("====================================");
-            System.out.println("1. Gestión de clientes");
-            System.out.println("2. Gestión de cuentas");
-            System.out.println("3. Operaciones financieras");
-            System.out.println("4. Salir");
-            System.out.print("Seleccione una opción: ");
+        menuPri.menuPrincipal();
 
-            try {
-                int opcion = Integer.parseInt(entrada.nextLine().trim());
-
-                switch (opcion) {
-                    case 1:
-                        menuCli.menuClientes();
-                        break;
-                    case 2:
-                        menuCu.menuCuentas();
-                        break;
-                    case 3:
-                        menuMov.menuMovimientos();
-                        break;
-                    case 4:
-                        System.out.println("Saliendo del sistema...");
-                        entrada.close();
-                        return;
-                    default:
-                        System.out.println("ERROR: Debes escoger una opción válida del menú.");
-                }
-
-            } catch (NumberFormatException ex) {
-                System.out.println("ERROR: Debes introducir un valor numérico.");
-            }
-        }
+        entrada.close();
     }
 }

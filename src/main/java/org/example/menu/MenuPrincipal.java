@@ -1,16 +1,23 @@
 package org.example.menu;
 
-import lombok.AllArgsConstructor;
-
 import java.util.Scanner;
 
-@AllArgsConstructor
 public class MenuPrincipal {
+
     private Scanner entrada;
     private MenuCliente menuCli;
     private MenuCuenta menuCu;
     private MenuMovimientos menuMov;
-    private MenuConsultas menuCo;
+    private MenuConsulta menuCo;
+
+    public MenuPrincipal(Scanner entrada, MenuCliente menuCli, MenuCuenta menuCu,
+                         MenuMovimientos menuMov, MenuConsulta menuCo) {
+        this.entrada = entrada;
+        this.menuCli = menuCli;
+        this.menuCu = menuCu;
+        this.menuMov = menuMov;
+        this.menuCo = menuCo;
+    }
 
     public void menuPrincipal() {
         while (true) {

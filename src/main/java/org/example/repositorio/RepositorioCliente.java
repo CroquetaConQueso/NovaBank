@@ -4,6 +4,7 @@ import org.example.modelos.Cliente;
 
 import java.util.HashMap;
 
+//Repositorio en memoria para la gestión de clientes.
 public class RepositorioCliente {
     private HashMap<Long, Cliente> registroClientes = new HashMap<>();
 
@@ -12,11 +13,6 @@ public class RepositorioCliente {
             registroClientes.put(nuevoCliente.getIdCliente(), nuevoCliente);
         }
     }
-
-    /* En el caso de que se pueda establecer
-    public void eliminarCliente(Cliente antiguoCliente){
-        registroClientes.remove(antiguoCliente.getIdCliente());
-    }*/
 
     public void listarClientes(){
         registroClientes.forEach((a,b)-> System.out.println(a+ " | "+b.getNombreCliente()+" | "+b.getDniNifCliente()+"| "+b.getEmailCliente()+" | "+b.getTelefonoCliente()));

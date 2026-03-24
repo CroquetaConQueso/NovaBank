@@ -1,19 +1,36 @@
 package org.example.menu;
 
-import lombok.AllArgsConstructor;
 import org.example.modelos.Cuenta;
-import org.example.modelos.Movimiento;
 import org.example.servicios.MovimientoServicio;
 
 import java.math.BigDecimal;
 import java.util.InputMismatchException;
 import java.util.Scanner;
 
-@AllArgsConstructor
+/**
+ * Gestiona las operaciones financieras realizadas sobre las cuentas.
+ *
+ * Permite efectuar depósitos, retiros y transferencias entre cuentas,
+ * delegando la lógica de negocio en MovimientoServicio.
+ *
+ * Actúa como capa de presentación dentro del sistema.
+ */
 public class MenuMovimientos {
+
     private final MovimientoServicio movimientoServicio;
     private Scanner entrada;
 
+    public MenuMovimientos(MovimientoServicio movimientoServicio, Scanner entrada) {
+        this.movimientoServicio = movimientoServicio;
+        this.entrada = entrada;
+    }
+
+    /**
+     * Solicita los datos necesarios para realizar una transferencia
+     * entre dos cuentas y muestra el resultado por output.
+     *
+     * La validación de cuentas y saldo se delega en el servicio.
+     */
     private void transferirDinero(){
         try {
             System.out.print("Número de cuenta origen: ");
@@ -40,6 +57,10 @@ public class MenuMovimientos {
         }
     }
 
+    /**
+     * Permite retirar una cantidad de dinero de una cuenta específica,
+     * mostrando el nuevo saldo tras la operación.
+     */
     private void retirarDinero(){
         try {
             System.out.print("Número de cuenta: ");
@@ -61,6 +82,10 @@ public class MenuMovimientos {
         }
     }
 
+    /**
+     * Permite ingresar una cantidad de dinero en una cuenta,
+     * actualizando y mostrando el saldo resultante.
+     */
     private void depositarDinero(){
         try {
             System.out.print("Número de cuenta: ");
@@ -83,6 +108,13 @@ public class MenuMovimientos {
         }
     }
 
+    /**
+     * Muestra el menú interactivo de operaciones financieras y
+     * gestiona la navegación entre las distintas opciones.
+     *
+     * Permanece activo hasta que el usuario decide volver
+     * al menú principal.
+     */
     public void menuMovimientos(){
         while (true) {
             System.out.println();

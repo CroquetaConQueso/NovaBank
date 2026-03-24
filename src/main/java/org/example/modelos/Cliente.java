@@ -1,13 +1,14 @@
 package org.example.modelos;
 
-import lombok.AllArgsConstructor;
-import lombok.Data;
-
 import java.time.LocalDateTime;
-import java.util.List;
 
-@Data
+/**
+ * Representa un cliente del sistema bancario.
+ *
+ * Contiene la información personal, id autogenerado
+ */
 public class Cliente {
+
     private static long contadorIds = 1000L;
 
     private long idCliente = ++contadorIds;
@@ -27,6 +28,31 @@ public class Cliente {
         this.telefonoCliente = telefonoCliente;
         this.fechaCreacionCliente = fechaCreacionCliente;
     }
+
+    public long getIdCliente() {
+        return idCliente;
+    }
+
+    public String getNombreCliente() {
+        return nombreCliente;
+    }
+
+    public String getApellidosCliente() {
+        return apellidosCliente;
+    }
+
+    public String getDniNifCliente() {
+        return dniNifCliente;
+    }
+
+    public String getEmailCliente() {
+        return emailCliente;
+    }
+
+    public int getTelefonoCliente() {
+        return telefonoCliente;
+    }
+
 
     @Override
     public String toString() {

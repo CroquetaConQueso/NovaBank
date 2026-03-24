@@ -1,20 +1,41 @@
 package org.example.servicios;
 
-import lombok.AllArgsConstructor;
-import lombok.Data;
 import org.example.modelos.Cliente;
 import org.example.repositorio.RepositorioCliente;
 
 import java.time.LocalDateTime;
-import java.util.Scanner;
 
-@Data
-@AllArgsConstructor
+/**
+ * Servicio encargado de la lógica de negocio relacionada con los clientes.
+ *
+ * Gestiona las validaciones, reglas de unicidad y operaciones
+ * necesarias antes de interactuar con el repositorio.
+ *
+ * Actúa como intermediario entre la capa de presentación
+ * y la capa de persistencia en memoria.
+ */
 public class ClienteServicio {
+
     private RepositorioCliente repoCliente;
 
-    //VALIDACIONES
+    public ClienteServicio(RepositorioCliente repoCliente) {
+        this.repoCliente = repoCliente;
+    }
 
+    public RepositorioCliente getRepoCliente() {
+        return repoCliente;
+    }
+
+    /**
+     * Dentro de este bloque hasta el siguiente comentario se encuentran las validaciones,
+     * en estas podemos encontrar las validaciones de:
+     *  -nombre
+     *  -apellido
+     *  -dni
+     *  -telefono
+     *  -email
+     *  -telefono
+     */
     private void validarNombre(String nombre){
         if(nombre.isEmpty() || nombre.isBlank()){
             throw new IllegalArgumentException("El cliente debe de tener un nombre");
@@ -87,6 +108,11 @@ public class ClienteServicio {
         repoCliente.listarClientes();
     }
 
+    /**
+     * Busca un cliente por su identificador,
+     * validando previamente que sea un valor correcto.
+     */
+
     public Cliente buscarIdCliente(Long idBuscar) {
         if (idBuscar == null || idBuscar <= 0) {
             throw new IllegalArgumentException("Debes de introducir una ID correcta");
@@ -101,6 +127,7 @@ public class ClienteServicio {
         return cliente;
     }
 
+    // Busca un cliente por su DNI/NIF tras validar su formato.
     public Cliente buscarDniCliente(String dniBuscar) {
         validarDni(dniBuscar);
 
@@ -113,6 +140,19 @@ public class ClienteServicio {
         return cliente;
     }
 
+    /**
+     * Registra un nuevo cliente en el sistema.
+     *
+     * Aplica todas las validaciones necesarias y verifica
+     * que DNI, email y teléfono sean únicos antes de crear
+     * el objeto Cliente y almacenarlo en el repositorio.
+     *
+     * @param nombreCliente nombre del cliente
+     * @param apellidosCliente apellidos del cliente
+     * @param dniNifCliente DNI/NIF del cliente
+     * @param emailCliente correo electrónico
+     * @param telefonoCliente número de teléfono
+     */
     public void registrarCliente(String nombreCliente,String apellidosCliente, String dniNifCliente, String emailCliente, int telefonoCliente ){
 
         validarNombre(nombreCliente);

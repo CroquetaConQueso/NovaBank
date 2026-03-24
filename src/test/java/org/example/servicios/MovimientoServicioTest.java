@@ -2,8 +2,10 @@ package org.example.servicios;
 
 import org.example.modelos.Cuenta;
 import org.example.modelos.Movimiento;
+import org.example.modelos.TipoMovimiento;
 import org.example.repositorio.RepositorioCuenta;
 import org.example.repositorio.RepositorioMovimiento;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -11,6 +13,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
@@ -27,22 +30,27 @@ class MovimientoServicioTest {
     @InjectMocks
     private MovimientoServicio movimientoServicio;
 
+    private Cuenta cuentaOrigen;
+    private Cuenta cuentaDestino;
+
+    @BeforeEach
+    void setup() {
+        cuentaOrigen = new Cuenta(null, "ES1", new BigDecimal("300"), LocalDateTime.now());
+        cuentaDestino = new Cuenta(null, "ES2", new BigDecimal("100"), LocalDateTime.now());
+    }
+
     // ===============================
     // DEPOSITAR
     // ===============================
 
     @Test
     void depositar_conImportePositivo_debeActualizarSaldoYRegistrarMovimiento() {
-        Cuenta cuenta = new Cuenta();
-        cuenta.setNumeroCuenta("ES1");
-        cuenta.setSaldoCuenta(new BigDecimal("100"));
-
-        when(repoCuenta.buscarNumeroCuenta("ES1")).thenReturn(cuenta);
+        when(repoCuenta.buscarNumeroCuenta("ES1")).thenReturn(cuentaOrigen);
 
         movimientoServicio.depositar("ES1", new BigDecimal("50"));
 
-        assertEquals(new BigDecimal("150"), cuenta.getSaldoCuenta());
-        verify(repoMovimiento, times(1)).guardarMovimiento(any(Movimiento.class));
+        assertEquals(new BigDecimal("350"), cuentaOrigen.getSaldoCuenta());
+        verify(repoMovimiento).guardarMovimiento(any(Movimiento.class));
     }
 
     @Test
@@ -56,7 +64,7 @@ class MovimientoServicioTest {
         when(repoCuenta.buscarNumeroCuenta("ES1")).thenReturn(null);
 
         assertThrows(IllegalArgumentException.class,
-                () -> movimientoServicio.depositar("ES1", new BigDecimal("100")));
+                () -> movimientoServicio.depositar("ES1", new BigDecimal("50")));
     }
 
     // ===============================
@@ -65,28 +73,21 @@ class MovimientoServicioTest {
 
     @Test
     void retirar_conSaldoSuficiente_debeDisminuirSaldoYRegistrarMovimiento() {
-        Cuenta cuenta = new Cuenta();
-        cuenta.setNumeroCuenta("ES1");
-        cuenta.setSaldoCuenta(new BigDecimal("200"));
+        when(repoCuenta.buscarNumeroCuenta("ES1")).thenReturn(cuentaOrigen);
 
-        when(repoCuenta.buscarNumeroCuenta("ES1")).thenReturn(cuenta);
+        movimientoServicio.retirar("ES1", new BigDecimal("100"));
 
-        movimientoServicio.retirar("ES1", new BigDecimal("50"));
-
-        assertEquals(new BigDecimal("150"), cuenta.getSaldoCuenta());
+        assertEquals(new BigDecimal("200"), cuentaOrigen.getSaldoCuenta());
         verify(repoMovimiento).guardarMovimiento(any(Movimiento.class));
     }
 
     @Test
     void retirar_conSaldoInsuficiente_debeLanzarExcepcion() {
-        Cuenta cuenta = new Cuenta();
-        cuenta.setNumeroCuenta("ES1");
-        cuenta.setSaldoCuenta(new BigDecimal("20"));
-
-        when(repoCuenta.buscarNumeroCuenta("ES1")).thenReturn(cuenta);
+        cuentaOrigen.setSaldoCuenta(new BigDecimal("50"));
+        when(repoCuenta.buscarNumeroCuenta("ES1")).thenReturn(cuentaOrigen);
 
         assertThrows(IllegalArgumentException.class,
-                () -> movimientoServicio.retirar("ES1", new BigDecimal("50")));
+                () -> movimientoServicio.retirar("ES1", new BigDecimal("100")));
     }
 
     @Test
@@ -94,7 +95,7 @@ class MovimientoServicioTest {
         when(repoCuenta.buscarNumeroCuenta("ES1")).thenReturn(null);
 
         assertThrows(IllegalArgumentException.class,
-                () -> movimientoServicio.retirar("ES1", new BigDecimal("50")));
+                () -> movimientoServicio.retirar("ES1", new BigDecimal("100")));
     }
 
     // ===============================
@@ -102,22 +103,15 @@ class MovimientoServicioTest {
     // ===============================
 
     @Test
-    void transferir_correctamente_debeActualizarSaldosYRegistrarDosMovimientos() {
-        Cuenta origen = new Cuenta();
-        origen.setNumeroCuenta("ES1");
-        origen.setSaldoCuenta(new BigDecimal("300"));
-
-        Cuenta destino = new Cuenta();
-        destino.setNumeroCuenta("ES2");
-        destino.setSaldoCuenta(new BigDecimal("100"));
-
-        when(repoCuenta.buscarNumeroCuenta("ES1")).thenReturn(origen);
-        when(repoCuenta.buscarNumeroCuenta("ES2")).thenReturn(destino);
+    void transferir_correctamente_debeActualizarAmbasCuentasYRegistrarDosMovimientos() {
+        when(repoCuenta.buscarNumeroCuenta("ES1")).thenReturn(cuentaOrigen);
+        when(repoCuenta.buscarNumeroCuenta("ES2")).thenReturn(cuentaDestino);
 
         movimientoServicio.transferir("ES1", "ES2", new BigDecimal("100"));
 
-        assertEquals(new BigDecimal("200"), origen.getSaldoCuenta());
-        assertEquals(new BigDecimal("200"), destino.getSaldoCuenta());
+        assertEquals(new BigDecimal("200"), cuentaOrigen.getSaldoCuenta());
+        assertEquals(new BigDecimal("200"), cuentaDestino.getSaldoCuenta());
+
         verify(repoMovimiento, times(2)).guardarMovimiento(any(Movimiento.class));
     }
 
@@ -129,19 +123,13 @@ class MovimientoServicioTest {
 
     @Test
     void transferir_conSaldoInsuficiente_debeLanzarExcepcion() {
-        Cuenta origen = new Cuenta();
-        origen.setNumeroCuenta("ES1");
-        origen.setSaldoCuenta(new BigDecimal("10"));
+        cuentaOrigen.setSaldoCuenta(new BigDecimal("50"));
 
-        Cuenta destino = new Cuenta();
-        destino.setNumeroCuenta("ES2");
-        destino.setSaldoCuenta(new BigDecimal("100"));
-
-        when(repoCuenta.buscarNumeroCuenta("ES1")).thenReturn(origen);
-        when(repoCuenta.buscarNumeroCuenta("ES2")).thenReturn(destino);
+        when(repoCuenta.buscarNumeroCuenta("ES1")).thenReturn(cuentaOrigen);
+        when(repoCuenta.buscarNumeroCuenta("ES2")).thenReturn(cuentaDestino);
 
         assertThrows(IllegalArgumentException.class,
-                () -> movimientoServicio.transferir("ES1", "ES2", new BigDecimal("50")));
+                () -> movimientoServicio.transferir("ES1", "ES2", new BigDecimal("100")));
     }
 
     @Test
@@ -149,19 +137,15 @@ class MovimientoServicioTest {
         when(repoCuenta.buscarNumeroCuenta("ES1")).thenReturn(null);
 
         assertThrows(IllegalArgumentException.class,
-                () -> movimientoServicio.transferir("ES1", "ES2", new BigDecimal("50")));
+                () -> movimientoServicio.transferir("ES1", "ES2", new BigDecimal("100")));
     }
 
     @Test
     void transferir_conCuentaDestinoInexistente_debeLanzarExcepcion() {
-        Cuenta origen = new Cuenta();
-        origen.setNumeroCuenta("ES1");
-        origen.setSaldoCuenta(new BigDecimal("200"));
-
-        when(repoCuenta.buscarNumeroCuenta("ES1")).thenReturn(origen);
+        when(repoCuenta.buscarNumeroCuenta("ES1")).thenReturn(cuentaOrigen);
         when(repoCuenta.buscarNumeroCuenta("ES2")).thenReturn(null);
 
         assertThrows(IllegalArgumentException.class,
-                () -> movimientoServicio.transferir("ES1", "ES2", new BigDecimal("50")));
+                () -> movimientoServicio.transferir("ES1", "ES2", new BigDecimal("100")));
     }
 }

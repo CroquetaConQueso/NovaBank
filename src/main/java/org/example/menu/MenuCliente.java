@@ -1,17 +1,20 @@
 package org.example.menu;
 
-import lombok.AllArgsConstructor;
 import org.example.modelos.Cliente;
 import org.example.servicios.ClienteServicio;
 
 import java.util.InputMismatchException;
 import java.util.Scanner;
 
-@AllArgsConstructor
 public class MenuCliente {
+
     private final ClienteServicio clienteServicio;
     private Scanner entrada;
 
+    public MenuCliente(ClienteServicio clienteServicio, Scanner entrada) {
+        this.clienteServicio = clienteServicio;
+        this.entrada = entrada;
+    }
 
     public void buscarClienteId(){
         try{

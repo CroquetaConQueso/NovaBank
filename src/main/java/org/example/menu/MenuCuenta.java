@@ -1,20 +1,23 @@
 package org.example.menu;
 
-import lombok.AllArgsConstructor;
 import org.example.modelos.Cliente;
 import org.example.modelos.Cuenta;
 import org.example.servicios.CuentaServicio;
 
-import java.sql.SQLOutput;
 import java.time.format.DateTimeFormatter;
 import java.util.InputMismatchException;
 import java.util.List;
 import java.util.Scanner;
 
-@AllArgsConstructor
 public class MenuCuenta {
+
     private final CuentaServicio cuentaServicio;
     private Scanner entrada;
+
+    public MenuCuenta(CuentaServicio cuentaServicio, Scanner entrada) {
+        this.cuentaServicio = cuentaServicio;
+        this.entrada = entrada;
+    }
 
     private void verInfoCuenta(){
         try {

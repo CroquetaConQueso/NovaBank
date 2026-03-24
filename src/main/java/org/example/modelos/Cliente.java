@@ -1,13 +1,9 @@
 package org.example.modelos;
 
-import lombok.AllArgsConstructor;
-import lombok.Data;
-
 import java.time.LocalDateTime;
-import java.util.List;
 
-@Data
 public class Cliente {
+
     private static long contadorIds = 1000L;
 
     private long idCliente = ++contadorIds;
@@ -25,6 +21,62 @@ public class Cliente {
         this.dniNifCliente = dniNifCliente;
         this.emailCliente = emailCliente;
         this.telefonoCliente = telefonoCliente;
+        this.fechaCreacionCliente = fechaCreacionCliente;
+    }
+
+    // Getters
+
+    public long getIdCliente() {
+        return idCliente;
+    }
+
+    public String getNombreCliente() {
+        return nombreCliente;
+    }
+
+    public String getApellidosCliente() {
+        return apellidosCliente;
+    }
+
+    public String getDniNifCliente() {
+        return dniNifCliente;
+    }
+
+    public String getEmailCliente() {
+        return emailCliente;
+    }
+
+    public int getTelefonoCliente() {
+        return telefonoCliente;
+    }
+
+    public LocalDateTime getFechaCreacionCliente() {
+        return fechaCreacionCliente;
+    }
+
+    // Setters (kept to preserve @Data behavior)
+
+    public void setNombreCliente(String nombreCliente) {
+        this.nombreCliente = nombreCliente;
+    }
+
+    public void setApellidosCliente(String apellidosCliente) {
+        this.apellidosCliente = apellidosCliente;
+    }
+
+    public void setDniNifCliente(String dniNifCliente) {
+        this.dniNifCliente = dniNifCliente;
+    }
+
+    public void setEmailCliente(String emailCliente) {
+        this.emailCliente = emailCliente;
+    }
+
+    public void setTelefonoCliente(int telefonoCliente) {
+        this.telefonoCliente = telefonoCliente;
+    }
+
+    public void setFechaCreacionCliente(LocalDateTime fechaCreacionCliente) {
         this.fechaCreacionCliente = fechaCreacionCliente;
     }
 

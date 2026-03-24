@@ -1,18 +1,21 @@
 package org.example.menu;
 
-import lombok.AllArgsConstructor;
 import org.example.modelos.Cuenta;
-import org.example.modelos.Movimiento;
 import org.example.servicios.MovimientoServicio;
 
 import java.math.BigDecimal;
 import java.util.InputMismatchException;
 import java.util.Scanner;
 
-@AllArgsConstructor
 public class MenuMovimientos {
+
     private final MovimientoServicio movimientoServicio;
     private Scanner entrada;
+
+    public MenuMovimientos(MovimientoServicio movimientoServicio, Scanner entrada) {
+        this.movimientoServicio = movimientoServicio;
+        this.entrada = entrada;
+    }
 
     private void transferirDinero(){
         try {

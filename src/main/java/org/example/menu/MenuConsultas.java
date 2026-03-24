@@ -1,23 +1,26 @@
 package org.example.menu;
 
-import lombok.AllArgsConstructor;
 import org.example.modelos.Cuenta;
 import org.example.modelos.Movimiento;
 import org.example.servicios.CuentaServicio;
 import org.example.servicios.MovimientoServicio;
 
-import java.math.BigDecimal;
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Scanner;
 
-@AllArgsConstructor
 public class MenuConsultas {
+
     private CuentaServicio cuSer;
     private MovimientoServicio moSer;
     private Scanner entrada;
+
+    public MenuConsultas(CuentaServicio cuSer, MovimientoServicio moSer, Scanner entrada) {
+        this.cuSer = cuSer;
+        this.moSer = moSer;
+        this.entrada = entrada;
+    }
 
     private LocalDate validacionFecha(String mensaje,DateTimeFormatter dmt) {
         while (true) {

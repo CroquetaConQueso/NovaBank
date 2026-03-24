@@ -1,6 +1,5 @@
 package org.example.servicios;
 
-import lombok.AllArgsConstructor;
 import org.example.modelos.Cliente;
 import org.example.modelos.Cuenta;
 import org.example.repositorio.RepositorioCliente;
@@ -9,13 +8,17 @@ import org.example.repositorio.RepositorioCuenta;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Scanner;
 
-@AllArgsConstructor
 public class CuentaServicio {
+
     private final RepositorioCuenta repoCuenta;
     private final RepositorioCliente repoCliente;
     private static long contadorNumCuentas = 0L;
+
+    public CuentaServicio(RepositorioCuenta repoCuenta, RepositorioCliente repoCliente) {
+        this.repoCuenta = repoCuenta;
+        this.repoCliente = repoCliente;
+    }
 
     private void validarNumeroCuenta(String numeroCuenta) {
         if (numeroCuenta == null || numeroCuenta.isBlank()) {

@@ -1,18 +1,21 @@
 package org.example.servicios;
 
-import lombok.AllArgsConstructor;
-import lombok.Data;
 import org.example.modelos.Cliente;
 import org.example.repositorio.RepositorioCliente;
 
 import java.time.LocalDateTime;
-import java.util.Scanner;
 
-@Data
-@AllArgsConstructor
 public class ClienteServicio {
+
     private RepositorioCliente repoCliente;
 
+    public ClienteServicio(RepositorioCliente repoCliente) {
+        this.repoCliente = repoCliente;
+    }
+
+    public RepositorioCliente getRepoCliente() {
+        return repoCliente;
+    }
     //VALIDACIONES
 
     private void validarNombre(String nombre){

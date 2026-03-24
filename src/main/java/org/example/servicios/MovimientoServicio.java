@@ -1,23 +1,25 @@
 package org.example.servicios;
 
-import lombok.AllArgsConstructor;
 import org.example.modelos.Cuenta;
 import org.example.modelos.Movimiento;
 import org.example.modelos.TipoMovimiento;
 import org.example.repositorio.RepositorioCuenta;
 import org.example.repositorio.RepositorioMovimiento;
 
-import java.io.IOException;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 
-@AllArgsConstructor
 public class MovimientoServicio {
 
     private RepositorioCuenta repoCuenta;
     private RepositorioMovimiento repoMovi;
+
+    public MovimientoServicio(RepositorioCuenta repoCuenta, RepositorioMovimiento repoMovi) {
+        this.repoCuenta = repoCuenta;
+        this.repoMovi = repoMovi;
+    }
 
     private void registrarMovimiento(Cuenta cuenta, TipoMovimiento tipoMovimiento, BigDecimal cantidad){
         Movimiento nuevoMov = new Movimiento(cuenta, tipoMovimiento,cantidad, LocalDateTime.now());

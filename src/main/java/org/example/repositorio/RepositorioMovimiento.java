@@ -4,8 +4,10 @@ import org.example.modelos.Movimiento;
 
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.List;
 
 public class RepositorioMovimiento {
     private HashMap<Long, Movimiento> registroMovimientos = new HashMap<>();
@@ -14,7 +16,7 @@ public class RepositorioMovimiento {
         if(!registroMovimientos.containsKey(nuevoMovimiento.getIdMovimiento())){
             registroMovimientos.put(nuevoMovimiento.getIdMovimiento(),nuevoMovimiento);
         }else{
-            System.out.println("Ya existe un movimiento con esa id");
+            System.err.println("Ya existe un movimiento con esa id");
         }
     }
 
@@ -22,20 +24,26 @@ public class RepositorioMovimiento {
         return registroMovimientos.get(idBuscar);
     }
 
-    public void listarMovimientosCuenta(String numeroCuentaBuscar){
-        registroMovimientos.values().stream().filter(a -> a.getCuentaAsignada().getNumeroCuenta()
-                .equals(numeroCuentaBuscar)).forEach(System.out::println);
+    public List<Movimiento> obtenerMovimientosCuenta(String numeroCuentaBuscar){
+        return registroMovimientos.values().stream().filter(a -> a.getCuentaAsignada().getNumeroCuenta()
+                .equals(numeroCuentaBuscar)).sorted(Comparator.comparing(Movimiento::getFechaCreacionMov).reversed()).toList();
     }
 
-    public void listarMovimientosFecha(String numeroCuentaBuscar, String fechaInicio, String fechaFin) {
-        DateTimeFormatter formatoFecha = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+    public List<Movimiento> obtenerMovimientosFecha(String numeroCuentaBuscar, LocalDate inicio, LocalDate fin) {
+        List<Movimiento> movimientosFiltrados = new ArrayList<>();
 
-        LocalDate inicio = LocalDate.parse(fechaInicio, formatoFecha);
-        LocalDate fin = LocalDate.parse(fechaFin, formatoFecha);
+        for (Movimiento m : registroMovimientos.values()) {
+            if (m.getCuentaAsignada().getNumeroCuenta().equals(numeroCuentaBuscar)) {
+                LocalDate fechaMovimiento = m.getFechaCreacionMov().toLocalDate();
 
-        registroMovimientos.values().stream().filter(m -> m.getCuentaAsignada().getNumeroCuenta().equals(numeroCuentaBuscar))
-                .filter(m -> { LocalDate fechaMovimiento = m.getFechaCreacionMov().toLocalDate();
-                    return !fechaMovimiento.isBefore(inicio) && !fechaMovimiento.isAfter(fin);})
-                .sorted(Comparator.comparing(Movimiento::getFechaCreacionMov).reversed()).forEach(System.out::println);
+                if (!fechaMovimiento.isBefore(inicio) && !fechaMovimiento.isAfter(fin)) {
+                    movimientosFiltrados.add(m);
+                }
+            }
+        }
+        movimientosFiltrados.sort((mov1, mov2) -> mov2.getFechaCreacionMov().compareTo(mov1.getFechaCreacionMov()));
+
+        return movimientosFiltrados;
     }
 }
+

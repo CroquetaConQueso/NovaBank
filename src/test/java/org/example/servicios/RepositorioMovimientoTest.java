@@ -77,19 +77,11 @@ class RepositorioMovimientoTest {
     @Test
     void obtenerMovimientosCuenta_debeOrdenarPorFechaDescendente() {
 
-        Movimiento antiguo = new Movimiento(
-                cuenta,
-                TipoMovimiento.DEPOSITO,
-                new BigDecimal("100"),
-                LocalDateTime.now().minusDays(2)
-        );
+        Movimiento antiguo = new Movimiento(cuenta, TipoMovimiento.DEPOSITO, new BigDecimal("100"),
+                LocalDateTime.now().minusDays(2));
 
-        Movimiento reciente = new Movimiento(
-                cuenta,
-                TipoMovimiento.DEPOSITO,
-                new BigDecimal("200"),
-                LocalDateTime.now()
-        );
+        Movimiento reciente = new Movimiento(cuenta, TipoMovimiento.DEPOSITO, new BigDecimal("200"),
+                LocalDateTime.now());
 
         repositorio.guardarMovimiento(antiguo);
         repositorio.guardarMovimiento(reciente);
@@ -97,8 +89,7 @@ class RepositorioMovimientoTest {
         List<Movimiento> resultado = repositorio.obtenerMovimientosCuenta("ES12345678901234567890");
 
         assertEquals(2, resultado.size());
-        assertTrue(resultado.get(0).getFechaCreacionMov()
-                .isAfter(resultado.get(1).getFechaCreacionMov()));
+        assertTrue(resultado.get(0).getFechaCreacionMov().isAfter(resultado.get(1).getFechaCreacionMov()));
     }
 
     /**
@@ -120,24 +111,15 @@ class RepositorioMovimientoTest {
     @Test
     void obtenerMovimientosFecha_debeFiltrarPorRango() {
 
-        Movimiento mov1 = new Movimiento(
-                cuenta,
-                TipoMovimiento.DEPOSITO,
-                new BigDecimal("100"),
+        Movimiento mov1 = new Movimiento(cuenta, TipoMovimiento.DEPOSITO, new BigDecimal("100"),
                 LocalDateTime.of(2026,3,1,10,0)
         );
 
-        Movimiento mov2 = new Movimiento(
-                cuenta,
-                TipoMovimiento.DEPOSITO,
-                new BigDecimal("200"),
+        Movimiento mov2 = new Movimiento(cuenta, TipoMovimiento.DEPOSITO, new BigDecimal("200"),
                 LocalDateTime.of(2026,3,15,10,0)
         );
 
-        Movimiento mov3 = new Movimiento(
-                cuenta,
-                TipoMovimiento.DEPOSITO,
-                new BigDecimal("300"),
+        Movimiento mov3 = new Movimiento(cuenta, TipoMovimiento.DEPOSITO, new BigDecimal("300"),
                 LocalDateTime.of(2026,4,1,10,0)
         );
 
@@ -145,8 +127,7 @@ class RepositorioMovimientoTest {
         repositorio.guardarMovimiento(mov2);
         repositorio.guardarMovimiento(mov3);
 
-        List<Movimiento> resultado = repositorio.obtenerMovimientosFecha(
-                "ES12345678901234567890",
+        List<Movimiento> resultado = repositorio.obtenerMovimientosFecha("ES12345678901234567890",
                 LocalDate.of(2026,3,1),
                 LocalDate.of(2026,3,31)
         );
@@ -162,17 +143,13 @@ class RepositorioMovimientoTest {
     @Test
     void obtenerMovimientosFecha_sinCoincidencias_debeRetornarListaVacia() {
 
-        Movimiento movimiento = new Movimiento(
-                cuenta,
-                TipoMovimiento.DEPOSITO,
-                new BigDecimal("100"),
+        Movimiento movimiento = new Movimiento(cuenta, TipoMovimiento.DEPOSITO, new BigDecimal("100"),
                 LocalDateTime.of(2026,1,1,10,0)
         );
 
         repositorio.guardarMovimiento(movimiento);
 
-        List<Movimiento> resultado = repositorio.obtenerMovimientosFecha(
-                "ES12345678901234567890",
+        List<Movimiento> resultado = repositorio.obtenerMovimientosFecha("ES12345678901234567890",
                 LocalDate.of(2026,3,1),
                 LocalDate.of(2026,3,31)
         );

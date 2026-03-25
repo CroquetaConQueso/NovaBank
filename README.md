@@ -22,12 +22,15 @@ El sistema permite:
 
 ## Arquitectura
 
-La arquitectura del proyecto sigue una separación por capas que distingue entre:
+El proyecto sigue una arquitectura en capas con separación clara de responsabilidades:
 
-- Entidades del dominio
-- Repositorios en memoria
-- Servicios con lógica de negocio
-- Interfaz de usuario por consola
+- Modelos (entidades del dominio)
+- Repositorios en memoria (simulación de persistencia)
+- Servicios (lógica de negocio y reglas del sistema)
+- Menús (capa de presentación en consola)
+
+La lógica de negocio está desacoplada de la interfaz de usuario, lo que permite su validación independiente mediante pruebas unitarias.
+
 
 ## Tecnologías utilizadas
 
@@ -81,11 +84,12 @@ La ejecución debe finalizar mostrando:
 
 ## Estructura del proyecto
 
-com.novabank
+org.example
 ├── model        → Entidades del dominio (Cliente, Cuenta, Movimiento)
 ├── repository   → Almacenamiento en memoria
 ├── service      → Lógica de negocio y validaciones
 ├── menu         → Interfaz de usuario por consola
+├── utilidades   → Clase auxiliar la cual se expandirá en la siguiente iteración
 └── Main         → Punto de entrada de la aplicación
 
 La lógica de negocio se encuentra encapsulada en la capa de servicios, lo que permite validar su comportamiento de forma

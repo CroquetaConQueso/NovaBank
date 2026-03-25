@@ -2,6 +2,7 @@ package org.example.menu;
 
 import org.example.modelos.Cuenta;
 import org.example.servicios.MovimientoServicio;
+import org.example.utilidades.Utilidades;
 
 import java.math.BigDecimal;
 import java.util.InputMismatchException;
@@ -25,6 +26,18 @@ public class MenuMovimientos {
         this.entrada = entrada;
     }
 
+    private String tomarNumeroCuenta(String mensaje){
+        System.out.print(mensaje);
+        String numeroCuenta = entrada.nextLine().trim().toUpperCase();
+
+        if (!Utilidades.validarNumeroCuenta(numeroCuenta)) {
+            throw new IllegalArgumentException(
+                    "El número de cuenta debe tener formato ES seguido de 20 dígitos"
+            );
+        }
+        return numeroCuenta;
+    }
+
     /**
      * Solicita los datos necesarios para realizar una transferencia
      * entre dos cuentas y muestra el resultado por output.
@@ -33,11 +46,9 @@ public class MenuMovimientos {
      */
     private void transferirDinero(){
         try {
-            System.out.print("Número de cuenta origen: ");
-            String numeroCuOrigen = entrada.nextLine().toUpperCase().trim();
+            String numeroCuOrigen = tomarNumeroCuenta("Número de cuenta origen: ");
 
-            System.out.print("Número de cuenta destino: ");
-            String numeroCuDestino = entrada.nextLine().trim().toUpperCase();
+            String numeroCuDestino = tomarNumeroCuenta("Número de cuenta destino: ");
 
             System.out.print("Cantidad a transferir: ");
             BigDecimal cantidad = entrada.nextBigDecimal();
@@ -63,8 +74,7 @@ public class MenuMovimientos {
      */
     private void retirarDinero(){
         try {
-            System.out.print("Número de cuenta: ");
-            String numeroCuenta = entrada.nextLine().toUpperCase().trim();
+            String numeroCuenta = tomarNumeroCuenta("Número de cuenta: ");
 
             System.out.print("Cantidad a retirar: ");
             BigDecimal cantidad = entrada.nextBigDecimal();
@@ -88,8 +98,7 @@ public class MenuMovimientos {
      */
     private void depositarDinero(){
         try {
-            System.out.print("Número de cuenta: ");
-            String numeroCuento = entrada.nextLine().trim().toUpperCase();
+            String numeroCuento = tomarNumeroCuenta("Número de cuenta: ");
 
             System.out.print("Cantidad a depositar: ");
             BigDecimal cantidad = entrada.nextBigDecimal();

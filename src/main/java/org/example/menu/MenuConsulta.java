@@ -4,9 +4,11 @@ import org.example.modelos.Cuenta;
 import org.example.modelos.Movimiento;
 import org.example.servicios.CuentaServicio;
 import org.example.servicios.MovimientoServicio;
+import org.example.utilidades.Utilidades;
 
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
+import java.util.InputMismatchException;
 import java.util.List;
 import java.util.Scanner;
 
@@ -37,6 +39,17 @@ public class MenuConsulta {
         }
     }
 
+    private String tomarNumeroCuenta(){
+        System.out.print("Introduzca número de cuenta: ");
+        String numeroCuenta = entrada.nextLine().trim().toUpperCase();
+
+        if (!Utilidades.validarNumeroCuenta(numeroCuenta)) {
+            throw new IllegalArgumentException(
+                    "El número de cuenta debe tener formato ES seguido de 20 dígitos"
+            );
+        }
+        return numeroCuenta;
+    }
 
     /**
      * Muestra los movimientos de una cuenta dentro de un rango de fechas
@@ -44,9 +57,7 @@ public class MenuConsulta {
      */
     public void historiaRangoFechas(){
         try {
-            System.out.print("Introduzca número de cuenta: ");
-            String numeroCuenta = entrada.nextLine().trim().toUpperCase();
-
+            String numeroCuenta = tomarNumeroCuenta();
             cuSer.buscarNumero(numeroCuenta);
             DateTimeFormatter dmt = DateTimeFormatter.ofPattern("yyyy-MM-dd");
 
@@ -81,9 +92,7 @@ public class MenuConsulta {
      */
     public void historialMov(){
         try{
-            System.out.print("Introduzca número de cuenta: ");
-            String numeroCuenta = entrada.nextLine().trim().toUpperCase();
-
+            String numeroCuenta = tomarNumeroCuenta();
             Cuenta cuenta = cuSer.buscarNumero(numeroCuenta);
 
             List<Movimiento> lista = moSer.obtenerLista(numeroCuenta);
@@ -112,11 +121,13 @@ public class MenuConsulta {
     }
 
     public void consultarSaldo(){
-        System.out.print("Introduzca número de cuenta: ");
-        String numeroCuenta = entrada.nextLine().trim().toUpperCase();
-
-        Cuenta cuenta = cuSer.buscarNumero(numeroCuenta);
-        System.out.println("Saldo actual: "+cuenta.getSaldoCuenta()+" €");
+        try {
+            String numeroCuenta = tomarNumeroCuenta();
+            Cuenta cuenta = cuSer.buscarNumero(numeroCuenta);
+            System.out.println("Saldo actual: " + cuenta.getSaldoCuenta() + " €");
+        }catch(IllegalArgumentException ex){
+            System.err.println("ERROR: "+ex.getMessage());
+        }
     }
 
     /**
@@ -154,8 +165,9 @@ public class MenuConsulta {
                     default:
                         System.err.println("Debes de escoger una opción encontrada en el menu");
                 }
-            }catch(IllegalArgumentException ex){
+            }catch(InputMismatchException ex){
                 System.err.println("Debes de introducir un valor numérico");
+                entrada.nextLine();
             }
         }
     }

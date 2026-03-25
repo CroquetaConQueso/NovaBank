@@ -54,6 +54,10 @@ public class MovimientoServicio {
      * @return cuenta actualizada
      */
     public Cuenta depositar(String numeroCuenta, BigDecimal cantidad){
+
+        if(numeroCuenta == null || numeroCuenta.isBlank()) {
+            throw new IllegalArgumentException("Debe de introducir un número de cuenta");
+        }
         if(cantidad ==null || cantidad.compareTo(BigDecimal.ZERO)<=0){
             throw new IllegalArgumentException("La cantidad a depositar debe ser mayor que cero");
         }
@@ -80,6 +84,10 @@ public class MovimientoServicio {
      * @return cuenta actualizada
      */
     public Cuenta retirar(String numeroCuenta, BigDecimal cantidad){
+
+        if(numeroCuenta ==null || numeroCuenta.isBlank()){
+            throw new IllegalArgumentException("Debe de introducir un número de cuenta");
+        }
         if(cantidad ==null || cantidad.compareTo(BigDecimal.ZERO)<=0){
             throw new IllegalArgumentException("La cantidad a retirar debe ser mayor que cero");
         }
@@ -114,6 +122,11 @@ public class MovimientoServicio {
      * @param cantidad importe a transferir
      */
     public void transferir(String numeroOrigen, String numeroDestino, BigDecimal cantidad){
+
+        if(numeroOrigen == null || numeroOrigen.isBlank() || numeroDestino == null || numeroDestino.isBlank()){
+            throw new IllegalArgumentException("Debe introducir números de cuenta válidos");
+        }
+
         if(cantidad ==null || cantidad.compareTo(BigDecimal.ZERO)<=0){
             throw new IllegalArgumentException("La cantidad a depositar debe ser mayor que cero");
         }else if(numeroOrigen.equals(numeroDestino)){
@@ -146,6 +159,11 @@ public class MovimientoServicio {
     }
 
     public List<Movimiento> obtenerLista(String numeroCuenta){
+
+        if(numeroCuenta == null || numeroCuenta.isBlank()){
+            throw new IllegalArgumentException("Debe introducir un número de cuenta válido");
+        }
+
         Cuenta cuenta = repoCuenta.buscarNumeroCuenta(numeroCuenta);
 
         if(cuenta==null){
@@ -164,6 +182,16 @@ public class MovimientoServicio {
      * @return lista de movimientos dentro del intervalo indicado
      */
     public List<Movimiento> obtenerListaFecha(String numeroCuenta, LocalDate fechaIn, LocalDate fechaFin){
+
+        if(numeroCuenta== null || numeroCuenta.isBlank()){
+            throw new IllegalArgumentException("Debe introducir un número de cuenta válido");
+        }
+
+        if(fechaIn == null || fechaFin == null){
+            throw new IllegalArgumentException("Las fechas no pueden ser nulas");
+        }
+
+
         Cuenta cuenta = repoCuenta.buscarNumeroCuenta(numeroCuenta);
 
         if(cuenta==null){

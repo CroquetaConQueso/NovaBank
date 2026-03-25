@@ -1,4 +1,4 @@
-package org.example.servicios;
+package org.example.repositorios;
 
 import org.example.modelos.Cliente;
 import org.example.modelos.Cuenta;

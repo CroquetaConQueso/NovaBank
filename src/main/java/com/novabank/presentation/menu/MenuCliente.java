@@ -1,71 +1,57 @@
 package com.novabank.presentation.menu;
 
-
 import com.novabank.domain.model.Cliente;
+import com.novabank.exception.NovaBankException;
 import com.novabank.service.ClienteServicio;
 
 import java.util.InputMismatchException;
+import java.util.List;
 import java.util.Scanner;
 
 /**
- * Gestiona la interacción por consola relacionada con los clientes.
+ * Menú de clientes.
  *
- * Permite registrar nuevos clientes, buscarlos por ID o DNI
- * y mostrar el listado completo.
- *
- * Actúa como capa de presentación delegando la lógica
- * en ClienteServicio.
+ * Su responsabilidad es gestionar la interacción por consola y delegar
+ * la lógica de negocio en ClienteServicio.
  */
 public class MenuCliente {
 
     private final ClienteServicio clienteServicio;
-    private Scanner entrada;
+    private final Scanner entrada;
 
     public MenuCliente(ClienteServicio clienteServicio, Scanner entrada) {
         this.clienteServicio = clienteServicio;
         this.entrada = entrada;
     }
 
-    /**
-     * Solicita el identificador de un cliente y muestra su información
-     * si existe en el sistema.
-     */
-    public void buscarClienteId(){
-        try{
+    public void buscarClienteId() {
+        try {
             System.out.print("Introduzca la ID del cliente: ");
             Long idBuscar = entrada.nextLong();
             entrada.nextLine();
 
-            Cliente cli = clienteServicio.getRepoCliente().buscarIdCliente(idBuscar);
-            System.out.println(cli);
-        }catch(IllegalArgumentException ex){
-            System.err.println("Debes de introducir una ID correcta");
-        }catch(InputMismatchException inex){
-            System.err.println("Debes de introducir un valor númerico");
+            Cliente cliente = clienteServicio.buscarIdCliente(idBuscar);
+            System.out.println(cliente);
+        } catch (NovaBankException ex) {
+            System.err.println("ERROR: " + ex.getMessage());
+        } catch (InputMismatchException ex) {
+            System.err.println("Debes de introducir un valor numérico");
             entrada.nextLine();
         }
     }
 
-    /**
-     * Solicita el DNI/NIF de un cliente y muestra sus datos
-     * si se encuentra registrado.
-     */
-    public void buscarClienteDni(){
-        try{
+    public void buscarClienteDni() {
+        try {
             System.out.print("Introduzca el dni/nif del cliente: ");
-            String dniBuscar = entrada.nextLine().toUpperCase();
+            String dniBuscar = entrada.nextLine().trim().toUpperCase();
 
-            Cliente cli = clienteServicio.getRepoCliente().buscarDniCliente(dniBuscar);
-            System.out.println(cli);
-        }catch(IllegalArgumentException ex){
-            System.out.println("Debes de introducir un DNI/NIF correcto");
+            Cliente cliente = clienteServicio.buscarDniCliente(dniBuscar);
+            System.out.println(cliente);
+        } catch (NovaBankException ex) {
+            System.err.println("ERROR: " + ex.getMessage());
         }
     }
 
-    /**
-     * Permite seleccionar el criterio de búsqueda de cliente
-     * (por DNI o por ID) y delega en el método correspondiente.
-     */
     public void buscarCliente() {
         System.out.println("Busqueda:");
         System.out.println("1.DNI");
@@ -76,15 +62,10 @@ public class MenuCliente {
             int opcionSwitch = entrada.nextInt();
             entrada.nextLine();
 
-            switch (opcionSwitch){
-                case 1:
-                    buscarClienteDni();
-                    break;
-                case 2:
-                    buscarClienteId();
-                    break;
-                default:
-                    System.out.println("Opción no válida.");
+            switch (opcionSwitch) {
+                case 1 -> buscarClienteDni();
+                case 2 -> buscarClienteId();
+                default -> System.out.println("Opción no válida.");
             }
         } catch (InputMismatchException ex) {
             System.err.println("Error: Debes introducir un valor numérico");
@@ -92,21 +73,25 @@ public class MenuCliente {
         }
     }
 
-    /**
-     * Muestra por consola el listado completo de clientes registrados.
-     */
     private void listarClientes() {
+        List<Cliente> clientes = clienteServicio.listarClientes();
+
         System.out.println("\n--- LISTADO DE CLIENTES ---");
         System.out.println("ID    | Nombre      | DNI        | Email          | Teléfono");
-        clienteServicio.listarClientes();
+
+        for (Cliente cliente : clientes) {
+            System.out.println(
+                    cliente.getIdCliente() + " | "
+                            + cliente.getNombreCliente() + " | "
+                            + cliente.getDniNifCliente() + " | "
+                            + cliente.getEmailCliente() + " | "
+                            + cliente.getTelefonoCliente()
+            );
+        }
     }
 
-    /**
-     * Solicita los datos necesarios para registrar un nuevo cliente
-     * y delega la validación y creación al servicio correspondiente.
-     */
-    public void registrarCliente(){
-        try{
+    public void registrarCliente() {
+        try {
             System.out.print("Nombre: ");
             String nombreCliente = entrada.nextLine().trim();
 
@@ -123,24 +108,26 @@ public class MenuCliente {
             int telefonoCliente = entrada.nextInt();
             entrada.nextLine();
 
-            clienteServicio.registrarCliente(nombreCliente,apellidosCliente,dniNifCliente,emailCliente,telefonoCliente);
-        }catch(IllegalArgumentException ex){
-            System.out.println("Error: "+ex.getMessage());
-        }catch(InputMismatchException inex){
+            Cliente cliente = clienteServicio.registrarCliente(
+                    nombreCliente,
+                    apellidosCliente,
+                    dniNifCliente,
+                    emailCliente,
+                    telefonoCliente
+            );
+
+            System.out.println("Cliente creado correctamente.");
+            System.out.println("ID cliente: " + cliente.getIdCliente());
+        } catch (NovaBankException ex) {
+            System.out.println("Error: " + ex.getMessage());
+        } catch (InputMismatchException ex) {
             System.err.println("Error: El teléfono debe de ser numérico");
             entrada.nextLine();
         }
     }
 
-    /**
-     * Muestra el menú interactivo de gestión de clientes y
-     * controla la navegación entre sus distintas opciones.
-     *
-     * Permanece activo hasta que el usuario decide volver
-     * al menú principal.
-     */
-    public void menuClientes(){
-        while(true){
+    public void menuClientes() {
+        while (true) {
             System.out.println();
             System.out.println("====================================");
             System.out.println("         GESTIÓN DE CLIENTES");
@@ -154,26 +141,21 @@ public class MenuCliente {
             try {
                 int respuestaSwitch = entrada.nextInt();
                 entrada.nextLine();
-                switch (respuestaSwitch){
-                    case 1:
-                        registrarCliente();
-                        break;
-                    case 2:
-                        buscarCliente();
-                        break;
-                    case 3:
-                        listarClientes();
-                        break;
-                    case 4:
+
+                switch (respuestaSwitch) {
+                    case 1 -> registrarCliente();
+                    case 2 -> buscarCliente();
+                    case 3 -> listarClientes();
+                    case 4 -> {
                         System.out.println("Volviendo al menú principal...");
                         return;
-                    default:
-                        System.err.println("Debes de escoger una opción encontrada en el menu");
+                    }
+                    default -> System.err.println("Debes de escoger una opción encontrada en el menu");
                 }
-            }catch (IllegalArgumentException ex){
+            } catch (IllegalArgumentException ex) {
                 System.err.println("Debes de introducir un valor numérico");
-            }catch (InputMismatchException ex){
-                System.err.println("Error: "+ex.getMessage());
+            } catch (InputMismatchException ex) {
+                System.err.println("Error: " + ex.getMessage());
                 entrada.nextLine();
             }
         }

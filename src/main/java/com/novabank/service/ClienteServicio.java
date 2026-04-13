@@ -1,182 +1,244 @@
 package com.novabank.service;
 
 import com.novabank.domain.model.Cliente;
+import com.novabank.exception.DuplicateResourceException;
+import com.novabank.exception.ResourceNotFoundException;
+import com.novabank.exception.ValidationException;
 import com.novabank.persistence.memory.RepositorioCliente;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 /**
- * Servicio encargado de la lógica de negocio relacionada con los clientes.
+ * Servicio de clientes.
  *
- * Gestiona las validaciones, reglas de unicidad y operaciones
- * necesarias antes de interactuar con el repositorio.
- *
- * Actúa como intermediario entre la capa de presentación
- * y la capa de persistencia en memoria.
+ * Aquí vive la lógica de negocio relacionada con validación de datos,
+ * control de duplicados y coordinación con el repositorio.
  */
 public class ClienteServicio {
 
-    private RepositorioCliente repoCliente;
+    private final RepositorioCliente repoCliente;
 
     public ClienteServicio(RepositorioCliente repoCliente) {
         this.repoCliente = repoCliente;
     }
 
-    public RepositorioCliente getRepoCliente() {
-        return repoCliente;
-    }
-
     /**
-     * Dentro de este bloque hasta el siguiente comentario se encuentran las validaciones,
-     * en estas podemos encontrar las validaciones de:
-     *  -nombre
-     *  -apellido
-     *  -dni
-     *  -telefono
-     *  -email
-     *  -telefono
+     * Registra un nuevo cliente tras validar sus datos y comprobar
+     * que no exista otro con el mismo DNI, email o teléfono.
      */
-    private void validarNombre(String nombre){
-        if(nombre.isEmpty() || nombre.isBlank()){
-            throw new IllegalArgumentException("El cliente debe de tener un nombre");
-        }else if(nombre.length() < 2){
-            throw new IllegalArgumentException("El nombre debe de tener más de dos carácteres");
+    public Cliente registrarCliente(String nombre, String apellidos, String dni, String email, int telefono) {
+        validarNombre(nombre);
+        validarApellidos(apellidos);
+
+        String dniNormalizado = normalizarDni(dni);
+        String emailNormalizado = normalizarEmail(email);
+
+        validarDni(dniNormalizado);
+        validarEmail(emailNormalizado);
+        validarTelefono(telefono);
+
+        if (repoCliente.buscarDniCliente(dniNormalizado) != null) {
+            throw new DuplicateResourceException("Ya existe un cliente con el DNI " + dniNormalizado);
         }
 
-        for (int i = 0; i < nombre.length() ; i++) {
-            char valor = nombre.charAt(i);
-            if(!Character.isAlphabetic(valor)){
-                throw new IllegalArgumentException("Los caracteres solo pueden ser alfabéticos");
-            }
-        }
-    }
-
-    private void validarApellidos(String apellidos){
-        if(apellidos.isEmpty() || apellidos.isBlank()){
-            throw new IllegalArgumentException("El cliente debe de tener apellidos");
-        }else if(apellidos.length() < 2){
-            throw new IllegalArgumentException("Los apellidos debe de tener más de dos carácteres");
+        if (repoCliente.buscarEmailCliente(emailNormalizado) != null) {
+            throw new DuplicateResourceException("Ya existe un cliente con el email " + emailNormalizado);
         }
 
-        for (int i = 0; i < apellidos.length(); i++) {
-            char valor = apellidos.charAt(i);
-            if (!Character.isAlphabetic(valor) && !Character.isWhitespace(valor)) {
-                throw new IllegalArgumentException("Los caracteres solo pueden ser alfabéticos");
-            }
-        }
-    }
-
-    private void validarDni(String dniNif){
-        if(dniNif.isBlank() || dniNif.isEmpty()){
-            throw new IllegalArgumentException("El cliente debe de tener un dni/nif");
-        }else if(dniNif.length() != 9){
-            throw new IllegalArgumentException("El tamaño del dni/nif debe de ser 9 carácteres");
+        if (repoCliente.buscarTelefonoCliente(telefono) != null) {
+            throw new DuplicateResourceException("Ya existe un cliente con el teléfono " + telefono);
         }
 
-
-        for (int i = 0; i < 8; i++) {
-            if (!Character.isDigit(dniNif.charAt(i))) {
-                throw new IllegalArgumentException("Los primeros 8 caracteres del dni/nif deben de ser numéricos");
-            }
-        }
-
-        if (!Character.isLetter(dniNif.charAt(8))) {
-            throw new IllegalArgumentException("El último carácter del dni/nif debe de ser una letra");
-        }
-
-    }
-
-    private void validarEmail(String email) {
-        if(email.isEmpty() || email.isBlank()){
-            throw new IllegalArgumentException("El cliente debe de tener un email");
-        }else if(!email.matches(".+@.+\\..+")){
-            throw new IllegalArgumentException("El email debe de contener un formato adecuado");
-        }
-    }
-
-    private void validarTelefono(int telefonoCliente){
-        if(telefonoCliente <= 0){
-            throw new IllegalArgumentException("El numero de telefono no puede ser negativo");
-        }else if(String.valueOf(telefonoCliente).length() !=9){
-            throw new IllegalArgumentException("El numero de telefono debe de tener 9 caracteres");
-        }
-    }
-
-    //LOGICA
-
-    public void listarClientes(){
-        repoCliente.listarClientes();
-    }
-
-    /**
-     * Busca un cliente por su identificador,
-     * validando previamente que sea un valor correcto.
-     */
-
-    public Cliente buscarIdCliente(Long idBuscar) {
-        if (idBuscar == null || idBuscar <= 0) {
-            throw new IllegalArgumentException("Debes de introducir una ID correcta");
-        }
-
-        Cliente cliente = repoCliente.buscarIdCliente(idBuscar);
-
-        if (cliente == null) {
-            throw new IllegalArgumentException("No se ha podido encontrar al cliente con esa ID");
-        }
-
-        return cliente;
-    }
-
-    // Busca un cliente por su DNI/NIF tras validar su formato.
-    public Cliente buscarDniCliente(String dniBuscar) {
-        validarDni(dniBuscar);
-
-        Cliente cliente = repoCliente.buscarDniCliente(dniBuscar);
-
-        if (cliente == null) {
-            throw new IllegalArgumentException("No se ha podido encontrar al cliente con ese dni");
-        }
-
-        return cliente;
-    }
-
-    /**
-     * Registra un nuevo cliente en el sistema.
-     *
-     * Aplica todas las validaciones necesarias y verifica
-     * que DNI, email y teléfono sean únicos antes de crear
-     * el objeto Cliente y almacenarlo en el repositorio.
-     *
-     * @param nombreCliente nombre del cliente
-     * @param apellidosCliente apellidos del cliente
-     * @param dniNifCliente DNI/NIF del cliente
-     * @param emailCliente correo electrónico
-     * @param telefonoCliente número de teléfono
-     */
-    public void registrarCliente(String nombreCliente,String apellidosCliente, String dniNifCliente, String emailCliente, int telefonoCliente ){
-
-        validarNombre(nombreCliente);
-        validarApellidos(apellidosCliente);
-
-        validarDni(dniNifCliente);
-        if(repoCliente.buscarDniCliente(dniNifCliente)!=null){
-            throw new IllegalArgumentException("Ya existe un cliente con el DNI "+dniNifCliente);
-        }
-
-        validarEmail(emailCliente);
-        if(repoCliente.buscarEmailCliente(emailCliente)!=null){
-            throw new IllegalArgumentException("Ya existe un cliente con el email "+emailCliente);
-        }
-
-        validarTelefono(telefonoCliente);
-        if(repoCliente.buscarTelefonoCliente(telefonoCliente)!= null){
-            throw new IllegalArgumentException("Ya existe un cliente con el telefono "+telefonoCliente);
-        }
-        Cliente nuevoCliente = new Cliente(nombreCliente,apellidosCliente,dniNifCliente,emailCliente,telefonoCliente, LocalDateTime.now());
+        Cliente nuevoCliente = Cliente.builder()
+                .nombreCliente(nombre.trim())
+                .apellidosCliente(apellidos.trim())
+                .dniNifCliente(dniNormalizado)
+                .emailCliente(emailNormalizado)
+                .telefonoCliente(telefono)
+                .fechaCreacionCliente(LocalDateTime.now())
+                .build();
 
         repoCliente.anadirCliente(nuevoCliente);
-        System.out.println("Cliente creado correctamente.");
-        System.out.println("ID cliente: "+nuevoCliente.getIdCliente());
+        return nuevoCliente;
     }
 
+    public Cliente buscarIdCliente(Long idBusqueda) {
+        if (idBusqueda == null || idBusqueda <= 0) {
+            throw new ValidationException("Debes introducir una ID correcta");
+        }
+
+        Cliente cliente = repoCliente.buscarIdCliente(idBusqueda);
+
+        if (cliente == null) {
+            throw new ResourceNotFoundException("No existe ningún cliente con la ID " + idBusqueda);
+        }
+
+        return cliente;
+    }
+
+    public Cliente buscarDniCliente(String dni) {
+        String dniNormalizado = normalizarDni(dni);
+        validarDni(dniNormalizado);
+
+        Cliente cliente = repoCliente.buscarDniCliente(dniNormalizado);
+
+        if (cliente == null) {
+            throw new ResourceNotFoundException("No existe ningún cliente con el DNI/NIF indicado");
+        }
+
+        return cliente;
+    }
+
+    public List<Cliente> listarClientes() {
+        return repoCliente.obtenerClientes();
+    }
+
+    private String normalizarDni(String dni) {
+        if (dni == null) {
+            return null;
+        }
+        return dni.trim().toUpperCase();
+    }
+
+    private String normalizarEmail(String email) {
+        if (email == null) {
+            return null;
+        }
+        return email.trim().toLowerCase();
+    }
+
+    private void validarNombre(String nombre) {
+        if (nombre == null || nombre.isBlank() || nombre.trim().length() < 2) {
+            throw new ValidationException("El cliente debe de tener un nombre válido.");
+        }
+
+        for (char c : nombre.trim().toCharArray()) {
+            if (!Character.isLetter(c) && !Character.isWhitespace(c)) {
+                throw new ValidationException("El nombre solo puede contener caracteres alfabéticos.");
+            }
+        }
+    }
+
+    private void validarApellidos(String apellidos) {
+        if (apellidos == null || apellidos.isBlank() || apellidos.trim().length() < 2) {
+            throw new ValidationException("El cliente debe de tener apellidos válidos.");
+        }
+
+        for (char c : apellidos.trim().toCharArray()) {
+            if (!Character.isLetter(c) && !Character.isWhitespace(c)) {
+                throw new ValidationException("Los apellidos solo pueden contener letras y espacios.");
+            }
+        }
+    }
+
+    private void validarDni(String dni) {
+        if (dni == null || dni.isBlank() || dni.length() != 9) {
+            throw new ValidationException("El DNI/NIF debe tener 9 caracteres.");
+        }
+
+        for (int i = 0; i < 8; i++) {
+            if (!Character.isDigit(dni.charAt(i))) {
+                throw new ValidationException("Los primeros 8 caracteres del DNI/NIF deben ser numéricos.");
+            }
+        }
+
+        if (!Character.isLetter(dni.charAt(8))) {
+            throw new ValidationException("El último carácter del DNI/NIF debe ser una letra.");
+        }
+    }
+
+    /**
+     * Valida el email con reglas más estrictas que una simple expresión mínima.
+     *
+     * Reglas aplicadas:
+     * - longitud máxima total de 254 caracteres
+     * - un único '@'
+     * - parte local no vacía, sin puntos al inicio/final ni dobles puntos
+     * - dominio con al menos un punto
+     * - etiquetas del dominio sin guiones al inicio/final
+     * - TLD de al menos 2 letras
+     */
+    private void validarEmail(String email) {
+        if (email == null || email.isBlank()) {
+            throw new ValidationException("El email debe de tener un formato válido.");
+        }
+
+        if (email.length() > 254) {
+            throw new ValidationException("El email no puede superar los 254 caracteres.");
+        }
+
+        int primerArroba = email.indexOf('@');
+        int ultimaArroba = email.lastIndexOf('@');
+
+        if (primerArroba <= 0 || primerArroba != ultimaArroba || primerArroba == email.length() - 1) {
+            throw new ValidationException("El email debe contener un único '@' en una posición válida.");
+        }
+
+        String parteLocal = email.substring(0, primerArroba);
+        String dominio = email.substring(primerArroba + 1);
+
+        validarParteLocalEmail(parteLocal);
+        validarDominioEmail(dominio);
+    }
+
+    private void validarParteLocalEmail(String parteLocal) {
+        if (parteLocal.length() > 64) {
+            throw new ValidationException("La parte local del email no puede superar los 64 caracteres.");
+        }
+
+        if (parteLocal.startsWith(".") || parteLocal.endsWith(".") || parteLocal.contains("..")) {
+            throw new ValidationException("La parte local del email tiene un formato inválido.");
+        }
+
+        if (!parteLocal.matches("[A-Za-z0-9!#$%&'*+/=?^_`{|}~.-]+")) {
+            throw new ValidationException("La parte local del email contiene caracteres no permitidos.");
+        }
+    }
+
+    private void validarDominioEmail(String dominio) {
+        if (dominio.length() > 253) {
+            throw new ValidationException("El dominio del email es demasiado largo.");
+        }
+
+        if (dominio.startsWith(".") || dominio.endsWith(".") || dominio.contains("..")) {
+            throw new ValidationException("El dominio del email tiene un formato inválido.");
+        }
+
+        if (!dominio.contains(".")) {
+            throw new ValidationException("El dominio del email debe contener al menos un punto.");
+        }
+
+        String[] etiquetas = dominio.split("\\.");
+
+        for (String etiqueta : etiquetas) {
+            if (etiqueta.isBlank()) {
+                throw new ValidationException("El dominio del email contiene etiquetas vacías.");
+            }
+
+            if (etiqueta.length() > 63) {
+                throw new ValidationException("Una etiqueta del dominio del email supera los 63 caracteres.");
+            }
+
+            if (etiqueta.startsWith("-") || etiqueta.endsWith("-")) {
+                throw new ValidationException("Las etiquetas del dominio no pueden empezar ni terminar con guion.");
+            }
+
+            if (!etiqueta.matches("[A-Za-z0-9-]+")) {
+                throw new ValidationException("El dominio del email contiene caracteres no permitidos.");
+            }
+        }
+
+        String tld = etiquetas[etiquetas.length - 1];
+
+        if (!tld.matches("[A-Za-z]{2,63}")) {
+            throw new ValidationException("El dominio del email debe terminar en una extensión válida.");
+        }
+    }
+
+    private void validarTelefono(int telefono) {
+        if (String.valueOf(telefono).length() != 9) {
+            throw new ValidationException("El teléfono debe de tener exactamente 9 dígitos.");
+        }
+    }
 }

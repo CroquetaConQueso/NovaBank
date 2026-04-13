@@ -1,8 +1,6 @@
 package com.novabank;
 
-import com.novabank.persistence.memory.RepositorioCliente;
-import com.novabank.persistence.memory.RepositorioCuenta;
-import com.novabank.persistence.memory.RepositorioMovimiento;
+import com.novabank.config.RepositoryFactory;
 import com.novabank.persistence.repository.ClienteRepository;
 import com.novabank.persistence.repository.CuentaRepository;
 import com.novabank.persistence.repository.MovimientoRepository;
@@ -25,9 +23,9 @@ public class Main {
     public static void main(String[] args) {
         Scanner entrada = new Scanner(System.in);
 
-        ClienteRepository repoCliente = new RepositorioCliente();
-        CuentaRepository repoCuenta = new RepositorioCuenta();
-        MovimientoRepository repoMovimiento = new RepositorioMovimiento();
+        ClienteRepository repoCliente = RepositoryFactory.crearClienteRepository();
+        CuentaRepository repoCuenta = RepositoryFactory.crearCuentaRepository();
+        MovimientoRepository repoMovimiento = RepositoryFactory.crearMovimientoRepository();
 
         ClienteServicio cliServ = new ClienteServicio(repoCliente);
         CuentaServicio cuServ = new CuentaServicio(repoCuenta, repoCliente);

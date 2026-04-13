@@ -1,19 +1,40 @@
-package org.example.menu;
+package com.novabank.presentation.menu;
 
-import lombok.AllArgsConstructor;
-import org.example.modelos.Cliente;
-import org.example.modelos.Cuenta;
-import org.example.servicios.CuentaServicio;
+
+import com.novabank.domain.model.Cliente;
+import com.novabank.domain.model.Cuenta;
+import com.novabank.service.CuentaServicio;
 
 import java.time.format.DateTimeFormatter;
+import java.util.InputMismatchException;
 import java.util.List;
 import java.util.Scanner;
 
-@AllArgsConstructor
+/**
+ * Gestiona la interacción por consola relacionada con las cuentas bancarias.
+ *
+ * Permite crear cuentas, consultar información individual
+ * y listar las cuentas asociadas a un cliente.
+ *
+ * Actúa como capa de presentación delegando la lógica
+ * en CuentaServicio.
+ */
 public class MenuCuenta {
+
     private final CuentaServicio cuentaServicio;
     private Scanner entrada;
 
+    public MenuCuenta(CuentaServicio cuentaServicio, Scanner entrada) {
+        this.cuentaServicio = cuentaServicio;
+        this.entrada = entrada;
+    }
+
+    /**
+     * Solicita un número de cuenta y muestra su información detallada,
+     * incluyendo titular, saldo y fecha de creación.
+     *
+     * La validación de existencia se delega en el servicio.
+     */
     private void verInfoCuenta(){
         try {
             System.out.print("Introduzca número de cuenta: ");
@@ -23,7 +44,7 @@ public class MenuCuenta {
 
             System.out.println("Número de cuenta: " + cuenta.getNumeroCuenta()
                     +"\nTitular: " + cuenta.getDueñoCuenta().getNombreCliente() + " " + cuenta.getDueñoCuenta().getApellidosCliente()
-                    +"\nSaldo: " + cuenta.getSaldoCuenta()+
+                    +"\nSaldo: " + cuenta.getSaldoCuenta()+ " €"+
                     "\nFecha de creación: " + cuenta.getFechaCreacionCuenta().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
             ));
 
@@ -32,45 +53,75 @@ public class MenuCuenta {
         }
     }
 
+    /**
+     * Muestra todas las cuentas asociadas a un cliente concreto
+     * a partir de su identificador.
+     *
+     * Si el cliente no tiene cuentas registradas, se informa por pantalla.
+     */
     private void listarCuentasCli(){
         try{
             System.out.print("Introduce el ID del cliente: ");
             Long idCliente = entrada.nextLong();
+            entrada.nextLine();
 
             Cliente cli = cuentaServicio.obtenerTitular(idCliente);
             List<Cuenta> cuentasCliente = cuentaServicio.obtenerCuentas(idCliente);
 
             System.out.println("Cuentas del cliente "+cli.getNombreCliente()+" "+cli.getApellidosCliente());
-            System.out.println("Número de cuenta               | Saldo");
+            System.out.println("Número de cuenta         | Saldo");
+            System.out.println("-------------------------|----------");
 
             if(cuentasCliente.isEmpty()){
                 System.out.println("El cliente no tiene cuentas registradas");
                 return;
             }
             for (Cuenta cu: cuentasCliente){
-                System.out.println(cu.getNumeroCuenta()+" | "+cu.getSaldoCuenta());
+                System.out.println(cu.getNumeroCuenta()+" | "+cu.getSaldoCuenta()+ " €");
             }
         }catch (IllegalArgumentException ex){
+            System.out.println("ERROR: "+ex.getMessage());
+        }catch(InputMismatchException inex){
             System.out.println("El valor debe de ser numérico");
+            entrada.nextLine();
         }
     }
+
+    /**
+     * Crea una nueva cuenta bancaria asociada a un cliente existente.
+     *
+     * Solicita el ID del cliente y delega la creación
+     * al servicio correspondiente.
+     */
     private void crearCuenta(){
         try{
-            System.out.println("ID del cliente titular de la cuenta: ");
+            System.out.print("ID del cliente titular de la cuenta: ");
             Long idCliente = entrada.nextLong();
+            entrada.nextLine();
 
             Cuenta cuenta = cuentaServicio.crearCuenta(idCliente);
 
             System.out.println("Cuenta creada correctamente.");
             System.out.println("\nNúmero de la cuenta: "+cuenta.getNumeroCuenta()
-                    +"\nTitular: "+cuenta.getDueñoCuenta()+"(ID: "+cuenta.getIdCuenta()+")"
-                    +"\nSaldo inicial: "+cuenta.getSaldoCuenta());
+                    +"\nTitular: "+cuenta.getDueñoCuenta().getNombreCliente()+" "+cuenta.getDueñoCuenta().getApellidosCliente()
+                    +" (ID: "+cuenta.getDueñoCuenta().getIdCliente()+")"
+                    +"\nSaldo inicial: "+cuenta.getSaldoCuenta()+ " €");
             ;
         }catch(IllegalArgumentException ex){
+            System.err.println("ERROR:" +ex.getMessage());
+        }catch(InputMismatchException inex){
             System.err.println("El valor debe de ser númerico");
+            entrada.nextLine();
         }
     }
 
+    /**
+     * Muestra el menú interactivo de gestión de cuentas y
+     * controla la navegación entre sus distintas opciones.
+     *
+     * Permanece en ejecución hasta que el usuario decide volver
+     * al menú principal.
+     */
     public void menuCuentas(){
         while(true){
             System.out.println();
@@ -83,6 +134,7 @@ public class MenuCuenta {
 
             try{
                 int opcionSwitch = entrada.nextInt();
+                entrada.nextLine();
 
                 switch (opcionSwitch) {
                     case 1:
@@ -102,6 +154,9 @@ public class MenuCuenta {
                 }
             }catch (IllegalArgumentException ex){
                 System.out.println("El valor debe de ser númerico");
+            }catch(InputMismatchException inex){
+                System.out.println("Debes de introdducir un valor númerico");
+                entrada.nextLine();
             }
         }
     }

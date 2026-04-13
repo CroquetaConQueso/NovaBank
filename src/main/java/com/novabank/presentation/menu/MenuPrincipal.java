@@ -1,33 +1,25 @@
-package org.example;
-
-import org.example.menu.MenuCliente;
-import org.example.menu.MenuCuenta;
-import org.example.menu.MenuMovimientos;
-import org.example.repositorio.RepositorioCliente;
-import org.example.repositorio.RepositorioCuenta;
-import org.example.repositorio.RepositorioMovimiento;
-import org.example.servicios.ClienteServicio;
-import org.example.servicios.CuentaServicio;
-import org.example.servicios.MovimientoServicio;
+package com.novabank.presentation.menu;
 
 import java.util.Scanner;
 
-public class Main {
-    public static void main(String[] args) {
-        Scanner entrada = new Scanner(System.in);
+public class MenuPrincipal {
 
-        RepositorioCliente repoCliente = new RepositorioCliente();
-        RepositorioCuenta repoCuenta = new RepositorioCuenta();
-        RepositorioMovimiento repoMovimiento = new RepositorioMovimiento();
+    private Scanner entrada;
+    private MenuCliente menuCli;
+    private MenuCuenta menuCu;
+    private MenuMovimientos menuMov;
+    private MenuConsulta menuCo;
 
-        ClienteServicio cliServ = new ClienteServicio(repoCliente);
-        CuentaServicio cuServ = new CuentaServicio(repoCuenta, repoCliente);
-        MovimientoServicio moviServ = new MovimientoServicio(repoCuenta, repoMovimiento);
+    public MenuPrincipal(Scanner entrada, MenuCliente menuCli, MenuCuenta menuCu,
+                         MenuMovimientos menuMov, MenuConsulta menuCo) {
+        this.entrada = entrada;
+        this.menuCli = menuCli;
+        this.menuCu = menuCu;
+        this.menuMov = menuMov;
+        this.menuCo = menuCo;
+    }
 
-        MenuCliente menuCli = new MenuCliente(cliServ, entrada);
-        MenuCuenta menuCu = new MenuCuenta(cuServ, entrada);
-        MenuMovimientos menuMov = new MenuMovimientos(moviServ, entrada);
-
+    public void menuPrincipal() {
         while (true) {
             System.out.println();
             System.out.println("====================================");
@@ -36,7 +28,8 @@ public class Main {
             System.out.println("1. Gestión de clientes");
             System.out.println("2. Gestión de cuentas");
             System.out.println("3. Operaciones financieras");
-            System.out.println("4. Salir");
+            System.out.println("4. Consultas");
+            System.out.println("5. Salir");
             System.out.print("Seleccione una opción: ");
 
             try {
@@ -53,6 +46,9 @@ public class Main {
                         menuMov.menuMovimientos();
                         break;
                     case 4:
+                        menuCo.menuConsultas();
+                        break;
+                    case 5:
                         System.out.println("Saliendo del sistema...");
                         entrada.close();
                         return;

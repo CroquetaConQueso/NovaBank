@@ -6,8 +6,8 @@ import com.novabank.domain.model.Movimiento;
 import com.novabank.domain.model.TipoMovimiento;
 import com.novabank.exception.ResourceNotFoundException;
 import com.novabank.exception.ValidationException;
-import com.novabank.persistence.memory.RepositorioCuenta;
-import com.novabank.persistence.memory.RepositorioMovimiento;
+import com.novabank.persistence.repository.CuentaRepository;
+import com.novabank.persistence.repository.MovimientoRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -30,10 +30,10 @@ import static org.mockito.Mockito.when;
 class ConsultasMovimientoTest {
 
     @Mock
-    private RepositorioCuenta repoCuenta;
+    private CuentaRepository repoCuenta;
 
     @Mock
-    private RepositorioMovimiento repoMovimiento;
+    private MovimientoRepository repoMovimiento;
 
     @InjectMocks
     private MovimientoServicio movimientoServicio;

@@ -4,13 +4,15 @@ import com.novabank.domain.model.Cliente;
 import com.novabank.exception.DuplicateResourceException;
 import com.novabank.exception.ResourceNotFoundException;
 import com.novabank.exception.ValidationException;
-import com.novabank.persistence.memory.RepositorioCliente;
+import com.novabank.persistence.repository.ClienteRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+
+import java.time.LocalDateTime;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -26,7 +28,7 @@ import static org.mockito.Mockito.when;
 class ClienteServicioTest {
 
     @Mock
-    private RepositorioCliente repoCliente;
+    private ClienteRepository repoCliente;
 
     @InjectMocks
     private ClienteServicio clienteServicio;
@@ -57,7 +59,7 @@ class ClienteServicioTest {
     @Test
     void registrarCliente_dniDuplicado_debeLanzarExcepcion() {
         when(repoCliente.buscarDniCliente("12345678Z"))
-                .thenReturn(Cliente.builder().nombreCliente("Otro").build());
+                .thenReturn(Cliente.builder().nombreCliente("Otro").fechaCreacionCliente(LocalDateTime.now()).build());
 
         assertThrows(
                 DuplicateResourceException.class,

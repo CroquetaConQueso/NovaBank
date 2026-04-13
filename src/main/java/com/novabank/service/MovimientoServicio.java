@@ -1,11 +1,14 @@
 package com.novabank.service;
 
-
 import com.novabank.domain.model.Cuenta;
 import com.novabank.domain.model.Movimiento;
 import com.novabank.domain.model.TipoMovimiento;
+import com.novabank.exception.InsufficientBalanceException;
+import com.novabank.exception.ResourceNotFoundException;
+import com.novabank.exception.ValidationException;
 import com.novabank.persistence.memory.RepositorioCuenta;
 import com.novabank.persistence.memory.RepositorioMovimiento;
+import com.novabank.util.Utilidades;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -13,18 +16,15 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 /**
- * Servicio encargado de la gestión de operaciones financieras.
+ * Servicio de operaciones financieras.
  *
- * Contiene la lógica de negocio para depósitos, retiros,
- * transferencias y consulta de movimientos.
- *
- * Garantiza la validación de datos y la integridad
- * de los saldos antes de registrar cualquier operación.
+ * Centraliza la lógica de depósitos, retiros, transferencias y consulta
+ * de movimientos, manteniendo la persistencia en memoria en esta fase.
  */
 public class MovimientoServicio {
 
-    private RepositorioCuenta repoCuenta;
-    private RepositorioMovimiento repoMovi;
+    private final RepositorioCuenta repoCuenta;
+    private final RepositorioMovimiento repoMovi;
 
     public MovimientoServicio(RepositorioCuenta repoCuenta, RepositorioMovimiento repoMovi) {
         this.repoCuenta = repoCuenta;
@@ -32,178 +32,164 @@ public class MovimientoServicio {
     }
 
     /**
-     * Registra un movimiento financiero asociado a una cuenta.
+     * Aplica un depósito a una cuenta existente y registra el movimiento.
      *
-     * @param cuenta cuenta afectada
-     * @param tipoMovimiento tipo de operación realizada
-     * @param cantidad importe de la operación
-     */
-    private void registrarMovimiento(Cuenta cuenta, TipoMovimiento tipoMovimiento, BigDecimal cantidad){
-        Movimiento nuevoMov = new Movimiento(cuenta, tipoMovimiento,cantidad, LocalDateTime.now());
-
-        repoMovi.guardarMovimiento(nuevoMov);
-    }
-
-    /**
-     * Realiza un depósito en la cuenta indicada.
-     *
-     * Valida que la cantidad sea positiva y que la cuenta exista
-     * antes de actualizar el saldo y registrar el movimiento.
-     *
-     * @param numeroCuenta cuenta destino
+     * @param numeroCuenta número de cuenta destino
      * @param cantidad importe a depositar
      * @return cuenta actualizada
      */
-    public Cuenta depositar(String numeroCuenta, BigDecimal cantidad){
-
-        if(numeroCuenta == null || numeroCuenta.isBlank()) {
-            throw new IllegalArgumentException("Debe de introducir un número de cuenta");
-        }
-        if(cantidad ==null || cantidad.compareTo(BigDecimal.ZERO)<=0){
-            throw new IllegalArgumentException("La cantidad a depositar debe ser mayor que cero");
-        }
-        Cuenta cuenta = repoCuenta.buscarNumeroCuenta(numeroCuenta);
-
-        if(cuenta == null){
-            throw new IllegalArgumentException("No se ha encontrado la cuenta");
-        }
+    public Cuenta depositar(String numeroCuenta, BigDecimal cantidad) {
+        Cuenta cuenta = obtenerCuentaValida(numeroCuenta);
+        validarCantidadPositiva(cantidad, "depositar");
 
         cuenta.setSaldoCuenta(cuenta.getSaldoCuenta().add(cantidad));
-        registrarMovimiento(cuenta,TipoMovimiento.DEPOSITO,cantidad);
+        registrarMovimiento(cuenta, TipoMovimiento.DEPOSITO, cantidad);
 
         return cuenta;
     }
 
     /**
-     * Realiza un retiro de fondos de una cuenta.
+     * Aplica un retiro sobre una cuenta existente si dispone de saldo suficiente.
      *
-     * Valida que la cantidad sea positiva, que la cuenta exista
-     * y que el saldo sea suficiente antes de efectuar la operación.
-     *
-     * @param numeroCuenta cuenta origen
+     * @param numeroCuenta número de cuenta origen
      * @param cantidad importe a retirar
      * @return cuenta actualizada
      */
-    public Cuenta retirar(String numeroCuenta, BigDecimal cantidad){
-
-        if(numeroCuenta ==null || numeroCuenta.isBlank()){
-            throw new IllegalArgumentException("Debe de introducir un número de cuenta");
-        }
-        if(cantidad ==null || cantidad.compareTo(BigDecimal.ZERO)<=0){
-            throw new IllegalArgumentException("La cantidad a retirar debe ser mayor que cero");
-        }
-        Cuenta cuenta = repoCuenta.buscarNumeroCuenta(numeroCuenta);
-
-        if(cuenta == null){
-            throw new IllegalArgumentException("No se ha encontrado la cuenta");
-        }
+    public Cuenta retirar(String numeroCuenta, BigDecimal cantidad) {
+        Cuenta cuenta = obtenerCuentaValida(numeroCuenta);
+        validarCantidadPositiva(cantidad, "retirar");
 
         if (cuenta.getSaldoCuenta().compareTo(cantidad) < 0) {
-            throw new IllegalArgumentException("Saldo insuficiente.\nSaldo disponible: " + cuenta.getSaldoCuenta()
-                    + " €\nImporte solicitado: " + cantidad + " €");
+            throw new InsufficientBalanceException(
+                    "Saldo insuficiente.\nSaldo disponible: " + cuenta.getSaldoCuenta()
+                            + " €\nImporte solicitado: " + cantidad + " €"
+            );
         }
 
         cuenta.setSaldoCuenta(cuenta.getSaldoCuenta().subtract(cantidad));
-        registrarMovimiento(cuenta,TipoMovimiento.RETIRO,cantidad);
+        registrarMovimiento(cuenta, TipoMovimiento.RETIRO, cantidad);
 
         return cuenta;
     }
 
     /**
-     * Realiza una transferencia entre dos cuentas distintas.
+     * Transfiere saldo entre dos cuentas distintas, registrando un movimiento
+     * de salida y otro de entrada.
      *
-     * Verifica la existencia de ambas cuentas, que no sean la misma
-     * y que el saldo sea suficiente antes de efectuar la operación.
-     *
-     * En caso de error durante el proceso, se revierten los cambios
-     * realizados en memoria.
-     *
-     * @param numeroOrigen cuenta de origen
-     * @param numeroDestino cuenta de destino
+     * @param numeroOrigen cuenta origen
+     * @param numeroDestino cuenta destino
      * @param cantidad importe a transferir
      */
-    public void transferir(String numeroOrigen, String numeroDestino, BigDecimal cantidad){
+    public void transferir(String numeroOrigen, String numeroDestino, BigDecimal cantidad) {
+        String origenNormalizado = normalizarNumeroCuenta(numeroOrigen);
+        String destinoNormalizado = normalizarNumeroCuenta(numeroDestino);
 
-        if(numeroOrigen == null || numeroOrigen.isBlank() || numeroDestino == null || numeroDestino.isBlank()){
-            throw new IllegalArgumentException("Debe introducir números de cuenta válidos");
+        validarNumeroCuenta(origenNormalizado);
+        validarNumeroCuenta(destinoNormalizado);
+        validarCantidadPositiva(cantidad, "transferir");
+
+        if (origenNormalizado.equals(destinoNormalizado)) {
+            throw new ValidationException("La cuenta origen y destino deben de ser diferentes");
         }
 
-        if(cantidad ==null || cantidad.compareTo(BigDecimal.ZERO)<=0){
-            throw new IllegalArgumentException("La cantidad a depositar debe ser mayor que cero");
-        }else if(numeroOrigen.equals(numeroDestino)){
-            throw new IllegalArgumentException("La cuenta origen y destino deben de ser diferentes");
+        Cuenta cuentaOrigen = obtenerCuentaValida(origenNormalizado);
+        Cuenta cuentaDestino = obtenerCuentaValida(destinoNormalizado);
+
+        if (cuentaOrigen.getSaldoCuenta().compareTo(cantidad) < 0) {
+            throw new InsufficientBalanceException(
+                    "La cantidad a transferir no puede ser mayor que la cantidad encontrada en la cuenta"
+            );
         }
 
-        Cuenta cuentaOrigen = repoCuenta.buscarNumeroCuenta(numeroOrigen);
-        if(cuentaOrigen == null){
-            throw new IllegalArgumentException("La cuenta a realizar la transferencia debe de existir");
-        }
-        Cuenta cuentaDestino = repoCuenta.buscarNumeroCuenta(numeroDestino);
+        BigDecimal saldoOrigenAnterior = cuentaOrigen.getSaldoCuenta();
+        BigDecimal saldoDestinoAnterior = cuentaDestino.getSaldoCuenta();
 
-        if(cuentaDestino == null){
-            throw new IllegalArgumentException("La cuenta a la que se va a realizar la transferencia debe de existir");
-        }
-
-        if((cuentaOrigen.getSaldoCuenta().compareTo(cantidad))<0){
-            throw new IllegalArgumentException("La cantidad a transferir no puede ser mayor que la cantidad encontrada en la cuenta");
-        }
         try {
             cuentaOrigen.setSaldoCuenta(cuentaOrigen.getSaldoCuenta().subtract(cantidad));
             cuentaDestino.setSaldoCuenta(cuentaDestino.getSaldoCuenta().add(cantidad));
+
             registrarMovimiento(cuentaOrigen, TipoMovimiento.TRANSFERENCIA_SALIENTE, cantidad);
             registrarMovimiento(cuentaDestino, TipoMovimiento.TRANSFERENCIA_ENTRANTE, cantidad);
-        }catch(Exception ex){
-            cuentaOrigen.setSaldoCuenta(cuentaOrigen.getSaldoCuenta().add(cantidad));
-            cuentaDestino.setSaldoCuenta(cuentaDestino.getSaldoCuenta().subtract(cantidad));
-            throw new RuntimeException("Error durante la transferencia. Se han revertido los datos en memoria.");
+        } catch (RuntimeException ex) {
+            cuentaOrigen.setSaldoCuenta(saldoOrigenAnterior);
+            cuentaDestino.setSaldoCuenta(saldoDestinoAnterior);
+            throw new ValidationException("Error durante la transferencia. Se han revertido los datos en memoria.");
         }
     }
 
-    public List<Movimiento> obtenerLista(String numeroCuenta){
-
-        if(numeroCuenta == null || numeroCuenta.isBlank()){
-            throw new IllegalArgumentException("Debe introducir un número de cuenta válido");
-        }
-
-        Cuenta cuenta = repoCuenta.buscarNumeroCuenta(numeroCuenta);
-
-        if(cuenta==null){
-            throw new IllegalArgumentException("No se ha encontrado la cuenta");
-        }
+    /**
+     * Devuelve el historial completo de movimientos de una cuenta.
+     *
+     * @param numeroCuenta número de cuenta
+     * @return lista de movimientos
+     */
+    public List<Movimiento> obtenerLista(String numeroCuenta) {
+        Cuenta cuenta = obtenerCuentaValida(numeroCuenta);
         return repoMovi.obtenerMovimientosCuenta(cuenta.getNumeroCuenta());
     }
 
-
     /**
-     * Obtiene los movimientos de una cuenta dentro de un rango de fechas.
+     * Devuelve los movimientos de una cuenta filtrados por rango de fechas.
      *
      * @param numeroCuenta número de cuenta
      * @param fechaIn fecha inicial
      * @param fechaFin fecha final
-     * @return lista de movimientos dentro del intervalo indicado
+     * @return lista de movimientos filtrados
      */
-    public List<Movimiento> obtenerListaFecha(String numeroCuenta, LocalDate fechaIn, LocalDate fechaFin){
+    public List<Movimiento> obtenerListaFecha(String numeroCuenta, LocalDate fechaIn, LocalDate fechaFin) {
+        Cuenta cuenta = obtenerCuentaValida(numeroCuenta);
 
-        if(numeroCuenta== null || numeroCuenta.isBlank()){
-            throw new IllegalArgumentException("Debe introducir un número de cuenta válido");
+        if (fechaIn == null || fechaFin == null) {
+            throw new ValidationException("Las fechas no pueden ser nulas");
         }
 
-        if(fechaIn == null || fechaFin == null){
-            throw new IllegalArgumentException("Las fechas no pueden ser nulas");
+        if (fechaIn.isAfter(fechaFin)) {
+            throw new ValidationException("La fecha de inicio no puede ser más antigua que la fecha final");
         }
 
+        return repoMovi.obtenerMovimientosFecha(cuenta.getNumeroCuenta(), fechaIn, fechaFin);
+    }
 
-        Cuenta cuenta = repoCuenta.buscarNumeroCuenta(numeroCuenta);
+    private void registrarMovimiento(Cuenta cuenta, TipoMovimiento tipoMovimiento, BigDecimal cantidad) {
+        Movimiento nuevoMovimiento = Movimiento.builder()
+                .cuentaAsignada(cuenta)
+                .tipoMov(tipoMovimiento)
+                .cantidadMovimiento(cantidad)
+                .fechaCreacionMov(LocalDateTime.now())
+                .build();
 
-        if(cuenta==null){
-            throw new IllegalArgumentException("No se ha encontrado la cuenta");
+        repoMovi.guardarMovimiento(nuevoMovimiento);
+    }
+
+    private Cuenta obtenerCuentaValida(String numeroCuenta) {
+        String numeroNormalizado = normalizarNumeroCuenta(numeroCuenta);
+        validarNumeroCuenta(numeroNormalizado);
+
+        Cuenta cuenta = repoCuenta.buscarNumeroCuenta(numeroNormalizado);
+
+        if (cuenta == null) {
+            throw new ResourceNotFoundException("No se ha encontrado la cuenta");
         }
 
-        if(fechaIn.isAfter(fechaFin)){
-            throw new IllegalArgumentException("La fecha de inicio no puede ser más antigua que la fecha final");
-        }else if(fechaFin.isBefore(fechaIn)){
-            throw new IllegalArgumentException("La fecha de fin no puede ser anterior a la fecha inicial");
+        return cuenta;
+    }
+
+    private String normalizarNumeroCuenta(String numeroCuenta) {
+        if (numeroCuenta == null) {
+            return null;
         }
-        return repoMovi.obtenerMovimientosFecha(numeroCuenta,fechaIn,fechaFin);
+        return numeroCuenta.trim().toUpperCase();
+    }
+
+    private void validarNumeroCuenta(String numeroCuenta) {
+        if (!Utilidades.validarNumeroCuenta(numeroCuenta)) {
+            throw new ValidationException("El número de cuenta debe tener formato ES seguido de 20 dígitos");
+        }
+    }
+
+    private void validarCantidadPositiva(BigDecimal cantidad, String operacion) {
+        if (cantidad == null || cantidad.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new ValidationException("La cantidad a " + operacion + " debe ser mayor que cero");
+        }
     }
 }

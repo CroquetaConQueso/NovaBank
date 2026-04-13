@@ -1,10 +1,12 @@
 package com.novabank.service;
 
+import com.novabank.domain.model.Cliente;
 import com.novabank.domain.model.Cuenta;
-import com.novabank.domain.model.Movimiento;
+import com.novabank.exception.InsufficientBalanceException;
+import com.novabank.exception.ResourceNotFoundException;
+import com.novabank.exception.ValidationException;
 import com.novabank.persistence.memory.RepositorioCuenta;
 import com.novabank.persistence.memory.RepositorioMovimiento;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -14,9 +16,15 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.Mockito.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
+/**
+ * Tests unitarios para MovimientoServicio.
+ */
 @ExtendWith(MockitoExtension.class)
 class MovimientoServicioTest {
 
@@ -24,159 +32,174 @@ class MovimientoServicioTest {
     private RepositorioCuenta repoCuenta;
 
     @Mock
-    private RepositorioMovimiento repoMovimiento;
+    private RepositorioMovimiento repoMovi;
 
     @InjectMocks
     private MovimientoServicio movimientoServicio;
 
-    private Cuenta cuentaOrigen;
-    private Cuenta cuentaDestino;
+    private Cuenta crearCuenta(BigDecimal saldo) {
+        Cliente cliente = Cliente.builder()
+                .nombreCliente("Carlos")
+                .apellidosCliente("Torres")
+                .dniNifCliente("12345678Z")
+                .emailCliente("carlos@example.com")
+                .telefonoCliente(612345678)
+                .fechaCreacionCliente(LocalDateTime.now())
+                .build();
 
-    @BeforeEach
-    void setup() {
-        cuentaOrigen = new Cuenta(null, "ES1", new BigDecimal("300"), LocalDateTime.now());
-        cuentaDestino = new Cuenta(null, "ES2", new BigDecimal("100"), LocalDateTime.now());
+        return Cuenta.builder()
+                .dueñoCuenta(cliente)
+                .numeroCuenta("ES12345678901234567890")
+                .saldoCuenta(saldo)
+                .fechaCreacionCuenta(LocalDateTime.now())
+                .build();
     }
 
-    /**
-     * Verifica que un depósito válido:
-     * - Aumenta el saldo correctamente
-     * - Registra un movimiento de tipo DEPOSITO
-     */
-    @Test
-    void depositar_conImportePositivo_debeActualizarSaldoYRegistrarMovimiento() {
-        when(repoCuenta.buscarNumeroCuenta("ES1")).thenReturn(cuentaOrigen);
-
-        movimientoServicio.depositar("ES1", new BigDecimal("50"));
-
-        assertEquals(new BigDecimal("350"), cuentaOrigen.getSaldoCuenta());
-        verify(repoMovimiento).guardarMovimiento(any(Movimiento.class));
-    }
-
-    /**
-     * Verifica que no se permite depositar cantidades
-     * iguales o inferiores a cero.
-     */
-    @Test
-    void depositar_conImporteCero_debeLanzarExcepcion() {
-        assertThrows(IllegalArgumentException.class, () -> movimientoServicio.depositar("ES1", BigDecimal.ZERO));
-    }
-
-    /**
-     * Verifica que no se puede retirar más dinero
-     * del saldo disponible.
-     */
     @Test
     void depositar_conCuentaInexistente_debeLanzarExcepcion() {
-        when(repoCuenta.buscarNumeroCuenta("ES1")).thenReturn(null);
+        when(repoCuenta.buscarNumeroCuenta("ES12345678901234567890")).thenReturn(null);
 
-        assertThrows(IllegalArgumentException.class, () -> movimientoServicio.depositar("ES1", new BigDecimal("50")));
+        assertThrows(
+                ResourceNotFoundException.class,
+                () -> movimientoServicio.depositar("ES12345678901234567890", BigDecimal.TEN)
+        );
     }
 
-    /**
-     * Verifica que un retiro válido:
-     * - Disminuye el saldo correctamente
-     * - Registra un movimiento de tipo RETIRO
-     */
     @Test
-    void retirar_conSaldoSuficiente_debeDisminuirSaldoYRegistrarMovimiento() {
-        when(repoCuenta.buscarNumeroCuenta("ES1")).thenReturn(cuentaOrigen);
+    void depositar_conImporteCero_debeLanzarExcepcion() {
+        Cuenta cuenta = crearCuenta(BigDecimal.ZERO);
+        when(repoCuenta.buscarNumeroCuenta("ES12345678901234567890")).thenReturn(cuenta);
 
-        movimientoServicio.retirar("ES1", new BigDecimal("100"));
-
-        assertEquals(new BigDecimal("200"), cuentaOrigen.getSaldoCuenta());
-        verify(repoMovimiento).guardarMovimiento(any(Movimiento.class));
+        assertThrows(
+                ValidationException.class,
+                () -> movimientoServicio.depositar("ES12345678901234567890", BigDecimal.ZERO)
+        );
     }
 
-    /**
-     * Verifica que no se puede retirar una cantidad
-     * superior al saldo disponible.
-     */
     @Test
-    void retirar_conSaldoInsuficiente_debeLanzarExcepcion() {
-        cuentaOrigen.setSaldoCuenta(new BigDecimal("50"));
-        when(repoCuenta.buscarNumeroCuenta("ES1")).thenReturn(cuentaOrigen);
+    void depositar_conImportePositivo_debeActualizarSaldoYRegistrarMovimiento() {
+        Cuenta cuenta = crearCuenta(BigDecimal.TEN);
+        when(repoCuenta.buscarNumeroCuenta("ES12345678901234567890")).thenReturn(cuenta);
 
-        assertThrows(IllegalArgumentException.class, () -> movimientoServicio.retirar("ES1", new BigDecimal("100")));
+        movimientoServicio.depositar("ES12345678901234567890", BigDecimal.valueOf(5));
+
+        assertEquals(BigDecimal.valueOf(15), cuenta.getSaldoCuenta());
+        verify(repoMovi).guardarMovimiento(org.mockito.ArgumentMatchers.any());
     }
 
-    /**
-     * Verifica que no se puede realizar un retiro
-     * si la cuenta no existe.
-     */
     @Test
     void retirar_conCuentaInexistente_debeLanzarExcepcion() {
-        when(repoCuenta.buscarNumeroCuenta("ES1")).thenReturn(null);
+        when(repoCuenta.buscarNumeroCuenta("ES12345678901234567890")).thenReturn(null);
 
-        assertThrows(IllegalArgumentException.class, () -> movimientoServicio.retirar("ES1", new BigDecimal("100")));
+        assertThrows(
+                ResourceNotFoundException.class,
+                () -> movimientoServicio.retirar("ES12345678901234567890", BigDecimal.ONE)
+        );
     }
 
-    /**
-     * Verifica que una transferencia válida:
-     * - Resta saldo en la cuenta origen
-     * - Suma saldo en la cuenta destino
-     * - Registra dos movimientos (saliente y entrante)
-     */
     @Test
-    void transferir_correctamente_debeActualizarAmbasCuentasYRegistrarDosMovimientos() {
-        when(repoCuenta.buscarNumeroCuenta("ES1")).thenReturn(cuentaOrigen);
-        when(repoCuenta.buscarNumeroCuenta("ES2")).thenReturn(cuentaDestino);
+    void retirar_conSaldoInsuficiente_debeLanzarExcepcion() {
+        Cuenta cuenta = crearCuenta(BigDecimal.valueOf(5));
+        when(repoCuenta.buscarNumeroCuenta("ES12345678901234567890")).thenReturn(cuenta);
 
-        movimientoServicio.transferir("ES1", "ES2", new BigDecimal("100"));
-
-        assertEquals(new BigDecimal("200"), cuentaOrigen.getSaldoCuenta());
-        assertEquals(new BigDecimal("200"), cuentaDestino.getSaldoCuenta());
-
-        verify(repoMovimiento, times(2)).guardarMovimiento(any(Movimiento.class));
+        assertThrows(
+                InsufficientBalanceException.class,
+                () -> movimientoServicio.retirar("ES12345678901234567890", BigDecimal.TEN)
+        );
     }
 
-    /**
-     * Verifica que no se permite transferir
-     * entre la misma cuenta.
-     */
     @Test
-    void transferir_conMismaCuenta_debeLanzarExcepcion() {
-        assertThrows(IllegalArgumentException.class,
-                () -> movimientoServicio.transferir("ES1", "ES1", new BigDecimal("50")));
+    void retirar_conSaldoSuficiente_debeDisminuirSaldoYRegistrarMovimiento() {
+        Cuenta cuenta = crearCuenta(BigDecimal.TEN);
+        when(repoCuenta.buscarNumeroCuenta("ES12345678901234567890")).thenReturn(cuenta);
+
+        movimientoServicio.retirar("ES12345678901234567890", BigDecimal.valueOf(4));
+
+        assertEquals(BigDecimal.valueOf(6), cuenta.getSaldoCuenta());
+        verify(repoMovi).guardarMovimiento(org.mockito.ArgumentMatchers.any());
     }
 
-    /**
-     * Verifica que no se puede transferir una cantidad
-     * superior al saldo disponible en la cuenta origen.
-     */
-    @Test
-    void transferir_conSaldoInsuficiente_debeLanzarExcepcion() {
-        cuentaOrigen.setSaldoCuenta(new BigDecimal("50"));
-
-        when(repoCuenta.buscarNumeroCuenta("ES1")).thenReturn(cuentaOrigen);
-        when(repoCuenta.buscarNumeroCuenta("ES2")).thenReturn(cuentaDestino);
-
-        assertThrows(IllegalArgumentException.class,
-                () -> movimientoServicio.transferir("ES1", "ES2", new BigDecimal("100")));
-    }
-
-    /**
-     * Verifica que no se puede realizar una transferencia
-     * si la cuenta origen no existe.
-     */
     @Test
     void transferir_conCuentaOrigenInexistente_debeLanzarExcepcion() {
-        when(repoCuenta.buscarNumeroCuenta("ES1")).thenReturn(null);
+        when(repoCuenta.buscarNumeroCuenta("ES11111111111111111111")).thenReturn(null);
 
-        assertThrows(IllegalArgumentException.class,
-                () -> movimientoServicio.transferir("ES1", "ES2", new BigDecimal("100")));
+        assertThrows(
+                ResourceNotFoundException.class,
+                () -> movimientoServicio.transferir(
+                        "ES11111111111111111111",
+                        "ES22222222222222222222",
+                        BigDecimal.ONE
+                )
+        );
     }
 
-    /**
-     * Verifica que no se puede realizar una transferencia
-     * si la cuenta destino no existe.
-     */
     @Test
     void transferir_conCuentaDestinoInexistente_debeLanzarExcepcion() {
-        when(repoCuenta.buscarNumeroCuenta("ES1")).thenReturn(cuentaOrigen);
-        when(repoCuenta.buscarNumeroCuenta("ES2")).thenReturn(null);
+        Cuenta origen = crearCuenta(BigDecimal.TEN);
 
-        assertThrows(IllegalArgumentException.class,
-                () -> movimientoServicio.transferir("ES1", "ES2", new BigDecimal("100")));
+        when(repoCuenta.buscarNumeroCuenta("ES11111111111111111111")).thenReturn(origen);
+        when(repoCuenta.buscarNumeroCuenta("ES22222222222222222222")).thenReturn(null);
+
+        assertThrows(
+                ResourceNotFoundException.class,
+                () -> movimientoServicio.transferir(
+                        "ES11111111111111111111",
+                        "ES22222222222222222222",
+                        BigDecimal.ONE
+                )
+        );
+    }
+
+    @Test
+    void transferir_conMismaCuenta_debeLanzarExcepcion() {
+        assertThrows(
+                ValidationException.class,
+                () -> movimientoServicio.transferir(
+                        "ES11111111111111111111",
+                        "ES11111111111111111111",
+                        BigDecimal.ONE
+                )
+        );
+    }
+
+    @Test
+    void transferir_conSaldoInsuficiente_debeLanzarExcepcion() {
+        Cuenta origen = crearCuenta(BigDecimal.ONE);
+        Cuenta destino = crearCuenta(BigDecimal.ZERO);
+        destino.setNumeroCuenta("ES22222222222222222222");
+
+        when(repoCuenta.buscarNumeroCuenta("ES11111111111111111111")).thenReturn(origen);
+        when(repoCuenta.buscarNumeroCuenta("ES22222222222222222222")).thenReturn(destino);
+
+        assertThrows(
+                InsufficientBalanceException.class,
+                () -> movimientoServicio.transferir(
+                        "ES11111111111111111111",
+                        "ES22222222222222222222",
+                        BigDecimal.TEN
+                )
+        );
+    }
+
+    @Test
+    void transferir_correctamente_debeActualizarAmbasCuentasYRegistrarDosMovimientos() {
+        Cuenta origen = crearCuenta(BigDecimal.TEN);
+        origen.setNumeroCuenta("ES11111111111111111111");
+
+        Cuenta destino = crearCuenta(BigDecimal.ZERO);
+        destino.setNumeroCuenta("ES22222222222222222222");
+
+        when(repoCuenta.buscarNumeroCuenta("ES11111111111111111111")).thenReturn(origen);
+        when(repoCuenta.buscarNumeroCuenta("ES22222222222222222222")).thenReturn(destino);
+
+        movimientoServicio.transferir(
+                "ES11111111111111111111",
+                "ES22222222222222222222",
+                BigDecimal.valueOf(4)
+        );
+
+        assertEquals(BigDecimal.valueOf(6), origen.getSaldoCuenta());
+        assertEquals(BigDecimal.valueOf(4), destino.getSaldoCuenta());
+        verify(repoMovi, times(2)).guardarMovimiento(org.mockito.ArgumentMatchers.any());
     }
 }

@@ -1,19 +1,27 @@
 package com.novabank.service;
 
 import com.novabank.domain.model.Cliente;
+import com.novabank.exception.DuplicateResourceException;
+import com.novabank.exception.ResourceNotFoundException;
+import com.novabank.exception.ValidationException;
 import com.novabank.persistence.memory.RepositorioCliente;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import java.time.LocalDateTime;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.Mockito.*;
-
+/**
+ * Tests unitarios para ClienteServicio.
+ */
 @ExtendWith(MockitoExtension.class)
 class ClienteServicioTest {
 
@@ -23,85 +31,95 @@ class ClienteServicioTest {
     @InjectMocks
     private ClienteServicio clienteServicio;
 
-    private Cliente cliente;
-
-    @BeforeEach
-    void setup() {
-        cliente = new Cliente("Juan", "Perez", "12345678A",
-                "juan@email.com", 600123123, LocalDateTime.now());
-    }
-
-    /**
-     * Verifica que un cliente con datos válidos:
-     * - Supera todas las validaciones
-     * - Se guarda correctamente en el repositorio
-     */
     @Test
     void registrarCliente_datosValidos_debeGuardarCliente() {
-        when(repoCliente.buscarDniCliente("12345678A")).thenReturn(null);
-        when(repoCliente.buscarEmailCliente("juan@email.com")).thenReturn(null);
-        when(repoCliente.buscarTelefonoCliente(600123123)).thenReturn(null);
+        Cliente resultado = clienteServicio.registrarCliente(
+                "Carlos",
+                "Torres",
+                "12345678Z",
+                "carlos.torres@example.com",
+                612345678
+        );
 
-        clienteServicio.registrarCliente("Juan", "Perez", "12345678A",
-                "juan@email.com", 600123123);
+        ArgumentCaptor<Cliente> captor = ArgumentCaptor.forClass(Cliente.class);
+        verify(repoCliente).anadirCliente(captor.capture());
 
-        verify(repoCliente).anadirCliente(any(Cliente.class));
+        Cliente clienteGuardado = captor.getValue();
+
+        assertNotNull(resultado);
+        assertEquals("Carlos", clienteGuardado.getNombreCliente());
+        assertEquals("Torres", clienteGuardado.getApellidosCliente());
+        assertEquals("12345678Z", clienteGuardado.getDniNifCliente());
+        assertEquals("carlos.torres@example.com", clienteGuardado.getEmailCliente());
+        assertEquals(612345678, clienteGuardado.getTelefonoCliente());
     }
 
-    /**
-     * Verifica que no se permite registrar un cliente
-     * cuando el DNI ya existe en el sistema.
-     */
     @Test
     void registrarCliente_dniDuplicado_debeLanzarExcepcion() {
-        when(repoCliente.buscarDniCliente("12345678A")).thenReturn(cliente);
+        when(repoCliente.buscarDniCliente("12345678Z"))
+                .thenReturn(Cliente.builder().nombreCliente("Otro").build());
 
-        assertThrows(IllegalArgumentException.class, () ->
-                clienteServicio.registrarCliente("Juan", "Perez", "12345678A",
-                        "juan@email.com", 600123123));
+        assertThrows(
+                DuplicateResourceException.class,
+                () -> clienteServicio.registrarCliente(
+                        "Carlos",
+                        "Torres",
+                        "12345678Z",
+                        "carlos.torres@example.com",
+                        612345678
+                )
+        );
+
+        verify(repoCliente, never()).anadirCliente(org.mockito.ArgumentMatchers.any());
     }
 
-    /**
-     * Verifica que se lanza excepción cuando
-     * el email no cumple el formato válido.
-     */
     @Test
     void registrarCliente_emailInvalido_debeLanzarExcepcion() {
-        assertThrows(IllegalArgumentException.class, () ->
-                clienteServicio.registrarCliente("Juan", "Perez", "12345678A",
-                        "emailinvalido", 600123123));
+        assertThrows(
+                ValidationException.class,
+                () -> clienteServicio.registrarCliente(
+                        "Carlos",
+                        "Torres",
+                        "12345678Z",
+                        "carlos..torres@-mail",
+                        612345678
+                )
+        );
+
+        verify(repoCliente, never()).anadirCliente(org.mockito.ArgumentMatchers.any());
     }
 
-    /**
-     * Verifica que no se permite registrar un cliente
-     * con un número de teléfono inválido.
-     */
     @Test
     void registrarCliente_telefonoInvalido_debeLanzarExcepcion() {
-        assertThrows(IllegalArgumentException.class, () ->
-                clienteServicio.registrarCliente("Juan", "Perez", "12345678A",
-                        "juan@email.com", -1));
+        assertThrows(
+                ValidationException.class,
+                () -> clienteServicio.registrarCliente(
+                        "Carlos",
+                        "Torres",
+                        "12345678Z",
+                        "carlos.torres@example.com",
+                        12345
+                )
+        );
+
+        verify(repoCliente, never()).anadirCliente(org.mockito.ArgumentMatchers.any());
     }
 
-    /**
-     * Verifica que se lanza excepción cuando
-     * se busca un cliente por ID inexistente.
-     */
     @Test
     void buscarIdCliente_inexistente_debeLanzarExcepcion() {
-        when(repoCliente.buscarIdCliente(1L)).thenReturn(null);
+        when(repoCliente.buscarIdCliente(99L)).thenReturn(null);
 
-        assertThrows(IllegalArgumentException.class,
-                () -> clienteServicio.buscarIdCliente(1L));
+        assertThrows(
+                ResourceNotFoundException.class,
+                () -> clienteServicio.buscarIdCliente(99L)
+        );
     }
 
-    /**
-     * Verifica que se lanza excepción cuando
-     * el formato del DNI es inválido.
-     */
     @Test
     void buscarDniCliente_invalido_debeLanzarExcepcion() {
-        assertThrows(IllegalArgumentException.class,
-                () -> clienteServicio.buscarDniCliente("123"));
+        assertThrows(
+                ValidationException.class,
+                () -> clienteServicio.buscarDniCliente("12A")
+        );
     }
 }

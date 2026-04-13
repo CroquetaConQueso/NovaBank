@@ -4,6 +4,7 @@ import com.novabank.domain.model.Cliente;
 import com.novabank.domain.model.Cuenta;
 import com.novabank.domain.model.Movimiento;
 import com.novabank.domain.model.TipoMovimiento;
+import com.novabank.exception.InsufficientBalanceException;
 import com.novabank.persistence.jdbc.ClienteRepositoryJdbc;
 import com.novabank.persistence.jdbc.CuentaRepositoryJdbc;
 import com.novabank.persistence.jdbc.MovimientoRepositoryJdbc;
@@ -68,6 +69,44 @@ class MovimientoServicioJdbcIT {
 
         assertTrue(movimientosOrigen.stream().anyMatch(m -> m.getTipoMov() == TipoMovimiento.TRANSFERENCIA_SALIENTE));
         assertTrue(movimientosDestino.stream().anyMatch(m -> m.getTipoMov() == TipoMovimiento.TRANSFERENCIA_ENTRANTE));
+    }
+
+    @Test
+    void transferir_conSaldoInsuficiente_noDebePersistirCambiosParciales() {
+        Cuenta origen = crearCuentaPersistida(BigDecimal.valueOf(20));
+        Cuenta destino = crearCuentaPersistida(BigDecimal.valueOf(50));
+
+        assertThrows(
+                InsufficientBalanceException.class,
+                () -> movimientoServicio.transferir(
+                        origen.getNumeroCuenta(),
+                        destino.getNumeroCuenta(),
+                        BigDecimal.valueOf(100)
+                )
+        );
+
+        Cuenta origenRecuperada = cuentaRepositoryJdbc.buscarNumeroCuenta(origen.getNumeroCuenta());
+        Cuenta destinoRecuperada = cuentaRepositoryJdbc.buscarNumeroCuenta(destino.getNumeroCuenta());
+
+        List<Movimiento> movimientosOrigen = movimientoRepositoryJdbc.obtenerMovimientosCuenta(origen.getNumeroCuenta());
+        List<Movimiento> movimientosDestino = movimientoRepositoryJdbc.obtenerMovimientosCuenta(destino.getNumeroCuenta());
+
+        assertEquals(0, BigDecimal.valueOf(20).compareTo(origenRecuperada.getSaldoCuenta()));
+        assertEquals(0, BigDecimal.valueOf(50).compareTo(destinoRecuperada.getSaldoCuenta()));
+
+        assertTrue(
+                movimientosOrigen.stream().noneMatch(m ->
+                        m.getTipoMov() == TipoMovimiento.TRANSFERENCIA_SALIENTE
+                                && BigDecimal.valueOf(100).compareTo(m.getCantidadMovimiento()) == 0
+                )
+        );
+
+        assertTrue(
+                movimientosDestino.stream().noneMatch(m ->
+                        m.getTipoMov() == TipoMovimiento.TRANSFERENCIA_ENTRANTE
+                                && BigDecimal.valueOf(100).compareTo(m.getCantidadMovimiento()) == 0
+                )
+        );
     }
 
     private Cuenta crearCuentaPersistida(BigDecimal saldoInicial) {

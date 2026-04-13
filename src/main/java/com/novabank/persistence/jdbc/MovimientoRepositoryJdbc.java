@@ -8,7 +8,6 @@ import com.novabank.domain.model.TipoMovimiento;
 import com.novabank.exception.NovaBankException;
 import com.novabank.persistence.repository.MovimientoRepository;
 
-import java.math.BigDecimal;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -28,6 +27,18 @@ public class MovimientoRepositoryJdbc implements MovimientoRepository {
 
     @Override
     public void guardarMovimiento(Movimiento nuevoMovimiento) {
+        try (Connection connection = DatabaseConnectionManager.getConnection()) {
+            guardarMovimiento(connection, nuevoMovimiento);
+        } catch (SQLException ex) {
+            throw new NovaBankException("Error al guardar el movimiento en la base de datos.", ex);
+        }
+    }
+
+    /**
+     * Guarda un movimiento usando una conexión ya abierta, para poder
+     * participar en una transacción mayor.
+     */
+    public void guardarMovimiento(Connection connection, Movimiento nuevoMovimiento) {
         String sql = """
                 INSERT INTO movimientos (cuenta_id, tipo, cantidad, fecha)
                 VALUES (
@@ -36,9 +47,7 @@ public class MovimientoRepositoryJdbc implements MovimientoRepository {
                 )
                 """;
 
-        try (Connection connection = DatabaseConnectionManager.getConnection();
-             PreparedStatement statement = connection.prepareStatement(sql)) {
-
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setString(1, nuevoMovimiento.getCuentaAsignada().getNumeroCuenta());
             statement.setString(2, nuevoMovimiento.getTipoMov().name());
             statement.setBigDecimal(3, nuevoMovimiento.getCantidadMovimiento());
@@ -49,7 +58,6 @@ public class MovimientoRepositoryJdbc implements MovimientoRepository {
             if (filasAfectadas == 0) {
                 throw new NovaBankException("No se pudo guardar el movimiento en la base de datos.");
             }
-
         } catch (SQLException ex) {
             throw new NovaBankException("Error al guardar el movimiento en la base de datos.", ex);
         }

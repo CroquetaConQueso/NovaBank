@@ -55,38 +55,41 @@ public class CuentaRepositoryJdbc implements CuentaRepository {
 
     @Override
     public Cuenta buscarNumeroCuenta(String numeroCuenta) {
-        String sql = """
-                SELECT
-                    c.id AS cuenta_id,
-                    c.numero_cuenta,
-                    c.saldo,
-                    c.fecha_creacion AS cuenta_fecha_creacion,
-                    cl.id AS cliente_id,
-                    cl.nombre,
-                    cl.apellidos,
-                    cl.dni,
-                    cl.email,
-                    cl.telefono,
-                    cl.fecha_creacion AS cliente_fecha_creacion
-                FROM cuentas c
-                JOIN clientes cl ON cl.id = c.cliente_id
-                WHERE c.numero_cuenta = ?
-                """;
-
-        try (Connection connection = DatabaseConnectionManager.getConnection();
-             PreparedStatement statement = connection.prepareStatement(sql)) {
-
-            statement.setString(1, numeroCuenta);
-
-            try (ResultSet resultSet = statement.executeQuery()) {
-                if (resultSet.next()) {
-                    return mapearCuenta(resultSet);
-                }
-                return null;
-            }
-
+        try (Connection connection = DatabaseConnectionManager.getConnection()) {
+            return buscarNumeroCuentaInternal(connection, numeroCuenta, false);
         } catch (SQLException ex) {
             throw new NovaBankException("Error al buscar la cuenta por número.", ex);
+        }
+    }
+
+    /**
+     * Recupera la cuenta bloqueando su fila para una operación transaccional.
+     */
+    public Cuenta buscarNumeroCuentaForUpdate(Connection connection, String numeroCuenta) {
+        return buscarNumeroCuentaInternal(connection, numeroCuenta, true);
+    }
+
+    /**
+     * Actualiza el saldo de una cuenta dentro de una transacción ya abierta.
+     */
+    public void actualizarSaldo(Connection connection, String numeroCuenta, BigDecimal nuevoSaldo) {
+        String sql = """
+                UPDATE cuentas
+                SET saldo = ?
+                WHERE numero_cuenta = ?
+                """;
+
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setBigDecimal(1, nuevoSaldo);
+            statement.setString(2, numeroCuenta);
+
+            int filasAfectadas = statement.executeUpdate();
+
+            if (filasAfectadas == 0) {
+                throw new NovaBankException("No se pudo actualizar el saldo de la cuenta.");
+            }
+        } catch (SQLException ex) {
+            throw new NovaBankException("Error al actualizar el saldo de la cuenta.", ex);
         }
     }
 
@@ -128,6 +131,39 @@ public class CuentaRepositoryJdbc implements CuentaRepository {
 
         } catch (SQLException ex) {
             throw new NovaBankException("Error al listar cuentas del cliente.", ex);
+        }
+    }
+
+    private Cuenta buscarNumeroCuentaInternal(Connection connection, String numeroCuenta, boolean forUpdate) {
+        String sql = """
+                SELECT
+                    c.id AS cuenta_id,
+                    c.numero_cuenta,
+                    c.saldo,
+                    c.fecha_creacion AS cuenta_fecha_creacion,
+                    cl.id AS cliente_id,
+                    cl.nombre,
+                    cl.apellidos,
+                    cl.dni,
+                    cl.email,
+                    cl.telefono,
+                    cl.fecha_creacion AS cliente_fecha_creacion
+                FROM cuentas c
+                JOIN clientes cl ON cl.id = c.cliente_id
+                WHERE c.numero_cuenta = ?
+                """ + (forUpdate ? " FOR UPDATE" : "");
+
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, numeroCuenta);
+
+            try (ResultSet resultSet = statement.executeQuery()) {
+                if (resultSet.next()) {
+                    return mapearCuenta(resultSet);
+                }
+                return null;
+            }
+        } catch (SQLException ex) {
+            throw new NovaBankException("Error al buscar la cuenta por número.", ex);
         }
     }
 

@@ -1,6 +1,7 @@
 package com.novabank.service;
 
 import com.novabank.config.DatabaseConnectionManager;
+import com.novabank.domain.factory.MovimientoFactory;
 import com.novabank.domain.model.Cuenta;
 import com.novabank.domain.model.Movimiento;
 import com.novabank.domain.model.TipoMovimiento;
@@ -18,7 +19,6 @@ import java.math.BigDecimal;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.util.List;
 
 /**
@@ -272,14 +272,11 @@ public class MovimientoServicio {
         return repoCuenta instanceof CuentaRepositoryJdbc && repoMovi instanceof MovimientoRepositoryJdbc;
     }
 
-    private void registrarMovimiento(MovimientoRepository repo, Cuenta cuenta, TipoMovimiento tipoMovimiento, BigDecimal cantidad) {
-        Movimiento nuevoMovimiento = Movimiento.builder()
-                .cuentaAsignada(cuenta)
-                .tipoMov(tipoMovimiento)
-                .cantidadMovimiento(cantidad)
-                .fechaCreacionMov(LocalDateTime.now())
-                .build();
-
+    private void registrarMovimiento(MovimientoRepository repo,
+                                     Cuenta cuenta,
+                                     TipoMovimiento tipoMovimiento,
+                                     BigDecimal cantidad) {
+        Movimiento nuevoMovimiento = crearMovimiento(cuenta, tipoMovimiento, cantidad);
         repo.guardarMovimiento(nuevoMovimiento);
     }
 
@@ -288,14 +285,19 @@ public class MovimientoServicio {
                                      Cuenta cuenta,
                                      TipoMovimiento tipoMovimiento,
                                      BigDecimal cantidad) {
-        Movimiento nuevoMovimiento = Movimiento.builder()
-                .cuentaAsignada(cuenta)
-                .tipoMov(tipoMovimiento)
-                .cantidadMovimiento(cantidad)
-                .fechaCreacionMov(LocalDateTime.now())
-                .build();
-
+        Movimiento nuevoMovimiento = crearMovimiento(cuenta, tipoMovimiento, cantidad);
         repo.guardarMovimiento(connection, nuevoMovimiento);
+    }
+
+    private Movimiento crearMovimiento(Cuenta cuenta,
+                                       TipoMovimiento tipoMovimiento,
+                                       BigDecimal cantidad) {
+        return switch (tipoMovimiento) {
+            case DEPOSITO -> MovimientoFactory.crearDeposito(cuenta, cantidad);
+            case RETIRO -> MovimientoFactory.crearRetiro(cuenta, cantidad);
+            case TRANSFERENCIA_SALIENTE -> MovimientoFactory.crearTransferenciaSaliente(cuenta, cantidad);
+            case TRANSFERENCIA_ENTRANTE -> MovimientoFactory.crearTransferenciaEntrante(cuenta, cantidad);
+        };
     }
 
     private Cuenta obtenerCuentaValida(String numeroCuenta) {

@@ -99,7 +99,7 @@ public class MenuCuenta {
             cuentasCliente.stream()
                     .map(cuenta -> cuenta.getNumeroCuenta() + " | " + cuenta.getSaldoCuenta() + " €")
                     .forEach(System.out::println);
-            
+
         } catch (NovaBankException ex) {
             System.out.println("ERROR: " + ex.getMessage());
         } catch (InputMismatchException ex) {

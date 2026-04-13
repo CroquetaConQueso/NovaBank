@@ -1,23 +1,28 @@
 package com.novabank.presentation.menu;
 
-
 import com.novabank.domain.model.Cuenta;
 import com.novabank.domain.model.Movimiento;
+import com.novabank.exception.NovaBankException;
 import com.novabank.service.CuentaServicio;
 import com.novabank.service.MovimientoServicio;
 import com.novabank.util.Utilidades;
 
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
-import java.util.InputMismatchException;
 import java.util.List;
 import java.util.Scanner;
 
+/**
+ * Menú de consultas.
+ *
+ * Gestiona la interacción por consola para consultar saldo e historial
+ * de movimientos, delegando la lógica en los servicios.
+ */
 public class MenuConsulta {
 
-    private CuentaServicio cuSer;
-    private MovimientoServicio moSer;
-    private Scanner entrada;
+    private final CuentaServicio cuSer;
+    private final MovimientoServicio moSer;
+    private final Scanner entrada;
 
     public MenuConsulta(CuentaServicio cuSer, MovimientoServicio moSer, Scanner entrada) {
         this.cuSer = cuSer;
@@ -25,150 +30,122 @@ public class MenuConsulta {
         this.entrada = entrada;
     }
 
-    /*
-        Auxiliar que simplifica la validación de fecha, tomando el formato y devolviendo localdate
-     */
-    private LocalDate validacionFecha(String mensaje,DateTimeFormatter dmt) {
+    private LocalDate validacionFecha(String mensaje, DateTimeFormatter formato) {
         while (true) {
             try {
                 System.out.print(mensaje);
                 String entradaFecha = entrada.nextLine().trim();
-                return LocalDate.parse(entradaFecha, dmt);
-            } catch (Exception e) {
+                return LocalDate.parse(entradaFecha, formato);
+            } catch (Exception ex) {
                 System.err.println("Formato inválido. El valor debe de tener la estructura: yyyy-MM-dd");
             }
         }
     }
 
-    private String tomarNumeroCuenta(){
+    private String tomarNumeroCuenta() {
         System.out.print("Introduzca número de cuenta: ");
         String numeroCuenta = entrada.nextLine().trim().toUpperCase();
 
         if (!Utilidades.validarNumeroCuenta(numeroCuenta)) {
-            throw new IllegalArgumentException(
-                    "El número de cuenta debe tener formato ES seguido de 20 dígitos"
-            );
+            throw new NovaBankException("El número de cuenta debe tener formato ES seguido de 20 dígitos");
         }
+
         return numeroCuenta;
     }
 
-    /**
-     * Muestra los movimientos de una cuenta dentro de un rango de fechas
-     * introducidas por el usuario.
-     */
-    public void historiaRangoFechas(){
+    public void historiaRangoFechas() {
         try {
             String numeroCuenta = tomarNumeroCuenta();
             cuSer.buscarNumero(numeroCuenta);
-            DateTimeFormatter dmt = DateTimeFormatter.ofPattern("yyyy-MM-dd");
 
-            LocalDate feIni = validacionFecha("Fecha inicio (yyyy-MM-dd): ",dmt);
-            LocalDate feFina = validacionFecha("Fecha fin (yyyy-MM-dd): ",dmt);
+            DateTimeFormatter formato = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+            LocalDate feIni = validacionFecha("Fecha inicio (yyyy-MM-dd): ", formato);
+            LocalDate feFin = validacionFecha("Fecha fin (yyyy-MM-dd): ", formato);
 
-            List<Movimiento> lista = moSer.obtenerListaFecha(numeroCuenta, feIni, feFina);
-            System.out.println("Movimientos del "+feIni+" al "+feFina+":");
-            System.out.println("\nFecha               | Tipo                   | Cantidad"+
-                    "\n--------------------|------------------------|------------");
-            for (Movimiento mo : lista) {
-                String formatoFe = mo.getFechaCreacionMov().format(dmt);
+            List<Movimiento> movimientosRango = moSer.obtenerListaFecha(numeroCuenta, feIni, feFin);
 
-                String tipo;
-                switch (mo.getTipoMov()) {
-                    case DEPOSITO -> tipo = "Deposito";
-                    case RETIRO -> tipo = "Retiro";
-                    case TRANSFERENCIA_ENTRANTE -> tipo = "Transferencia Entrante";
-                    case TRANSFERENCIA_SALIENTE -> tipo = "Transferencia Saliente";
-                    default -> throw new IllegalArgumentException("El tipo debe de encontrarse entre los adecuados");
+            System.out.println("Movimientos del " + feIni + " al " + feFin + ":");
+
+            if (movimientosRango.isEmpty()) {
+                System.out.println("No hay movimientos en el rango de fechas indicado.");
+            } else {
+                System.out.println("Fecha                | Tipo                        | Cantidad");
+                System.out.println("---------------------|-----------------------------|------------");
+
+                for (Movimiento movimiento : movimientosRango) {
+                    System.out.printf("%s | %-27s | %10.2f €%n",
+                            movimiento.getFechaCreacionMov().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")),
+                            movimiento.getTipoMov(),
+                            movimiento.getCantidadMovimiento());
                 }
-                System.out.println(formatoFe + " | " + tipo + " | " + mo.getCantidadMovimiento() + " €");
             }
-        }catch(IllegalArgumentException ex){
-            System.err.println("ERROR: "+ex.getMessage());
-        }
-
-    }
-
-    /**
-     * Muestra el historial completo de movimientos de una cuenta específica.
-     */
-    public void historialMov(){
-        try{
-            String numeroCuenta = tomarNumeroCuenta();
-            Cuenta cuenta = cuSer.buscarNumero(numeroCuenta);
-
-            List<Movimiento> lista = moSer.obtenerLista(numeroCuenta);
-
-            System.out.println("\n\nHistorial de movimientos - "+cuenta.getNumeroCuenta());
-            System.out.println("Fecha               | Tipo                   | Cantidad");
-            System.out.println("--------------------|------------------------|------------");
-
-            DateTimeFormatter fmt = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
-            for (Movimiento mo : lista) {
-                String formatoFe = mo.getFechaCreacionMov().format(fmt);
-
-                String tipo;
-                switch (mo.getTipoMov()) {
-                    case DEPOSITO -> tipo = "Deposito";
-                    case RETIRO -> tipo = "Retiro";
-                    case TRANSFERENCIA_ENTRANTE -> tipo = "Transferencia Entrante";
-                    case TRANSFERENCIA_SALIENTE -> tipo = "Transferencia Saliente";
-                    default -> throw new IllegalArgumentException("El tipo debe de encontrarse entre los adecuados");
-                }
-                System.out.println(formatoFe + " | " + tipo + " | " + mo.getCantidadMovimiento() + " €");
-            }
-        }catch (IllegalArgumentException ex){
-            System.err.println("ERROR: "+ex.getMessage());
+        } catch (NovaBankException ex) {
+            System.err.println("ERROR: " + ex.getMessage());
         }
     }
 
-    public void consultarSaldo(){
+    public void consultarSaldo() {
         try {
             String numeroCuenta = tomarNumeroCuenta();
             Cuenta cuenta = cuSer.buscarNumero(numeroCuenta);
+
             System.out.println("Saldo actual: " + cuenta.getSaldoCuenta() + " €");
-        }catch(IllegalArgumentException ex){
-            System.err.println("ERROR: "+ex.getMessage());
+        } catch (NovaBankException ex) {
+            System.err.println("ERROR: " + ex.getMessage());
         }
     }
 
-    /**
-     * Muestra el menú interactivo de consultas y gestiona la navegación entre las distintas opciones.
-     * Utiliza los métodos encontrados en la clase
-     */
+    public void historialMovimientos() {
+        try {
+            String numeroCuenta = tomarNumeroCuenta();
+            cuSer.buscarNumero(numeroCuenta);
 
-    public void menuConsultas(){
-        while(true) {
+            List<Movimiento> listaMovimientos = moSer.obtenerLista(numeroCuenta);
 
-                System.out.println("--- CONSULTAS ---");
-                System.out.println("1.Consultar Saldo");
-                System.out.println("2.Historial de movimientos");
-                System.out.println("3.Movimientos por rango de fechas");
-                System.out.println("4.Volver");
+            if (listaMovimientos.isEmpty()) {
+                System.out.println("No hay movimientos registrados para esta cuenta");
+            } else {
+                System.out.println("Historial de movimientos - " + numeroCuenta + ":");
+                System.out.println("Fecha                | Tipo                        | Cantidad");
+                System.out.println("---------------------|-----------------------------|------------");
 
-                System.out.print("Seleccione una opción: ");
-            try{
-                int opcionSwi = entrada.nextInt();
-                entrada.nextLine();
-
-                switch (opcionSwi) {
-                    case 1:
-                        consultarSaldo();
-                        break;
-                    case 2:
-                        historialMov();
-                        break;
-                    case 3:
-                        historiaRangoFechas();
-                        break;
-                    case 4:
-                        System.out.println("Volviendo al menu principal");
-                        return;
-                    default:
-                        System.err.println("Debes de escoger una opción encontrada en el menu");
+                for (Movimiento movimiento : listaMovimientos) {
+                    System.out.printf("%s | %-27s | %10.2f €%n",
+                            movimiento.getFechaCreacionMov().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")),
+                            movimiento.getTipoMov(),
+                            movimiento.getCantidadMovimiento());
                 }
-            }catch(InputMismatchException ex){
-                System.err.println("Debes de introducir un valor numérico");
-                entrada.nextLine();
+            }
+        } catch (NovaBankException ex) {
+            System.err.println("ERROR: " + ex.getMessage());
+        }
+    }
+
+    public void menuConsultas() {
+        while (true) {
+            System.out.println();
+            System.out.println("--- CONSULTAS ---");
+            System.out.println("1. Consultar saldo");
+            System.out.println("2. Historial de movimientos");
+            System.out.println("3. Movimientos por rango de fechas");
+            System.out.println("4. Volver");
+            System.out.print("Seleccione una opción: ");
+
+            try {
+                int opcionSwitch = Integer.parseInt(entrada.nextLine().trim());
+
+                switch (opcionSwitch) {
+                    case 1 -> consultarSaldo();
+                    case 2 -> historialMovimientos();
+                    case 3 -> historiaRangoFechas();
+                    case 4 -> {
+                        System.out.println("Volviendo al menú principal...");
+                        return;
+                    }
+                    default -> System.out.println("Opción no válida.");
+                }
+            } catch (NumberFormatException ex) {
+                System.err.println("ERROR: Debes introducir un valor numérico.");
             }
         }
     }

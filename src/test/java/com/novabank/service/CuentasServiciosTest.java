@@ -2,9 +2,10 @@ package com.novabank.service;
 
 import com.novabank.domain.model.Cliente;
 import com.novabank.domain.model.Cuenta;
+import com.novabank.exception.ResourceNotFoundException;
+import com.novabank.exception.ValidationException;
 import com.novabank.persistence.memory.RepositorioCliente;
 import com.novabank.persistence.memory.RepositorioCuenta;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -15,9 +16,15 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.Mockito.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
+/**
+ * Tests unitarios para CuentaServicio.
+ */
 @ExtendWith(MockitoExtension.class)
 class CuentaServicioTest {
 
@@ -30,178 +37,140 @@ class CuentaServicioTest {
     @InjectMocks
     private CuentaServicio cuentaServicio;
 
-    private Cliente cliente;
+    @Test
+    void buscarNumero_conFormatoInvalido_debeLanzarExcepcion() {
+        assertThrows(ValidationException.class, () -> cuentaServicio.buscarNumero("123"));
+    }
 
-    @BeforeEach
-    void setup() {
-        cliente = new Cliente(
-                "Juan",
-                "Perez",
-                "12345678A",
-                "juan@email.com",
-                600123123,
-                LocalDateTime.now()
+    @Test
+    void buscarNumero_conCuentaInexistente_debeLanzarExcepcion() {
+        when(repoCuenta.buscarNumeroCuenta("ES12345678901234567890")).thenReturn(null);
+
+        assertThrows(
+                ResourceNotFoundException.class,
+                () -> cuentaServicio.buscarNumero("ES12345678901234567890")
         );
     }
 
-    /**
-     * Verifica que se lanza excepción cuando
-     * el número de cuenta no cumple el formato IBAN esperado.
-     */
-    @Test
-    void buscarNumero_conFormatoInvalido_debeLanzarExcepcion() {
-        assertThrows(IllegalArgumentException.class,
-                () -> cuentaServicio.buscarNumero("123"));
-    }
-
-    /**
-     * Verifica que se lanza excepción cuando
-     * la cuenta no existe en el repositorio.
-     */
-    @Test
-    void buscarNumero_conCuentaInexistente_debeLanzarExcepcion() {
-        when(repoCuenta.buscarNumeroCuenta("ES91210000000000000001"))
-                .thenReturn(null);
-
-        assertThrows(IllegalArgumentException.class,
-                () -> cuentaServicio.buscarNumero("ES91210000000000000001"));
-    }
-
-    /**
-     * Verifica que se retorna correctamente la cuenta
-     * cuando existe y el formato es válido.
-     */
     @Test
     void buscarNumero_conCuentaValida_debeRetornarCuenta() {
-        Cuenta cuenta = new Cuenta(cliente,
-                "ES91210000000000000001",
-                BigDecimal.ZERO,
-                LocalDateTime.now());
+        Cliente cliente = Cliente.builder()
+                .nombreCliente("Carlos")
+                .apellidosCliente("Torres")
+                .dniNifCliente("12345678Z")
+                .emailCliente("carlos@example.com")
+                .telefonoCliente(612345678)
+                .fechaCreacionCliente(LocalDateTime.now())
+                .build();
 
-        when(repoCuenta.buscarNumeroCuenta("ES91210000000000000001"))
-                .thenReturn(cuenta);
+        Cuenta cuenta = Cuenta.builder()
+                .dueñoCuenta(cliente)
+                .numeroCuenta("ES12345678901234567890")
+                .saldoCuenta(BigDecimal.TEN)
+                .fechaCreacionCuenta(LocalDateTime.now())
+                .build();
 
-        Cuenta resultado =
-                cuentaServicio.buscarNumero("ES91210000000000000001");
+        when(repoCuenta.buscarNumeroCuenta("ES12345678901234567890")).thenReturn(cuenta);
+
+        Cuenta resultado = cuentaServicio.buscarNumero("es12345678901234567890");
 
         assertNotNull(resultado);
-        assertEquals("ES91210000000000000001",
-                resultado.getNumeroCuenta());
+        assertEquals("ES12345678901234567890", resultado.getNumeroCuenta());
     }
 
-    /**
-     * Verifica que no se permite crear una cuenta
-     * con un identificador negativo.
-     */
-    @Test
-    void crearCuenta_conIdNegativo_debeLanzarExcepcion() {
-        assertThrows(IllegalArgumentException.class,
-                () -> cuentaServicio.crearCuenta(-1L));
-    }
-
-    /**
-     * Verifica que no se puede crear una cuenta
-     * si el cliente no existe.
-     */
-    @Test
-    void crearCuenta_conClienteInexistente_debeLanzarExcepcion() {
-        when(repoCliente.buscarIdCliente(1L)).thenReturn(null);
-
-        assertThrows(IllegalArgumentException.class,
-                () -> cuentaServicio.crearCuenta(1L));
-    }
-
-    /**
-     * Verifica que al crear una cuenta válida:
-     * - Se inicializa con saldo cero
-     * - Se genera un número IBAN correcto
-     * - Se guarda en el repositorio
-     */
-    @Test
-    void crearCuenta_conClienteValido_debeCrearCuentaConSaldoCero() {
-        when(repoCliente.buscarIdCliente(cliente.getIdCliente()))
-                .thenReturn(cliente);
-
-        Cuenta nuevaCuenta =
-                cuentaServicio.crearCuenta(cliente.getIdCliente());
-
-        assertNotNull(nuevaCuenta);
-        assertEquals(BigDecimal.ZERO,
-                nuevaCuenta.getSaldoCuenta());
-        assertTrue(nuevaCuenta.getNumeroCuenta()
-                .startsWith("ES91210000"));
-
-        verify(repoCuenta).guardarCuenta(any(Cuenta.class));
-    }
-
-    /**
-     * Verifica que se lanza excepción cuando
-     * el ID del cliente es inválido.
-     */
     @Test
     void obtenerTitular_conIdInvalido_debeLanzarExcepcion() {
-        assertThrows(IllegalArgumentException.class,
-                () -> cuentaServicio.obtenerTitular(0L));
+        assertThrows(ValidationException.class, () -> cuentaServicio.obtenerTitular(0L));
     }
 
-    /**
-     * Verifica que se lanza excepción cuando
-     * el cliente no existe.
-     */
-    @Test
-    void obtenerTitular_conClienteInexistente_debeLanzarExcepcion() {
-        when(repoCliente.buscarIdCliente(1L)).thenReturn(null);
-
-        assertThrows(IllegalArgumentException.class,
-                () -> cuentaServicio.obtenerTitular(1L));
-    }
-
-    /**
-     * Verifica que se retorna correctamente el cliente
-     * cuando existe.
-     */
     @Test
     void obtenerTitular_conClienteValido_debeRetornarCliente() {
-        when(repoCliente.buscarIdCliente(cliente.getIdCliente()))
-                .thenReturn(cliente);
+        Cliente cliente = Cliente.builder()
+                .nombreCliente("Carlos")
+                .apellidosCliente("Torres")
+                .dniNifCliente("12345678Z")
+                .emailCliente("carlos@example.com")
+                .telefonoCliente(612345678)
+                .fechaCreacionCliente(LocalDateTime.now())
+                .build();
 
-        Cliente resultado =
-                cuentaServicio.obtenerTitular(cliente.getIdCliente());
+        when(repoCliente.buscarIdCliente(1L)).thenReturn(cliente);
+
+        Cliente resultado = cuentaServicio.obtenerTitular(1L);
 
         assertNotNull(resultado);
-        assertEquals(cliente.getIdCliente(),
-                resultado.getIdCliente());
+        assertEquals("Carlos", resultado.getNombreCliente());
     }
 
-    /**
-     * Verifica que se lanza excepción cuando
-     * se intentan obtener cuentas de un cliente inexistente.
-     */
     @Test
-    void obtenerCuentas_conClienteInexistente_debeLanzarExcepcion() {
-        when(repoCliente.buscarIdCliente(1L)).thenReturn(null);
+    void obtenerTitular_conClienteInexistente_debeLanzarExcepcion() {
+        when(repoCliente.buscarIdCliente(99L)).thenReturn(null);
 
-        assertThrows(IllegalArgumentException.class,
-                () -> cuentaServicio.obtenerCuentas(1L));
+        assertThrows(ResourceNotFoundException.class, () -> cuentaServicio.obtenerTitular(99L));
     }
 
-    /**
-     * Verifica que se retorna correctamente la lista
-     * de cuentas asociadas a un cliente válido.
-     */
     @Test
     void obtenerCuentas_conClienteValido_debeRetornarLista() {
-        when(repoCliente.buscarIdCliente(cliente.getIdCliente()))
-                .thenReturn(cliente);
+        Cliente cliente = Cliente.builder()
+                .nombreCliente("Carlos")
+                .apellidosCliente("Torres")
+                .dniNifCliente("12345678Z")
+                .emailCliente("carlos@example.com")
+                .telefonoCliente(612345678)
+                .fechaCreacionCliente(LocalDateTime.now())
+                .build();
 
-        when(repoCuenta.listarCuentasCliente(cliente.getIdCliente()))
-                .thenReturn(List.of());
+        Cuenta cuenta = Cuenta.builder()
+                .dueñoCuenta(cliente)
+                .numeroCuenta("ES12345678901234567890")
+                .saldoCuenta(BigDecimal.ZERO)
+                .fechaCreacionCuenta(LocalDateTime.now())
+                .build();
 
-        List<Cuenta> cuentas =
-                cuentaServicio.obtenerCuentas(cliente.getIdCliente());
+        when(repoCliente.buscarIdCliente(1L)).thenReturn(cliente);
+        when(repoCuenta.listarCuentasCliente(cliente.getIdCliente())).thenReturn(List.of(cuenta));
 
-        assertNotNull(cuentas);
-        verify(repoCuenta)
-                .listarCuentasCliente(cliente.getIdCliente());
+        List<Cuenta> resultado = cuentaServicio.obtenerCuentas(1L);
+
+        assertEquals(1, resultado.size());
+    }
+
+    @Test
+    void obtenerCuentas_conClienteInexistente_debeLanzarExcepcion() {
+        when(repoCliente.buscarIdCliente(99L)).thenReturn(null);
+
+        assertThrows(ResourceNotFoundException.class, () -> cuentaServicio.obtenerCuentas(99L));
+    }
+
+    @Test
+    void crearCuenta_conIdNegativo_debeLanzarExcepcion() {
+        assertThrows(ValidationException.class, () -> cuentaServicio.crearCuenta(-1L));
+    }
+
+    @Test
+    void crearCuenta_conClienteInexistente_debeLanzarExcepcion() {
+        when(repoCliente.buscarIdCliente(99L)).thenReturn(null);
+
+        assertThrows(ResourceNotFoundException.class, () -> cuentaServicio.crearCuenta(99L));
+    }
+
+    @Test
+    void crearCuenta_conClienteValido_debeCrearCuentaConSaldoCero() {
+        Cliente cliente = Cliente.builder()
+                .nombreCliente("Carlos")
+                .apellidosCliente("Torres")
+                .dniNifCliente("12345678Z")
+                .emailCliente("carlos@example.com")
+                .telefonoCliente(612345678)
+                .fechaCreacionCliente(LocalDateTime.now())
+                .build();
+
+        when(repoCliente.buscarIdCliente(1L)).thenReturn(cliente);
+
+        Cuenta cuenta = cuentaServicio.crearCuenta(1L);
+
+        assertNotNull(cuenta);
+        assertEquals(BigDecimal.ZERO, cuenta.getSaldoCuenta());
+        verify(repoCuenta).guardarCuenta(cuenta);
     }
 }

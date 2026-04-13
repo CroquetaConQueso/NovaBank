@@ -79,15 +79,13 @@ public class MenuCliente {
         System.out.println("\n--- LISTADO DE CLIENTES ---");
         System.out.println("ID    | Nombre      | DNI        | Email          | Teléfono");
 
-        for (Cliente cliente : clientes) {
-            System.out.println(
-                    cliente.getIdCliente() + " | "
-                            + cliente.getNombreCliente() + " | "
-                            + cliente.getDniNifCliente() + " | "
-                            + cliente.getEmailCliente() + " | "
-                            + cliente.getTelefonoCliente()
-            );
-        }
+        clientes.stream()
+                .map(cliente -> cliente.getIdCliente() + " | "
+                        + cliente.getNombreCliente() + " | "
+                        + cliente.getDniNifCliente() + " | "
+                        + cliente.getEmailCliente() + " | "
+                        + cliente.getTelefonoCliente())
+                .forEach(System.out::println);
     }
 
     public void registrarCliente() {

@@ -4,7 +4,6 @@ import com.novabank.domain.model.Movimiento;
 import com.novabank.persistence.repository.MovimientoRepository;
 
 import java.time.LocalDate;
-import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
@@ -37,19 +36,14 @@ public class RepositorioMovimiento implements MovimientoRepository {
 
     @Override
     public List<Movimiento> obtenerMovimientosFecha(String numeroCuentaBuscar, LocalDate inicio, LocalDate fin) {
-        List<Movimiento> movimientosFiltrados = new ArrayList<>();
-
-        for (Movimiento movimiento : registroMovimientos.values()) {
-            if (movimiento.getCuentaAsignada().getNumeroCuenta().equals(numeroCuentaBuscar)) {
-                LocalDate fechaMovimiento = movimiento.getFechaCreacionMov().toLocalDate();
-
-                if (!fechaMovimiento.isBefore(inicio) && !fechaMovimiento.isAfter(fin)) {
-                    movimientosFiltrados.add(movimiento);
-                }
-            }
-        }
-
-        movimientosFiltrados.sort(Comparator.comparing(Movimiento::getFechaCreacionMov).reversed());
-        return movimientosFiltrados;
+        return registroMovimientos.values()
+                .stream()
+                .filter(movimiento -> movimiento.getCuentaAsignada().getNumeroCuenta().equals(numeroCuentaBuscar))
+                .filter(movimiento -> {
+                    LocalDate fechaMovimiento = movimiento.getFechaCreacionMov().toLocalDate();
+                    return !fechaMovimiento.isBefore(inicio) && !fechaMovimiento.isAfter(fin);
+                })
+                .sorted(Comparator.comparing(Movimiento::getFechaCreacionMov).reversed())
+                .toList();
     }
 }

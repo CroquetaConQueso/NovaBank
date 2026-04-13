@@ -2,34 +2,16 @@ package com.novabank.presentation.menu;
 
 import java.util.Scanner;
 
-/**
- * Menú principal de la aplicación.
- *
- * Se encarga de mostrar las opciones principales y delegar en los menús
- * especializados de clientes, cuentas, operaciones y consultas.
- */
 public class MenuPrincipal {
 
-    private final Scanner entrada;
-    private final MenuCliente menuCli;
-    private final MenuCuenta menuCu;
-    private final MenuMovimientos menuMov;
-    private final MenuConsulta menuCo;
+    private Scanner entrada;
+    private MenuCliente menuCli;
+    private MenuCuenta menuCu;
+    private MenuMovimientos menuMov;
+    private MenuConsulta menuCo;
 
-    /**
-     * Construye el menú principal con sus dependencias de presentación.
-     *
-     * @param entrada scanner compartido de entrada por consola
-     * @param menuCli menú de gestión de clientes
-     * @param menuCu menú de gestión de cuentas
-     * @param menuMov menú de operaciones financieras
-     * @param menuCo menú de consultas
-     */
-    public MenuPrincipal(Scanner entrada,
-                         MenuCliente menuCli,
-                         MenuCuenta menuCu,
-                         MenuMovimientos menuMov,
-                         MenuConsulta menuCo) {
+    public MenuPrincipal(Scanner entrada, MenuCliente menuCli, MenuCuenta menuCu,
+                         MenuMovimientos menuMov, MenuConsulta menuCo) {
         this.entrada = entrada;
         this.menuCli = menuCli;
         this.menuCu = menuCu;
@@ -37,9 +19,6 @@ public class MenuPrincipal {
         this.menuCo = menuCo;
     }
 
-    /**
-     * Muestra el menú principal y redirige a la opción seleccionada.
-     */
     public void menuPrincipal() {
         while (true) {
             System.out.println();
@@ -57,16 +36,26 @@ public class MenuPrincipal {
                 int opcion = Integer.parseInt(entrada.nextLine().trim());
 
                 switch (opcion) {
-                    case 1 -> menuCli.menuClientes();
-                    case 2 -> menuCu.menuCuentas();
-                    case 3 -> menuMov.menuMovimientos();
-                    case 4 -> menuCo.menuConsultas();
-                    case 5 -> {
+                    case 1:
+                        menuCli.menuClientes();
+                        break;
+                    case 2:
+                        menuCu.menuCuentas();
+                        break;
+                    case 3:
+                        menuMov.menuMovimientos();
+                        break;
+                    case 4:
+                        menuCo.menuConsultas();
+                        break;
+                    case 5:
                         System.out.println("Saliendo del sistema...");
+                        entrada.close();
                         return;
-                    }
-                    default -> System.out.println("ERROR: Debes escoger una opción válida del menú.");
+                    default:
+                        System.out.println("ERROR: Debes escoger una opción válida del menú.");
                 }
+
             } catch (NumberFormatException ex) {
                 System.out.println("ERROR: Debes introducir un valor numérico.");
             }

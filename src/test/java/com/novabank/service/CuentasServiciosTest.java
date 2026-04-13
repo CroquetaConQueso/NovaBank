@@ -4,8 +4,8 @@ import com.novabank.domain.model.Cliente;
 import com.novabank.domain.model.Cuenta;
 import com.novabank.exception.ResourceNotFoundException;
 import com.novabank.exception.ValidationException;
-import com.novabank.persistence.memory.RepositorioCliente;
-import com.novabank.persistence.memory.RepositorioCuenta;
+import com.novabank.persistence.repository.ClienteRepository;
+import com.novabank.persistence.repository.CuentaRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -29,10 +29,10 @@ import static org.mockito.Mockito.when;
 class CuentaServicioTest {
 
     @Mock
-    private RepositorioCuenta repoCuenta;
+    private CuentaRepository repoCuenta;
 
     @Mock
-    private RepositorioCliente repoCliente;
+    private ClienteRepository repoCliente;
 
     @InjectMocks
     private CuentaServicio cuentaServicio;

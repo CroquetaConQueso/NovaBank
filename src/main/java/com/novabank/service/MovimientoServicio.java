@@ -6,8 +6,8 @@ import com.novabank.domain.model.TipoMovimiento;
 import com.novabank.exception.InsufficientBalanceException;
 import com.novabank.exception.ResourceNotFoundException;
 import com.novabank.exception.ValidationException;
-import com.novabank.persistence.memory.RepositorioCuenta;
-import com.novabank.persistence.memory.RepositorioMovimiento;
+import com.novabank.persistence.repository.CuentaRepository;
+import com.novabank.persistence.repository.MovimientoRepository;
 import com.novabank.util.Utilidades;
 
 import java.math.BigDecimal;
@@ -19,25 +19,18 @@ import java.util.List;
  * Servicio de operaciones financieras.
  *
  * Centraliza la lógica de depósitos, retiros, transferencias y consulta
- * de movimientos, manteniendo la persistencia en memoria en esta fase.
+ * de movimientos.
  */
 public class MovimientoServicio {
 
-    private final RepositorioCuenta repoCuenta;
-    private final RepositorioMovimiento repoMovi;
+    private final CuentaRepository repoCuenta;
+    private final MovimientoRepository repoMovi;
 
-    public MovimientoServicio(RepositorioCuenta repoCuenta, RepositorioMovimiento repoMovi) {
+    public MovimientoServicio(CuentaRepository repoCuenta, MovimientoRepository repoMovi) {
         this.repoCuenta = repoCuenta;
         this.repoMovi = repoMovi;
     }
 
-    /**
-     * Aplica un depósito a una cuenta existente y registra el movimiento.
-     *
-     * @param numeroCuenta número de cuenta destino
-     * @param cantidad importe a depositar
-     * @return cuenta actualizada
-     */
     public Cuenta depositar(String numeroCuenta, BigDecimal cantidad) {
         Cuenta cuenta = obtenerCuentaValida(numeroCuenta);
         validarCantidadPositiva(cantidad, "depositar");
@@ -48,13 +41,6 @@ public class MovimientoServicio {
         return cuenta;
     }
 
-    /**
-     * Aplica un retiro sobre una cuenta existente si dispone de saldo suficiente.
-     *
-     * @param numeroCuenta número de cuenta origen
-     * @param cantidad importe a retirar
-     * @return cuenta actualizada
-     */
     public Cuenta retirar(String numeroCuenta, BigDecimal cantidad) {
         Cuenta cuenta = obtenerCuentaValida(numeroCuenta);
         validarCantidadPositiva(cantidad, "retirar");
@@ -72,14 +58,6 @@ public class MovimientoServicio {
         return cuenta;
     }
 
-    /**
-     * Transfiere saldo entre dos cuentas distintas, registrando un movimiento
-     * de salida y otro de entrada.
-     *
-     * @param numeroOrigen cuenta origen
-     * @param numeroDestino cuenta destino
-     * @param cantidad importe a transferir
-     */
     public void transferir(String numeroOrigen, String numeroDestino, BigDecimal cantidad) {
         String origenNormalizado = normalizarNumeroCuenta(numeroOrigen);
         String destinoNormalizado = normalizarNumeroCuenta(numeroDestino);
@@ -117,25 +95,11 @@ public class MovimientoServicio {
         }
     }
 
-    /**
-     * Devuelve el historial completo de movimientos de una cuenta.
-     *
-     * @param numeroCuenta número de cuenta
-     * @return lista de movimientos
-     */
     public List<Movimiento> obtenerLista(String numeroCuenta) {
         Cuenta cuenta = obtenerCuentaValida(numeroCuenta);
         return repoMovi.obtenerMovimientosCuenta(cuenta.getNumeroCuenta());
     }
 
-    /**
-     * Devuelve los movimientos de una cuenta filtrados por rango de fechas.
-     *
-     * @param numeroCuenta número de cuenta
-     * @param fechaIn fecha inicial
-     * @param fechaFin fecha final
-     * @return lista de movimientos filtrados
-     */
     public List<Movimiento> obtenerListaFecha(String numeroCuenta, LocalDate fechaIn, LocalDate fechaFin) {
         Cuenta cuenta = obtenerCuentaValida(numeroCuenta);
 

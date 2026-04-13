@@ -5,8 +5,8 @@ import com.novabank.domain.model.Cuenta;
 import com.novabank.exception.InsufficientBalanceException;
 import com.novabank.exception.ResourceNotFoundException;
 import com.novabank.exception.ValidationException;
-import com.novabank.persistence.memory.RepositorioCuenta;
-import com.novabank.persistence.memory.RepositorioMovimiento;
+import com.novabank.persistence.repository.CuentaRepository;
+import com.novabank.persistence.repository.MovimientoRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -29,10 +29,10 @@ import static org.mockito.Mockito.when;
 class MovimientoServicioTest {
 
     @Mock
-    private RepositorioCuenta repoCuenta;
+    private CuentaRepository repoCuenta;
 
     @Mock
-    private RepositorioMovimiento repoMovi;
+    private MovimientoRepository repoMovi;
 
     @InjectMocks
     private MovimientoServicio movimientoServicio;
@@ -165,6 +165,8 @@ class MovimientoServicioTest {
     @Test
     void transferir_conSaldoInsuficiente_debeLanzarExcepcion() {
         Cuenta origen = crearCuenta(BigDecimal.ONE);
+        origen.setNumeroCuenta("ES11111111111111111111");
+
         Cuenta destino = crearCuenta(BigDecimal.ZERO);
         destino.setNumeroCuenta("ES22222222222222222222");
 

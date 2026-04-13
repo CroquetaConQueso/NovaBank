@@ -4,7 +4,7 @@ import com.novabank.domain.model.Cliente;
 import com.novabank.exception.DuplicateResourceException;
 import com.novabank.exception.ResourceNotFoundException;
 import com.novabank.exception.ValidationException;
-import com.novabank.persistence.memory.RepositorioCliente;
+import com.novabank.persistence.repository.ClienteRepository;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -17,16 +17,12 @@ import java.util.List;
  */
 public class ClienteServicio {
 
-    private final RepositorioCliente repoCliente;
+    private final ClienteRepository repoCliente;
 
-    public ClienteServicio(RepositorioCliente repoCliente) {
+    public ClienteServicio(ClienteRepository repoCliente) {
         this.repoCliente = repoCliente;
     }
 
-    /**
-     * Registra un nuevo cliente tras validar sus datos y comprobar
-     * que no exista otro con el mismo DNI, email o teléfono.
-     */
     public Cliente registrarCliente(String nombre, String apellidos, String dni, String email, int telefono) {
         validarNombre(nombre);
         validarApellidos(apellidos);
@@ -148,17 +144,6 @@ public class ClienteServicio {
         }
     }
 
-    /**
-     * Valida el email con reglas más estrictas que una simple expresión mínima.
-     *
-     * Reglas aplicadas:
-     * - longitud máxima total de 254 caracteres
-     * - un único '@'
-     * - parte local no vacía, sin puntos al inicio/final ni dobles puntos
-     * - dominio con al menos un punto
-     * - etiquetas del dominio sin guiones al inicio/final
-     * - TLD de al menos 2 letras
-     */
     private void validarEmail(String email) {
         if (email == null || email.isBlank()) {
             throw new ValidationException("El email debe de tener un formato válido.");

@@ -1,37 +1,38 @@
 package com.novabank.persistence.memory;
 
 import com.novabank.domain.model.Cuenta;
+import com.novabank.persistence.repository.CuentaRepository;
 
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
- * Repositorio en memoria para la gestión de cuentas bancarias.
- *
- * Almacena las cuentas utilizando una estructura HashMap,
- * donde la clave corresponde al número de cuenta(OBJETO).
+ * Repositorio en memoria para cuentas bancarias.
  */
-public class RepositorioCuenta {
-    /**
-     * Estructura de almacenamiento en memoria de las cuentas,
-     * indexadas por su número de cuenta.
-     */
-    private HashMap<String, Cuenta> registroCuentas = new HashMap<>();
+public class RepositorioCuenta implements CuentaRepository {
 
-    public void guardarCuenta(Cuenta nuevaCuenta){
+    private final Map<String, Cuenta> registroCuentas = new HashMap<>();
+
+    @Override
+    public void guardarCuenta(Cuenta nuevaCuenta) {
         registroCuentas.put(nuevaCuenta.getNumeroCuenta(), nuevaCuenta);
     }
 
-    public Cuenta buscarNumeroCuenta(String numeroCuenta){
-        return registroCuentas.values().stream().filter(a->a.getNumeroCuenta()
-                .equals(numeroCuenta)).findFirst()
+    @Override
+    public Cuenta buscarNumeroCuenta(String numeroCuenta) {
+        return registroCuentas.values()
+                .stream()
+                .filter(cuenta -> cuenta.getNumeroCuenta().equals(numeroCuenta))
+                .findFirst()
                 .orElse(null);
     }
 
-    public List<Cuenta> listarCuentasCliente(Long idBuscar){
-        return registroCuentas.values().stream().filter(a -> a.getDueñoCuenta().getIdCliente() == idBuscar)
+    @Override
+    public List<Cuenta> listarCuentasCliente(Long idBuscar) {
+        return registroCuentas.values()
+                .stream()
+                .filter(cuenta -> cuenta.getDueñoCuenta().getIdCliente() == idBuscar)
                 .toList();
     }
-
-
 }

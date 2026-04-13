@@ -4,8 +4,8 @@ import com.novabank.domain.model.Cliente;
 import com.novabank.domain.model.Cuenta;
 import com.novabank.exception.ResourceNotFoundException;
 import com.novabank.exception.ValidationException;
-import com.novabank.persistence.memory.RepositorioCliente;
-import com.novabank.persistence.memory.RepositorioCuenta;
+import com.novabank.persistence.repository.ClienteRepository;
+import com.novabank.persistence.repository.CuentaRepository;
 import com.novabank.util.Utilidades;
 
 import java.math.BigDecimal;
@@ -17,27 +17,19 @@ import java.util.List;
  *
  * Centraliza la lógica de negocio relacionada con creación, búsqueda y
  * consulta de cuentas, dejando al repositorio únicamente la persistencia
- * en memoria y al menú la interacción por consola.
+ * y al menú la interacción por consola.
  */
 public class CuentaServicio {
 
-    private final RepositorioCuenta repoCuenta;
-    private final RepositorioCliente repoCliente;
+    private final CuentaRepository repoCuenta;
+    private final ClienteRepository repoCliente;
     private long contadorNumCuentas = 0L;
 
-    public CuentaServicio(RepositorioCuenta repoCuenta, RepositorioCliente repoCliente) {
+    public CuentaServicio(CuentaRepository repoCuenta, ClienteRepository repoCliente) {
         this.repoCuenta = repoCuenta;
         this.repoCliente = repoCliente;
     }
 
-    /**
-     * Recupera una cuenta por su número tras validar el formato de entrada.
-     *
-     * @param numeroCuenta número de cuenta a buscar
-     * @return cuenta encontrada
-     * @throws ValidationException si el formato no es válido
-     * @throws ResourceNotFoundException si la cuenta no existe
-     */
     public Cuenta buscarNumero(String numeroCuenta) {
         String numeroNormalizado = normalizarNumeroCuenta(numeroCuenta);
         validarNumeroCuenta(numeroNormalizado);
@@ -51,14 +43,6 @@ public class CuentaServicio {
         return cuentaEncontrada;
     }
 
-    /**
-     * Recupera el cliente titular por id.
-     *
-     * @param idCliente identificador del cliente
-     * @return cliente encontrado
-     * @throws ValidationException si el id es inválido
-     * @throws ResourceNotFoundException si el cliente no existe
-     */
     public Cliente obtenerTitular(Long idCliente) {
         validarIdCliente(idCliente);
 
@@ -71,23 +55,11 @@ public class CuentaServicio {
         return cliente;
     }
 
-    /**
-     * Devuelve las cuentas asociadas a un cliente existente.
-     *
-     * @param idCliente identificador del cliente
-     * @return lista de cuentas del cliente
-     */
     public List<Cuenta> obtenerCuentas(Long idCliente) {
         Cliente cliente = obtenerTitular(idCliente);
         return repoCuenta.listarCuentasCliente(cliente.getIdCliente());
     }
 
-    /**
-     * Crea una cuenta nueva para un cliente existente con saldo inicial a cero.
-     *
-     * @param idCliente identificador del titular
-     * @return cuenta creada
-     */
     public Cuenta crearCuenta(Long idCliente) {
         Cliente cliente = obtenerTitular(idCliente);
 
@@ -102,11 +74,6 @@ public class CuentaServicio {
         return nuevaCuenta;
     }
 
-    /**
-     * Genera un número de cuenta interno con el formato usado en el proyecto.
-     *
-     * @return número de cuenta generado
-     */
     public String generadorNumero() {
         return "ES91210000" + String.format("%012d", ++contadorNumCuentas);
     }

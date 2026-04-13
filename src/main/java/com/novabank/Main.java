@@ -3,6 +3,9 @@ package com.novabank;
 import com.novabank.persistence.memory.RepositorioCliente;
 import com.novabank.persistence.memory.RepositorioCuenta;
 import com.novabank.persistence.memory.RepositorioMovimiento;
+import com.novabank.persistence.repository.ClienteRepository;
+import com.novabank.persistence.repository.CuentaRepository;
+import com.novabank.persistence.repository.MovimientoRepository;
 import com.novabank.presentation.menu.MenuCliente;
 import com.novabank.presentation.menu.MenuConsulta;
 import com.novabank.presentation.menu.MenuCuenta;
@@ -16,23 +19,15 @@ import java.util.Scanner;
 
 /**
  * Punto de entrada de la aplicación NovaBank.
- *
- * En este issue solo se actualiza su ubicación al nuevo paquete raíz y
- * se corrigen los imports para respetar la arquitectura por capas.
  */
 public class Main {
 
-    /**
-     * Arranca la aplicación de consola y cablea sus dependencias en memoria.
-     *
-     * @param args argumentos de arranque de la aplicación
-     */
     public static void main(String[] args) {
         Scanner entrada = new Scanner(System.in);
 
-        RepositorioCliente repoCliente = new RepositorioCliente();
-        RepositorioCuenta repoCuenta = new RepositorioCuenta();
-        RepositorioMovimiento repoMovimiento = new RepositorioMovimiento();
+        ClienteRepository repoCliente = new RepositorioCliente();
+        CuentaRepository repoCuenta = new RepositorioCuenta();
+        MovimientoRepository repoMovimiento = new RepositorioMovimiento();
 
         ClienteServicio cliServ = new ClienteServicio(repoCliente);
         CuentaServicio cuServ = new CuentaServicio(repoCuenta, repoCliente);

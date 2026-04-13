@@ -1,0 +1,208 @@
+package org.example.servicios;
+
+import org.example.modelos.Cuenta;
+import org.example.modelos.Movimiento;
+import org.example.modelos.TipoMovimiento;
+import org.example.repositorio.RepositorioCuenta;
+import org.example.repositorio.RepositorioMovimiento;
+
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.util.List;
+
+/**
+ * Servicio encargado de la gestión de operaciones financieras.
+ *
+ * Contiene la lógica de negocio para depósitos, retiros,
+ * transferencias y consulta de movimientos.
+ *
+ * Garantiza la validación de datos y la integridad
+ * de los saldos antes de registrar cualquier operación.
+ */
+public class MovimientoServicio {
+
+    private RepositorioCuenta repoCuenta;
+    private RepositorioMovimiento repoMovi;
+
+    public MovimientoServicio(RepositorioCuenta repoCuenta, RepositorioMovimiento repoMovi) {
+        this.repoCuenta = repoCuenta;
+        this.repoMovi = repoMovi;
+    }
+
+    /**
+     * Registra un movimiento financiero asociado a una cuenta.
+     *
+     * @param cuenta cuenta afectada
+     * @param tipoMovimiento tipo de operación realizada
+     * @param cantidad importe de la operación
+     */
+    private void registrarMovimiento(Cuenta cuenta, TipoMovimiento tipoMovimiento, BigDecimal cantidad){
+        Movimiento nuevoMov = new Movimiento(cuenta, tipoMovimiento,cantidad, LocalDateTime.now());
+
+        repoMovi.guardarMovimiento(nuevoMov);
+    }
+
+    /**
+     * Realiza un depósito en la cuenta indicada.
+     *
+     * Valida que la cantidad sea positiva y que la cuenta exista
+     * antes de actualizar el saldo y registrar el movimiento.
+     *
+     * @param numeroCuenta cuenta destino
+     * @param cantidad importe a depositar
+     * @return cuenta actualizada
+     */
+    public Cuenta depositar(String numeroCuenta, BigDecimal cantidad){
+
+        if(numeroCuenta == null || numeroCuenta.isBlank()) {
+            throw new IllegalArgumentException("Debe de introducir un número de cuenta");
+        }
+        if(cantidad ==null || cantidad.compareTo(BigDecimal.ZERO)<=0){
+            throw new IllegalArgumentException("La cantidad a depositar debe ser mayor que cero");
+        }
+        Cuenta cuenta = repoCuenta.buscarNumeroCuenta(numeroCuenta);
+
+        if(cuenta == null){
+            throw new IllegalArgumentException("No se ha encontrado la cuenta");
+        }
+
+        cuenta.setSaldoCuenta(cuenta.getSaldoCuenta().add(cantidad));
+        registrarMovimiento(cuenta,TipoMovimiento.DEPOSITO,cantidad);
+
+        return cuenta;
+    }
+
+    /**
+     * Realiza un retiro de fondos de una cuenta.
+     *
+     * Valida que la cantidad sea positiva, que la cuenta exista
+     * y que el saldo sea suficiente antes de efectuar la operación.
+     *
+     * @param numeroCuenta cuenta origen
+     * @param cantidad importe a retirar
+     * @return cuenta actualizada
+     */
+    public Cuenta retirar(String numeroCuenta, BigDecimal cantidad){
+
+        if(numeroCuenta ==null || numeroCuenta.isBlank()){
+            throw new IllegalArgumentException("Debe de introducir un número de cuenta");
+        }
+        if(cantidad ==null || cantidad.compareTo(BigDecimal.ZERO)<=0){
+            throw new IllegalArgumentException("La cantidad a retirar debe ser mayor que cero");
+        }
+        Cuenta cuenta = repoCuenta.buscarNumeroCuenta(numeroCuenta);
+
+        if(cuenta == null){
+            throw new IllegalArgumentException("No se ha encontrado la cuenta");
+        }
+
+        if (cuenta.getSaldoCuenta().compareTo(cantidad) < 0) {
+            throw new IllegalArgumentException("Saldo insuficiente.\nSaldo disponible: " + cuenta.getSaldoCuenta()
+                    + " €\nImporte solicitado: " + cantidad + " €");
+        }
+
+        cuenta.setSaldoCuenta(cuenta.getSaldoCuenta().subtract(cantidad));
+        registrarMovimiento(cuenta,TipoMovimiento.RETIRO,cantidad);
+
+        return cuenta;
+    }
+
+    /**
+     * Realiza una transferencia entre dos cuentas distintas.
+     *
+     * Verifica la existencia de ambas cuentas, que no sean la misma
+     * y que el saldo sea suficiente antes de efectuar la operación.
+     *
+     * En caso de error durante el proceso, se revierten los cambios
+     * realizados en memoria.
+     *
+     * @param numeroOrigen cuenta de origen
+     * @param numeroDestino cuenta de destino
+     * @param cantidad importe a transferir
+     */
+    public void transferir(String numeroOrigen, String numeroDestino, BigDecimal cantidad){
+
+        if(numeroOrigen == null || numeroOrigen.isBlank() || numeroDestino == null || numeroDestino.isBlank()){
+            throw new IllegalArgumentException("Debe introducir números de cuenta válidos");
+        }
+
+        if(cantidad ==null || cantidad.compareTo(BigDecimal.ZERO)<=0){
+            throw new IllegalArgumentException("La cantidad a depositar debe ser mayor que cero");
+        }else if(numeroOrigen.equals(numeroDestino)){
+            throw new IllegalArgumentException("La cuenta origen y destino deben de ser diferentes");
+        }
+
+        Cuenta cuentaOrigen = repoCuenta.buscarNumeroCuenta(numeroOrigen);
+        if(cuentaOrigen == null){
+            throw new IllegalArgumentException("La cuenta a realizar la transferencia debe de existir");
+        }
+        Cuenta cuentaDestino = repoCuenta.buscarNumeroCuenta(numeroDestino);
+
+        if(cuentaDestino == null){
+            throw new IllegalArgumentException("La cuenta a la que se va a realizar la transferencia debe de existir");
+        }
+
+        if((cuentaOrigen.getSaldoCuenta().compareTo(cantidad))<0){
+            throw new IllegalArgumentException("La cantidad a transferir no puede ser mayor que la cantidad encontrada en la cuenta");
+        }
+        try {
+            cuentaOrigen.setSaldoCuenta(cuentaOrigen.getSaldoCuenta().subtract(cantidad));
+            cuentaDestino.setSaldoCuenta(cuentaDestino.getSaldoCuenta().add(cantidad));
+            registrarMovimiento(cuentaOrigen, TipoMovimiento.TRANSFERENCIA_SALIENTE, cantidad);
+            registrarMovimiento(cuentaDestino, TipoMovimiento.TRANSFERENCIA_ENTRANTE, cantidad);
+        }catch(Exception ex){
+            cuentaOrigen.setSaldoCuenta(cuentaOrigen.getSaldoCuenta().add(cantidad));
+            cuentaDestino.setSaldoCuenta(cuentaDestino.getSaldoCuenta().subtract(cantidad));
+            throw new RuntimeException("Error durante la transferencia. Se han revertido los datos en memoria.");
+        }
+    }
+
+    public List<Movimiento> obtenerLista(String numeroCuenta){
+
+        if(numeroCuenta == null || numeroCuenta.isBlank()){
+            throw new IllegalArgumentException("Debe introducir un número de cuenta válido");
+        }
+
+        Cuenta cuenta = repoCuenta.buscarNumeroCuenta(numeroCuenta);
+
+        if(cuenta==null){
+            throw new IllegalArgumentException("No se ha encontrado la cuenta");
+        }
+        return repoMovi.obtenerMovimientosCuenta(cuenta.getNumeroCuenta());
+    }
+
+
+    /**
+     * Obtiene los movimientos de una cuenta dentro de un rango de fechas.
+     *
+     * @param numeroCuenta número de cuenta
+     * @param fechaIn fecha inicial
+     * @param fechaFin fecha final
+     * @return lista de movimientos dentro del intervalo indicado
+     */
+    public List<Movimiento> obtenerListaFecha(String numeroCuenta, LocalDate fechaIn, LocalDate fechaFin){
+
+        if(numeroCuenta== null || numeroCuenta.isBlank()){
+            throw new IllegalArgumentException("Debe introducir un número de cuenta válido");
+        }
+
+        if(fechaIn == null || fechaFin == null){
+            throw new IllegalArgumentException("Las fechas no pueden ser nulas");
+        }
+
+
+        Cuenta cuenta = repoCuenta.buscarNumeroCuenta(numeroCuenta);
+
+        if(cuenta==null){
+            throw new IllegalArgumentException("No se ha encontrado la cuenta");
+        }
+
+        if(fechaIn.isAfter(fechaFin)){
+            throw new IllegalArgumentException("La fecha de inicio no puede ser más antigua que la fecha final");
+        }else if(fechaFin.isBefore(fechaIn)){
+            throw new IllegalArgumentException("La fecha de fin no puede ser anterior a la fecha inicial");
+        }
+        return repoMovi.obtenerMovimientosFecha(numeroCuenta,fechaIn,fechaFin);
+    }
+}

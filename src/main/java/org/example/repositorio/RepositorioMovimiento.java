@@ -1,7 +1,6 @@
-package com.novabank.persistence.memory;
+package org.example.repositorio;
 
-
-import com.novabank.domain.model.Movimiento;
+import org.example.modelos.Movimiento;
 
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -22,7 +21,6 @@ public class RepositorioMovimiento {
      * indexados por su identificador único.
      */
     private HashMap<Long, Movimiento> registroMovimientos = new HashMap<>();
-    private String s;
 
     public void guardarMovimiento(Movimiento nuevoMovimiento){
         if(!registroMovimientos.containsKey(nuevoMovimiento.getIdMovimiento())){

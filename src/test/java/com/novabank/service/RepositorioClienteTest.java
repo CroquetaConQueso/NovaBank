@@ -6,6 +6,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDateTime;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -19,14 +20,14 @@ class RepositorioClienteTest {
     }
 
     private Cliente crearClienteEjemplo() {
-        return new Cliente(
-                "Carlos",
-                "Torres",
-                "12345678A",
-                "carlos@email.com",
-                600123123,
-                LocalDateTime.now()
-        );
+        return Cliente.builder()
+                .nombreCliente("Carlos")
+                .apellidosCliente("Torres")
+                .dniNifCliente("12345678A")
+                .emailCliente("carlos@email.com")
+                .telefonoCliente(600123123)
+                .fechaCreacionCliente(LocalDateTime.now())
+                .build();
     }
 
     @Test
@@ -35,24 +36,23 @@ class RepositorioClienteTest {
 
         repositorio.anadirCliente(cliente);
 
-        Cliente resultado = repositorio.buscarIdCliente(cliente.getIdCliente());
+        Optional<Cliente> resultado = repositorio.buscarIdCliente(cliente.getIdCliente());
 
-        assertNotNull(resultado);
-        assertEquals(cliente.getDniNifCliente(), resultado.getDniNifCliente());
+        assertTrue(resultado.isPresent());
+        assertEquals(cliente.getDniNifCliente(), resultado.get().getDniNifCliente());
     }
 
     @Test
     void noDebeSobrescribirClienteConMismoId() {
-        Cliente cliente1 = crearClienteEjemplo();
-        repositorio.anadirCliente(cliente1);
+        Cliente cliente = crearClienteEjemplo();
+        repositorio.anadirCliente(cliente);
 
-        // Intentamos añadir el mismo objeto otra vez
-        repositorio.anadirCliente(cliente1);
+        repositorio.anadirCliente(cliente);
 
-        Cliente resultado = repositorio.buscarIdCliente(cliente1.getIdCliente());
+        Optional<Cliente> resultado = repositorio.buscarIdCliente(cliente.getIdCliente());
 
-        assertNotNull(resultado);
-        assertEquals(cliente1.getEmailCliente(), resultado.getEmailCliente());
+        assertTrue(resultado.isPresent());
+        assertEquals(cliente.getEmailCliente(), resultado.get().getEmailCliente());
     }
 
     @Test
@@ -60,10 +60,10 @@ class RepositorioClienteTest {
         Cliente cliente = crearClienteEjemplo();
         repositorio.anadirCliente(cliente);
 
-        Cliente resultado = repositorio.buscarDniCliente("12345678A");
+        Optional<Cliente> resultado = repositorio.buscarDniCliente("12345678A");
 
-        assertNotNull(resultado);
-        assertEquals(cliente.getIdCliente(), resultado.getIdCliente());
+        assertTrue(resultado.isPresent());
+        assertEquals(cliente.getIdCliente(), resultado.get().getIdCliente());
     }
 
     @Test
@@ -71,9 +71,10 @@ class RepositorioClienteTest {
         Cliente cliente = crearClienteEjemplo();
         repositorio.anadirCliente(cliente);
 
-        Cliente resultado = repositorio.buscarEmailCliente("carlos@email.com");
+        Optional<Cliente> resultado = repositorio.buscarEmailCliente("carlos@email.com");
 
-        assertNotNull(resultado);
+        assertTrue(resultado.isPresent());
+        assertEquals(cliente.getEmailCliente(), resultado.get().getEmailCliente());
     }
 
     @Test
@@ -81,15 +82,55 @@ class RepositorioClienteTest {
         Cliente cliente = crearClienteEjemplo();
         repositorio.anadirCliente(cliente);
 
-        Cliente resultado = repositorio.buscarTelefonoCliente(600123123);
+        Optional<Cliente> resultado = repositorio.buscarTelefonoCliente(600123123);
 
-        assertNotNull(resultado);
+        assertTrue(resultado.isPresent());
+        assertEquals(cliente.getTelefonoCliente(), resultado.get().getTelefonoCliente());
     }
 
     @Test
-    void debeRetornarNullSiNoExiste() {
-        Cliente resultado = repositorio.buscarIdCliente(999999L);
+    void debeRetornarOptionalVacioSiNoExiste() {
+        Optional<Cliente> resultado = repositorio.buscarIdCliente(999999L);
 
-        assertNull(resultado);
+        assertTrue(resultado.isEmpty());
+    }
+
+    @Test
+    void debeAsignarIdAlAnadirCliente() {
+        Cliente cliente = crearClienteEjemplo();
+
+        repositorio.anadirCliente(cliente);
+
+        assertTrue(cliente.getIdCliente() > 0);
+    }
+
+    @Test
+    void debeBuscarPorEmailIgnorandoMayusculas() {
+        Cliente cliente = crearClienteEjemplo();
+        repositorio.anadirCliente(cliente);
+
+        Optional<Cliente> resultado = repositorio.buscarEmailCliente("CARLOS@EMAIL.COM");
+
+        assertTrue(resultado.isPresent());
+        assertEquals(cliente.getEmailCliente(), resultado.get().getEmailCliente());
+    }
+
+    @Test
+    void obtenerClientes_debeRetornarTodosLosClientes() {
+        Cliente cliente1 = crearClienteEjemplo();
+
+        Cliente cliente2 = Cliente.builder()
+                .nombreCliente("Ana")
+                .apellidosCliente("Ruiz")
+                .dniNifCliente("87654321B")
+                .emailCliente("ana@email.com")
+                .telefonoCliente(611111111)
+                .fechaCreacionCliente(LocalDateTime.now())
+                .build();
+
+        repositorio.anadirCliente(cliente1);
+        repositorio.anadirCliente(cliente2);
+
+        assertEquals(2, repositorio.obtenerClientes().size());
     }
 }

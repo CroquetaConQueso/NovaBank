@@ -2,20 +2,19 @@ package com.novabank.persistence.memory;
 
 import com.novabank.domain.model.Cliente;
 import com.novabank.domain.model.Cuenta;
+import com.novabank.exception.ResourceNotFoundException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * Pruebas unitarias para la clase RepositorioCuenta.
- *
- * Verifica el correcto almacenamiento y recuperación
- * de cuentas bancarias en memoria.
  */
 class RepositorioCuentaTest {
 
@@ -26,73 +25,96 @@ class RepositorioCuentaTest {
     void setup() {
         repositorio = new RepositorioCuenta();
 
-        cliente = new Cliente("Carlos", "Torres", "12345678A",
-                "carlos@email.com", 600123123, LocalDateTime.now());
+        cliente = Cliente.builder()
+                .nombreCliente("Carlos")
+                .apellidosCliente("Torres")
+                .dniNifCliente("12345678A")
+                .emailCliente("carlos@email.com")
+                .telefonoCliente(600123123)
+                .fechaCreacionCliente(LocalDateTime.now())
+                .build();
+
+        cliente.setIdCliente(1L);
     }
 
-    /**
-     * Verifica que una cuenta se guarda correctamente
-     * y puede recuperarse mediante su número de cuenta.
-     */
     @Test
     void guardarCuenta_debePermitirBuscarPorNumero() {
-
-        Cuenta cuenta = new Cuenta(cliente, "ES12345678901234567890", new BigDecimal("100"),
-                LocalDateTime.now());
+        Cuenta cuenta = Cuenta.builder()
+                .dueñoCuenta(cliente)
+                .numeroCuenta("ES12345678901234567890")
+                .saldoCuenta(new BigDecimal("100"))
+                .fechaCreacionCuenta(LocalDateTime.now())
+                .build();
 
         repositorio.guardarCuenta(cuenta);
 
-        Cuenta resultado = repositorio.buscarNumeroCuenta("ES12345678901234567890");
+        Optional<Cuenta> resultado = repositorio.buscarNumeroCuenta("ES12345678901234567890");
 
-        assertNotNull(resultado);
-        assertEquals("ES12345678901234567890", resultado.getNumeroCuenta());
+        assertTrue(resultado.isPresent());
+        assertEquals("ES12345678901234567890", resultado.get().getNumeroCuenta());
     }
 
-    /**
-     * Verifica que si se guarda una cuenta con el mismo número,
-     * el registro anterior es sobrescrito (comportamiento de HashMap).
-     */
+    @Test
+    void guardarCuenta_debeAsignarIdEnMemoria() {
+        Cuenta cuenta = Cuenta.builder()
+                .dueñoCuenta(cliente)
+                .numeroCuenta("ES12345678901234567890")
+                .saldoCuenta(new BigDecimal("100"))
+                .fechaCreacionCuenta(LocalDateTime.now())
+                .build();
+
+        repositorio.guardarCuenta(cuenta);
+
+        assertTrue(cuenta.getIdCuenta() > 0);
+    }
+
     @Test
     void guardarCuenta_conMismoNumero_debeSobrescribir() {
+        Cuenta cuenta1 = Cuenta.builder()
+                .dueñoCuenta(cliente)
+                .numeroCuenta("ES12345678901234567890")
+                .saldoCuenta(new BigDecimal("100"))
+                .fechaCreacionCuenta(LocalDateTime.now())
+                .build();
 
-        Cuenta cuenta1 = new Cuenta(cliente, "ES12345678901234567890", new BigDecimal("100"),
-                LocalDateTime.now());
-
-        Cuenta cuenta2 = new Cuenta(cliente, "ES12345678901234567890", new BigDecimal("500"),
-                LocalDateTime.now());
+        Cuenta cuenta2 = Cuenta.builder()
+                .dueñoCuenta(cliente)
+                .numeroCuenta("ES12345678901234567890")
+                .saldoCuenta(new BigDecimal("500"))
+                .fechaCreacionCuenta(LocalDateTime.now())
+                .build();
 
         repositorio.guardarCuenta(cuenta1);
         repositorio.guardarCuenta(cuenta2);
 
-        Cuenta resultado = repositorio.buscarNumeroCuenta("ES12345678901234567890");
+        Optional<Cuenta> resultado = repositorio.buscarNumeroCuenta("ES12345678901234567890");
 
-        assertEquals(new BigDecimal("500"), resultado.getSaldoCuenta());
+        assertTrue(resultado.isPresent());
+        assertEquals(new BigDecimal("500"), resultado.get().getSaldoCuenta());
     }
 
-    /**
-     * Verifica que buscarNumeroCuenta devuelve null
-     * cuando no existe ninguna cuenta con el número indicado.
-     */
     @Test
-    void buscarNumeroCuenta_inexistente_debeRetornarNull() {
+    void buscarNumeroCuenta_inexistente_debeRetornarOptionalVacio() {
+        Optional<Cuenta> resultado = repositorio.buscarNumeroCuenta("ES00000000000000000000");
 
-        Cuenta resultado = repositorio.buscarNumeroCuenta("ES00000000000000000000");
-
-        assertNull(resultado);
+        assertTrue(resultado.isEmpty());
     }
 
-    /**
-     * Verifica que listarCuentasCliente devuelve todas
-     * las cuentas asociadas a un cliente concreto.
-     */
     @Test
     void listarCuentasCliente_debeRetornarCuentasDelCliente() {
+        Cuenta cuenta1 = Cuenta.builder()
+                .dueñoCuenta(cliente)
+                .numeroCuenta("ES11111111111111111111")
+                .saldoCuenta(new BigDecimal("100"))
+                .fechaCreacionCuenta(LocalDateTime.now())
+                .build();
 
-        Cuenta cuenta1 = new Cuenta(cliente, "ES11111111111111111111", new BigDecimal("100"),
-                LocalDateTime.now());
-
-        Cuenta cuenta2 = new Cuenta(cliente, "ES22222222222222222222", new BigDecimal("200"),
-                LocalDateTime.now());
+        Cuenta cuenta2 = Cuenta.builder()
+                .dueñoCuenta(cliente)
+                .numeroCuenta("ES22222222222222222222")
+                .saldoCuenta(new BigDecimal("200"))
+                .fechaCreacionCuenta(LocalDateTime.now())
+                .build();
 
         repositorio.guardarCuenta(cuenta1);
         repositorio.guardarCuenta(cuenta2);
@@ -102,16 +124,111 @@ class RepositorioCuentaTest {
         assertEquals(2, resultado.size());
     }
 
-    /**
-     * Verifica que listarCuentasCliente devuelve
-     * una lista vacía cuando el cliente no tiene cuentas.
-     */
     @Test
     void listarCuentasCliente_sinResultados_debeRetornarListaVacia() {
-
         List<Cuenta> resultado = repositorio.listarCuentasCliente(cliente.getIdCliente());
 
         assertTrue(resultado.isEmpty());
     }
 
+    @Test
+    void actualizarSaldo_debeModificarElSaldoDeLaCuenta() {
+        Cuenta cuenta = Cuenta.builder()
+                .dueñoCuenta(cliente)
+                .numeroCuenta("ES12345678901234567890")
+                .saldoCuenta(new BigDecimal("100"))
+                .fechaCreacionCuenta(LocalDateTime.now())
+                .build();
+
+        repositorio.guardarCuenta(cuenta);
+
+        repositorio.actualizarSaldo(null, "ES12345678901234567890", new BigDecimal("250"));
+
+        Optional<Cuenta> resultado = repositorio.buscarNumeroCuenta("ES12345678901234567890");
+
+        assertTrue(resultado.isPresent());
+        assertEquals(new BigDecimal("250"), resultado.get().getSaldoCuenta());
+    }
+
+    @Test
+    void buscarNumeroCuenta_conConnection_debeRetornarLaCuenta() {
+        Cuenta cuenta = Cuenta.builder()
+                .dueñoCuenta(cliente)
+                .numeroCuenta("ES12345678901234567890")
+                .saldoCuenta(new BigDecimal("100"))
+                .fechaCreacionCuenta(LocalDateTime.now())
+                .build();
+
+        repositorio.guardarCuenta(cuenta);
+
+        Optional<Cuenta> resultado = repositorio.buscarNumeroCuenta("ES12345678901234567890", null);
+
+        assertTrue(resultado.isPresent());
+        assertEquals("ES12345678901234567890", resultado.get().getNumeroCuenta());
+    }
+
+    @Test
+    void guardarCuenta_variasCuentas_debeAsignarIdsDiferentes() {
+        Cuenta cuenta1 = Cuenta.builder()
+                .dueñoCuenta(cliente)
+                .numeroCuenta("ES11111111111111111111")
+                .saldoCuenta(new BigDecimal("100"))
+                .fechaCreacionCuenta(LocalDateTime.now())
+                .build();
+
+        Cuenta cuenta2 = Cuenta.builder()
+                .dueñoCuenta(cliente)
+                .numeroCuenta("ES22222222222222222222")
+                .saldoCuenta(new BigDecimal("200"))
+                .fechaCreacionCuenta(LocalDateTime.now())
+                .build();
+
+        repositorio.guardarCuenta(cuenta1);
+        repositorio.guardarCuenta(cuenta2);
+
+        assertNotEquals(cuenta1.getIdCuenta(), cuenta2.getIdCuenta());
+    }
+
+    @Test
+    void actualizarSaldo_cuentaInexistente_debeLanzarExcepcion() {
+        assertThrows(
+                ResourceNotFoundException.class,
+                () -> repositorio.actualizarSaldo(null, "ES00000000000000000000", new BigDecimal("50"))
+        );
+    }
+
+    @Test
+    void listarCuentasCliente_conCuentasDeDosClientes_debeRetornarSoloLasDelClienteSolicitado() {
+        Cliente otroCliente = Cliente.builder()
+                .nombreCliente("Ana")
+                .apellidosCliente("Ruiz")
+                .dniNifCliente("87654321B")
+                .emailCliente("ana@email.com")
+                .telefonoCliente(611111111)
+                .fechaCreacionCliente(LocalDateTime.now())
+                .build();
+        otroCliente.setIdCliente(2L);
+
+        Cuenta cuentaCliente1 = Cuenta.builder()
+                .dueñoCuenta(cliente)
+                .numeroCuenta("ES11111111111111111111")
+                .saldoCuenta(new BigDecimal("100"))
+                .fechaCreacionCuenta(LocalDateTime.now())
+                .build();
+
+        Cuenta cuentaCliente2 = Cuenta.builder()
+                .dueñoCuenta(otroCliente)
+                .numeroCuenta("ES22222222222222222222")
+                .saldoCuenta(new BigDecimal("200"))
+                .fechaCreacionCuenta(LocalDateTime.now())
+                .build();
+
+        repositorio.guardarCuenta(cuentaCliente1);
+        repositorio.guardarCuenta(cuentaCliente2);
+
+        List<Cuenta> resultado = repositorio.listarCuentasCliente(cliente.getIdCliente());
+
+        assertEquals(1, resultado.size());
+        assertEquals("ES11111111111111111111", resultado.get(0).getNumeroCuenta());
+    }
 }

@@ -18,13 +18,15 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.mockito.Mockito.when;
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.*;
 
 /**
- * Tests unitarios para las consultas de movimientos expuestas por MovimientoServicio.
+ * Tests unitarios para las consultas de movimientos en MovimientoServicio.
  */
 @ExtendWith(MockitoExtension.class)
 class ConsultasMovimientoTest {
@@ -33,7 +35,7 @@ class ConsultasMovimientoTest {
     private CuentaRepository repoCuenta;
 
     @Mock
-    private MovimientoRepository repoMovimiento;
+    private MovimientoRepository repoMovi;
 
     @InjectMocks
     private MovimientoServicio movimientoServicio;
@@ -56,86 +58,100 @@ class ConsultasMovimientoTest {
                 .build();
     }
 
-    @Test
-    void obtenerLista_cuentaInexistente_debeLanzarExcepcion() {
-        when(repoCuenta.buscarNumeroCuenta("ES12345678901234567890")).thenReturn(null);
-
-        assertThrows(
-                ResourceNotFoundException.class,
-                () -> movimientoServicio.obtenerLista("ES12345678901234567890")
-        );
+    private Movimiento crearMovimiento(Cuenta cuenta) {
+        return Movimiento.builder()
+                .cuentaAsignada(cuenta)
+                .tipoMov(TipoMovimiento.DEPOSITO)
+                .cantidadMovimiento(BigDecimal.valueOf(20))
+                .fechaCreacionMov(LocalDateTime.now())
+                .build();
     }
 
     @Test
     void obtenerLista_cuentaValida_debeRetornarLista() {
         Cuenta cuenta = crearCuenta();
-        Movimiento movimiento = Movimiento.builder()
-                .cuentaAsignada(cuenta)
-                .tipoMov(TipoMovimiento.DEPOSITO)
-                .cantidadMovimiento(BigDecimal.TEN)
-                .fechaCreacionMov(LocalDateTime.now())
-                .build();
+        List<Movimiento> movimientos = List.of(crearMovimiento(cuenta));
 
-        when(repoCuenta.buscarNumeroCuenta("ES12345678901234567890")).thenReturn(cuenta);
-        when(repoMovimiento.obtenerMovimientosCuenta("ES12345678901234567890")).thenReturn(List.of(movimiento));
+        when(repoCuenta.buscarNumeroCuenta("ES12345678901234567890"))
+                .thenReturn(Optional.of(cuenta));
+        when(repoMovi.obtenerMovimientosCuenta("ES12345678901234567890"))
+                .thenReturn(movimientos);
 
         List<Movimiento> resultado = movimientoServicio.obtenerLista("ES12345678901234567890");
 
         assertEquals(1, resultado.size());
+        verify(repoMovi).obtenerMovimientosCuenta("ES12345678901234567890");
     }
 
     @Test
-    void obtenerListaFecha_cuentaInexistente_debeLanzarExcepcion() {
-        when(repoCuenta.buscarNumeroCuenta("ES12345678901234567890")).thenReturn(null);
+    void obtenerLista_cuentaInexistente_debeLanzarExcepcion() {
+        when(repoCuenta.buscarNumeroCuenta("ES12345678901234567890"))
+                .thenReturn(Optional.empty());
 
         assertThrows(
                 ResourceNotFoundException.class,
-                () -> movimientoServicio.obtenerListaFecha(
-                        "ES12345678901234567890",
-                        LocalDate.now().minusDays(5),
-                        LocalDate.now()
-                )
+                () -> movimientoServicio.obtenerLista("ES12345678901234567890")
         );
-    }
 
-    @Test
-    void obtenerListaFecha_fechasInvalidas_debeLanzarExcepcion() {
-        Cuenta cuenta = crearCuenta();
-        when(repoCuenta.buscarNumeroCuenta("ES12345678901234567890")).thenReturn(cuenta);
-
-        assertThrows(
-                ValidationException.class,
-                () -> movimientoServicio.obtenerListaFecha(
-                        "ES12345678901234567890",
-                        LocalDate.now(),
-                        LocalDate.now().minusDays(2)
-                )
-        );
+        verify(repoMovi, never()).obtenerMovimientosCuenta(anyString());
     }
 
     @Test
     void obtenerListaFecha_correcto_debeRetornarLista() {
         Cuenta cuenta = crearCuenta();
-        Movimiento movimiento = Movimiento.builder()
-                .cuentaAsignada(cuenta)
-                .tipoMov(TipoMovimiento.DEPOSITO)
-                .cantidadMovimiento(BigDecimal.TEN)
-                .fechaCreacionMov(LocalDateTime.now())
-                .build();
+        List<Movimiento> movimientos = List.of(crearMovimiento(cuenta));
 
-        when(repoCuenta.buscarNumeroCuenta("ES12345678901234567890")).thenReturn(cuenta);
-        when(repoMovimiento.obtenerMovimientosFecha(
-                "ES12345678901234567890",
-                LocalDate.now().minusDays(5),
-                LocalDate.now()
-        )).thenReturn(List.of(movimiento));
+        LocalDate inicio = LocalDate.now().minusDays(1);
+        LocalDate fin = LocalDate.now().plusDays(1);
+
+        when(repoCuenta.buscarNumeroCuenta("ES12345678901234567890"))
+                .thenReturn(Optional.of(cuenta));
+        when(repoMovi.obtenerMovimientosFecha("ES12345678901234567890", inicio, fin))
+                .thenReturn(movimientos);
 
         List<Movimiento> resultado = movimientoServicio.obtenerListaFecha(
                 "ES12345678901234567890",
-                LocalDate.now().minusDays(5),
-                LocalDate.now()
+                inicio,
+                fin
         );
 
         assertEquals(1, resultado.size());
+        verify(repoMovi).obtenerMovimientosFecha("ES12345678901234567890", inicio, fin);
+    }
+
+    @Test
+    void obtenerListaFecha_fechasInvalidas_debeLanzarExcepcion() {
+        Cuenta cuenta = crearCuenta();
+
+        when(repoCuenta.buscarNumeroCuenta("ES12345678901234567890"))
+                .thenReturn(Optional.of(cuenta));
+
+        assertThrows(
+                ValidationException.class,
+                () -> movimientoServicio.obtenerListaFecha(
+                        "ES12345678901234567890",
+                        LocalDate.now().plusDays(1),
+                        LocalDate.now()
+                )
+        );
+
+        verify(repoMovi, never()).obtenerMovimientosFecha(anyString(), any(), any());
+    }
+
+    @Test
+    void obtenerListaFecha_cuentaInexistente_debeLanzarExcepcion() {
+        when(repoCuenta.buscarNumeroCuenta("ES12345678901234567890"))
+                .thenReturn(Optional.empty());
+
+        assertThrows(
+                ResourceNotFoundException.class,
+                () -> movimientoServicio.obtenerListaFecha(
+                        "ES12345678901234567890",
+                        LocalDate.now().minusDays(1),
+                        LocalDate.now().plusDays(1)
+                )
+        );
+
+        verify(repoMovi, never()).obtenerMovimientosFecha(anyString(), any(), any());
     }
 }

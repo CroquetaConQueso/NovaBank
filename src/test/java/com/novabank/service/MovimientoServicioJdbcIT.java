@@ -5,6 +5,8 @@ import com.novabank.domain.model.Cuenta;
 import com.novabank.domain.model.Movimiento;
 import com.novabank.domain.model.TipoMovimiento;
 import com.novabank.exception.InsufficientBalanceException;
+import com.novabank.exception.ResourceNotFoundException;
+import com.novabank.exception.ValidationException;
 import com.novabank.persistence.jdbc.ClienteRepositoryJdbc;
 import com.novabank.persistence.jdbc.CuentaRepositoryJdbc;
 import com.novabank.persistence.jdbc.MovimientoRepositoryJdbc;
@@ -20,7 +22,7 @@ import static org.junit.jupiter.api.Assertions.*;
 /**
  * Test de integración para las operaciones JDBC transaccionales.
  *
- * Requiere PostgreSQL disponible y variables de entorno NOVABANK_DB_* configuradas.
+ * Requiere PostgreSQL disponible y configuración JDBC operativa.
  */
 class MovimientoServicioJdbcIT {
 
@@ -43,12 +45,34 @@ class MovimientoServicioJdbcIT {
 
         movimientoServicio.depositar(cuenta.getNumeroCuenta(), BigDecimal.valueOf(25));
 
-        Cuenta recuperada = cuentaRepositoryJdbc.buscarNumeroCuenta(cuenta.getNumeroCuenta());
+        Cuenta recuperada = cuentaRepositoryJdbc.buscarNumeroCuenta(cuenta.getNumeroCuenta()).orElseThrow();
         List<Movimiento> movimientos = movimientoRepositoryJdbc.obtenerMovimientosCuenta(cuenta.getNumeroCuenta());
 
-        assertNotNull(recuperada);
         assertEquals(0, BigDecimal.valueOf(125).compareTo(recuperada.getSaldoCuenta()));
-        assertTrue(movimientos.stream().anyMatch(m -> m.getTipoMov() == TipoMovimiento.DEPOSITO));
+        assertTrue(
+                movimientos.stream().anyMatch(m ->
+                        m.getTipoMov() == TipoMovimiento.DEPOSITO
+                                && BigDecimal.valueOf(25).compareTo(m.getCantidadMovimiento()) == 0
+                )
+        );
+    }
+
+    @Test
+    void retirar_debePersistirSaldoYMovimiento() {
+        Cuenta cuenta = crearCuentaPersistida(BigDecimal.valueOf(100));
+
+        movimientoServicio.retirar(cuenta.getNumeroCuenta(), BigDecimal.valueOf(40));
+
+        Cuenta recuperada = cuentaRepositoryJdbc.buscarNumeroCuenta(cuenta.getNumeroCuenta()).orElseThrow();
+        List<Movimiento> movimientos = movimientoRepositoryJdbc.obtenerMovimientosCuenta(cuenta.getNumeroCuenta());
+
+        assertEquals(0, BigDecimal.valueOf(60).compareTo(recuperada.getSaldoCuenta()));
+        assertTrue(
+                movimientos.stream().anyMatch(m ->
+                        m.getTipoMov() == TipoMovimiento.RETIRO
+                                && BigDecimal.valueOf(40).compareTo(m.getCantidadMovimiento()) == 0
+                )
+        );
     }
 
     @Test
@@ -56,10 +80,14 @@ class MovimientoServicioJdbcIT {
         Cuenta origen = crearCuentaPersistida(BigDecimal.valueOf(100));
         Cuenta destino = crearCuentaPersistida(BigDecimal.valueOf(20));
 
-        movimientoServicio.transferir(origen.getNumeroCuenta(), destino.getNumeroCuenta(), BigDecimal.valueOf(30));
+        movimientoServicio.transferir(
+                origen.getNumeroCuenta(),
+                destino.getNumeroCuenta(),
+                BigDecimal.valueOf(30)
+        );
 
-        Cuenta origenRecuperada = cuentaRepositoryJdbc.buscarNumeroCuenta(origen.getNumeroCuenta());
-        Cuenta destinoRecuperada = cuentaRepositoryJdbc.buscarNumeroCuenta(destino.getNumeroCuenta());
+        Cuenta origenRecuperada = cuentaRepositoryJdbc.buscarNumeroCuenta(origen.getNumeroCuenta()).orElseThrow();
+        Cuenta destinoRecuperada = cuentaRepositoryJdbc.buscarNumeroCuenta(destino.getNumeroCuenta()).orElseThrow();
 
         List<Movimiento> movimientosOrigen = movimientoRepositoryJdbc.obtenerMovimientosCuenta(origen.getNumeroCuenta());
         List<Movimiento> movimientosDestino = movimientoRepositoryJdbc.obtenerMovimientosCuenta(destino.getNumeroCuenta());
@@ -67,8 +95,19 @@ class MovimientoServicioJdbcIT {
         assertEquals(0, BigDecimal.valueOf(70).compareTo(origenRecuperada.getSaldoCuenta()));
         assertEquals(0, BigDecimal.valueOf(50).compareTo(destinoRecuperada.getSaldoCuenta()));
 
-        assertTrue(movimientosOrigen.stream().anyMatch(m -> m.getTipoMov() == TipoMovimiento.TRANSFERENCIA_SALIENTE));
-        assertTrue(movimientosDestino.stream().anyMatch(m -> m.getTipoMov() == TipoMovimiento.TRANSFERENCIA_ENTRANTE));
+        assertTrue(
+                movimientosOrigen.stream().anyMatch(m ->
+                        m.getTipoMov() == TipoMovimiento.TRANSFERENCIA_SALIENTE
+                                && BigDecimal.valueOf(30).compareTo(m.getCantidadMovimiento()) == 0
+                )
+        );
+
+        assertTrue(
+                movimientosDestino.stream().anyMatch(m ->
+                        m.getTipoMov() == TipoMovimiento.TRANSFERENCIA_ENTRANTE
+                                && BigDecimal.valueOf(30).compareTo(m.getCantidadMovimiento()) == 0
+                )
+        );
     }
 
     @Test
@@ -85,8 +124,8 @@ class MovimientoServicioJdbcIT {
                 )
         );
 
-        Cuenta origenRecuperada = cuentaRepositoryJdbc.buscarNumeroCuenta(origen.getNumeroCuenta());
-        Cuenta destinoRecuperada = cuentaRepositoryJdbc.buscarNumeroCuenta(destino.getNumeroCuenta());
+        Cuenta origenRecuperada = cuentaRepositoryJdbc.buscarNumeroCuenta(origen.getNumeroCuenta()).orElseThrow();
+        Cuenta destinoRecuperada = cuentaRepositoryJdbc.buscarNumeroCuenta(destino.getNumeroCuenta()).orElseThrow();
 
         List<Movimiento> movimientosOrigen = movimientoRepositoryJdbc.obtenerMovimientosCuenta(origen.getNumeroCuenta());
         List<Movimiento> movimientosDestino = movimientoRepositoryJdbc.obtenerMovimientosCuenta(destino.getNumeroCuenta());
@@ -109,6 +148,33 @@ class MovimientoServicioJdbcIT {
         );
     }
 
+    @Test
+    void transferir_conCuentaDestinoInexistente_noDebeAlterarElSaldoOrigen() {
+        Cuenta origen = crearCuentaPersistida(BigDecimal.valueOf(100));
+
+        assertThrows(
+                ResourceNotFoundException.class,
+                () -> movimientoServicio.transferir(
+                        origen.getNumeroCuenta(),
+                        "ES91999999999999999999",
+                        BigDecimal.valueOf(30)
+                )
+        );
+
+        Cuenta origenRecuperada = cuentaRepositoryJdbc.buscarNumeroCuenta(origen.getNumeroCuenta()).orElseThrow();
+        List<Movimiento> movimientosOrigen = movimientoRepositoryJdbc.obtenerMovimientosCuenta(origen.getNumeroCuenta());
+
+        assertEquals(0, BigDecimal.valueOf(100).compareTo(origenRecuperada.getSaldoCuenta()));
+
+        assertTrue(
+                movimientosOrigen.stream().noneMatch(m ->
+                        (m.getTipoMov() == TipoMovimiento.TRANSFERENCIA_SALIENTE
+                                || m.getTipoMov() == TipoMovimiento.TRANSFERENCIA_ENTRANTE)
+                                && BigDecimal.valueOf(30).compareTo(m.getCantidadMovimiento()) == 0
+                )
+        );
+    }
+
     private Cuenta crearCuentaPersistida(BigDecimal saldoInicial) {
         Cliente cliente = crearClientePersistido();
 
@@ -124,7 +190,7 @@ class MovimientoServicioJdbcIT {
     }
 
     private Cliente crearClientePersistido() {
-        String sufijo = String.valueOf(System.currentTimeMillis());
+        String sufijo = String.valueOf(System.nanoTime());
         String ochoDigitos = String.format("%08d", Math.abs((int) (System.nanoTime() % 100_000_000L)));
         int telefono = Integer.parseInt("6" + ochoDigitos.substring(1));
 
@@ -144,5 +210,61 @@ class MovimientoServicioJdbcIT {
     private String generarNumeroCuentaUnico() {
         long sufijo = Math.abs(System.nanoTime() % 1_000_000_000_000_000_000L);
         return "ES91" + String.format("%018d", sufijo);
+    }
+
+    @Test
+    void depositar_conCuentaInexistente_debeLanzarExcepcionSinPersistirMovimiento() {
+        assertThrows(
+                ResourceNotFoundException.class,
+                () -> movimientoServicio.depositar("ES91999999999999999999", BigDecimal.valueOf(25))
+        );
+    }
+
+    @Test
+    void retirar_conSaldoInsuficiente_noDebePersistirCambiosParciales() {
+        Cuenta cuenta = crearCuentaPersistida(BigDecimal.valueOf(20));
+
+        assertThrows(
+                InsufficientBalanceException.class,
+                () -> movimientoServicio.retirar(cuenta.getNumeroCuenta(), BigDecimal.valueOf(100))
+        );
+
+        Cuenta recuperada = cuentaRepositoryJdbc.buscarNumeroCuenta(cuenta.getNumeroCuenta()).orElseThrow();
+        List<Movimiento> movimientos = movimientoRepositoryJdbc.obtenerMovimientosCuenta(cuenta.getNumeroCuenta());
+
+        assertEquals(0, BigDecimal.valueOf(20).compareTo(recuperada.getSaldoCuenta()));
+
+        assertTrue(
+                movimientos.stream().noneMatch(m ->
+                        m.getTipoMov() == TipoMovimiento.RETIRO
+                                && BigDecimal.valueOf(100).compareTo(m.getCantidadMovimiento()) == 0
+                )
+        );
+    }
+
+    @Test
+    void transferir_conMismaCuenta_debeLanzarExcepcionSinPersistirNada() {
+        Cuenta cuenta = crearCuentaPersistida(BigDecimal.valueOf(100));
+
+        assertThrows(
+                ValidationException.class,
+                () -> movimientoServicio.transferir(
+                        cuenta.getNumeroCuenta(),
+                        cuenta.getNumeroCuenta(),
+                        BigDecimal.valueOf(10)
+                )
+        );
+
+        Cuenta recuperada = cuentaRepositoryJdbc.buscarNumeroCuenta(cuenta.getNumeroCuenta()).orElseThrow();
+        List<Movimiento> movimientos = movimientoRepositoryJdbc.obtenerMovimientosCuenta(cuenta.getNumeroCuenta());
+
+        assertEquals(0, BigDecimal.valueOf(100).compareTo(recuperada.getSaldoCuenta()));
+        assertTrue(
+                movimientos.stream().noneMatch(m ->
+                        (m.getTipoMov() == TipoMovimiento.TRANSFERENCIA_SALIENTE
+                                || m.getTipoMov() == TipoMovimiento.TRANSFERENCIA_ENTRANTE)
+                                && BigDecimal.valueOf(10).compareTo(m.getCantidadMovimiento()) == 0
+                )
+        );
     }
 }

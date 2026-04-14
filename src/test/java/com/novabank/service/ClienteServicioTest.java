@@ -13,13 +13,11 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Optional;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.*;
 
 /**
  * Tests unitarios para ClienteServicio.
@@ -33,33 +31,52 @@ class ClienteServicioTest {
     @InjectMocks
     private ClienteServicio clienteServicio;
 
+    private Cliente crearClienteExistente() {
+        Cliente cliente = Cliente.builder()
+                .nombreCliente("Carlos")
+                .apellidosCliente("Torres")
+                .dniNifCliente("12345678Z")
+                .emailCliente("carlos@example.com")
+                .telefonoCliente(612345678)
+                .fechaCreacionCliente(LocalDateTime.now())
+                .build();
+
+        cliente.setIdCliente(1L);
+        return cliente;
+    }
+
     @Test
     void registrarCliente_datosValidos_debeGuardarCliente() {
+        when(repoCliente.buscarDniCliente("12345678Z")).thenReturn(Optional.empty());
+        when(repoCliente.buscarEmailCliente("carlos@example.com")).thenReturn(Optional.empty());
+        when(repoCliente.buscarTelefonoCliente(612345678)).thenReturn(Optional.empty());
+
+        ArgumentCaptor<Cliente> captor = ArgumentCaptor.forClass(Cliente.class);
+
         Cliente resultado = clienteServicio.registrarCliente(
                 "Carlos",
                 "Torres",
-                "12345678Z",
-                "carlos.torres@example.com",
+                "12345678z",
+                "Carlos@Example.com",
                 612345678
         );
 
-        ArgumentCaptor<Cliente> captor = ArgumentCaptor.forClass(Cliente.class);
         verify(repoCliente).anadirCliente(captor.capture());
 
-        Cliente clienteGuardado = captor.getValue();
+        Cliente guardado = captor.getValue();
 
         assertNotNull(resultado);
-        assertEquals("Carlos", clienteGuardado.getNombreCliente());
-        assertEquals("Torres", clienteGuardado.getApellidosCliente());
-        assertEquals("12345678Z", clienteGuardado.getDniNifCliente());
-        assertEquals("carlos.torres@example.com", clienteGuardado.getEmailCliente());
-        assertEquals(612345678, clienteGuardado.getTelefonoCliente());
+        assertEquals("Carlos", guardado.getNombreCliente());
+        assertEquals("Torres", guardado.getApellidosCliente());
+        assertEquals("12345678Z", guardado.getDniNifCliente());
+        assertEquals("carlos@example.com", guardado.getEmailCliente());
+        assertEquals(612345678, guardado.getTelefonoCliente());
+        assertNotNull(guardado.getFechaCreacionCliente());
     }
 
     @Test
     void registrarCliente_dniDuplicado_debeLanzarExcepcion() {
-        when(repoCliente.buscarDniCliente("12345678Z"))
-                .thenReturn(Cliente.builder().nombreCliente("Otro").fechaCreacionCliente(LocalDateTime.now()).build());
+        when(repoCliente.buscarDniCliente("12345678Z")).thenReturn(Optional.of(crearClienteExistente()));
 
         assertThrows(
                 DuplicateResourceException.class,
@@ -67,12 +84,12 @@ class ClienteServicioTest {
                         "Carlos",
                         "Torres",
                         "12345678Z",
-                        "carlos.torres@example.com",
-                        612345678
+                        "otro@email.com",
+                        611111111
                 )
         );
 
-        verify(repoCliente, never()).anadirCliente(org.mockito.ArgumentMatchers.any());
+        verify(repoCliente, never()).anadirCliente(any());
     }
 
     @Test
@@ -83,12 +100,12 @@ class ClienteServicioTest {
                         "Carlos",
                         "Torres",
                         "12345678Z",
-                        "carlos..torres@-mail",
+                        "email-invalido",
                         612345678
                 )
         );
 
-        verify(repoCliente, never()).anadirCliente(org.mockito.ArgumentMatchers.any());
+        verifyNoInteractions(repoCliente);
     }
 
     @Test
@@ -99,17 +116,17 @@ class ClienteServicioTest {
                         "Carlos",
                         "Torres",
                         "12345678Z",
-                        "carlos.torres@example.com",
-                        12345
+                        "carlos@example.com",
+                        123
                 )
         );
 
-        verify(repoCliente, never()).anadirCliente(org.mockito.ArgumentMatchers.any());
+        verifyNoInteractions(repoCliente);
     }
 
     @Test
     void buscarIdCliente_inexistente_debeLanzarExcepcion() {
-        when(repoCliente.buscarIdCliente(99L)).thenReturn(null);
+        when(repoCliente.buscarIdCliente(99L)).thenReturn(Optional.empty());
 
         assertThrows(
                 ResourceNotFoundException.class,
@@ -121,7 +138,19 @@ class ClienteServicioTest {
     void buscarDniCliente_invalido_debeLanzarExcepcion() {
         assertThrows(
                 ValidationException.class,
-                () -> clienteServicio.buscarDniCliente("12A")
+                () -> clienteServicio.buscarDniCliente("123")
         );
+
+        verifyNoInteractions(repoCliente);
+    }
+
+    @Test
+    void listarClientes_debeRetornarLista() {
+        when(repoCliente.obtenerClientes()).thenReturn(List.of(crearClienteExistente()));
+
+        List<Cliente> resultado = clienteServicio.listarClientes();
+
+        assertEquals(1, resultado.size());
+        verify(repoCliente).obtenerClientes();
     }
 }

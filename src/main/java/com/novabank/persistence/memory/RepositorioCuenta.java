@@ -14,8 +14,9 @@ import java.util.Optional;
 /**
  * Repositorio en memoria para cuentas bancarias.
  *
- * En memoria sí se asignan IDs manualmente porque no existe una base
- * de datos que los genere automáticamente.
+ * Mantiene una implementación simple basada en Map.
+ * Aunque no usa transacciones reales, implementa las variantes
+ * con Connection para respetar el contrato del repositorio.
  */
 public class RepositorioCuenta implements CuentaRepository {
 
@@ -24,7 +25,11 @@ public class RepositorioCuenta implements CuentaRepository {
 
     @Override
     public void guardarCuenta(Cuenta nuevaCuenta) {
-        if (nuevaCuenta.getIdCuenta() <= 0) {
+        Cuenta cuentaExistente = registroCuentas.get(nuevaCuenta.getNumeroCuenta());
+
+        if (cuentaExistente != null && nuevaCuenta.getIdCuenta() <= 0) {
+            nuevaCuenta.setIdCuenta(cuentaExistente.getIdCuenta());
+        } else if (nuevaCuenta.getIdCuenta() <= 0) {
             nuevaCuenta.setIdCuenta(++contadorIds);
         }
 
@@ -33,10 +38,7 @@ public class RepositorioCuenta implements CuentaRepository {
 
     @Override
     public Optional<Cuenta> buscarNumeroCuenta(String numeroCuenta) {
-        return registroCuentas.values()
-                .stream()
-                .filter(cuenta -> cuenta.getNumeroCuenta().equals(numeroCuenta))
-                .findFirst();
+        return Optional.ofNullable(registroCuentas.get(numeroCuenta));
     }
 
     @Override
@@ -45,18 +47,28 @@ public class RepositorioCuenta implements CuentaRepository {
     }
 
     @Override
+    public List<Cuenta> listarCuentasCliente(Long idBuscar) {
+        if (idBuscar == null) {
+            return List.of();
+        }
+
+        return registroCuentas.values()
+                .stream()
+                .filter(cuenta -> cuenta.getDueñoCuenta() != null)
+                .filter(cuenta -> cuenta.getDueñoCuenta().getIdCliente() == idBuscar.longValue())
+                .toList();
+    }
+
+    @Override
+    public void actualizarSaldo(String numeroCuenta, BigDecimal nuevoSaldo) {
+        actualizarSaldo(null, numeroCuenta, nuevoSaldo);
+    }
+
+    @Override
     public void actualizarSaldo(Connection connection, String numeroCuenta, BigDecimal nuevoSaldo) {
         Cuenta cuenta = buscarNumeroCuenta(numeroCuenta)
                 .orElseThrow(() -> new ResourceNotFoundException("No se ha encontrado la cuenta"));
 
         cuenta.setSaldoCuenta(nuevoSaldo);
-    }
-
-    @Override
-    public List<Cuenta> listarCuentasCliente(Long idBuscar) {
-        return registroCuentas.values()
-                .stream()
-                .filter(cuenta -> cuenta.getDueñoCuenta().getIdCliente() == idBuscar)
-                .toList();
     }
 }

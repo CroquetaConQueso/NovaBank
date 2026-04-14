@@ -183,10 +183,6 @@ public class CuentaRepositoryJdbc implements CuentaRepository {
         }
     }
 
-    @Override
-    public boolean soportaTransacciones() {
-        return true;
-    }
 
     private Cuenta mapearCuenta(ResultSet resultSet) throws SQLException {
         Cliente cliente = mapearCliente(resultSet);
@@ -220,5 +216,14 @@ public class CuentaRepositoryJdbc implements CuentaRepository {
 
         cliente.setIdCliente(resultSet.getLong("cliente_id"));
         return cliente;
+    }
+
+    @Override
+    public void actualizarSaldo(String numeroCuenta, BigDecimal nuevoSaldo) {
+        try (Connection connection = DatabaseConnectionManager.getConnection()) {
+            actualizarSaldo(connection, numeroCuenta, nuevoSaldo);
+        } catch (SQLException ex) {
+            throw new NovaBankException("Error al actualizar el saldo de la cuenta.", ex);
+        }
     }
 }

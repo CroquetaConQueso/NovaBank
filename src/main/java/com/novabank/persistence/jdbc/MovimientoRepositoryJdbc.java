@@ -160,10 +160,6 @@ public class MovimientoRepositoryJdbc implements MovimientoRepository {
         }
     }
 
-    @Override
-    public boolean soportaTransacciones() {
-        return true;
-    }
 
     private Movimiento mapearMovimiento(ResultSet resultSet) throws SQLException {
         Cuenta cuenta = mapearCuenta(resultSet);

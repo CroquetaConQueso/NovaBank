@@ -18,8 +18,4 @@ public interface MovimientoRepository {
     List<Movimiento> obtenerMovimientosCuenta(String numeroCuentaBuscar);
 
     List<Movimiento> obtenerMovimientosFecha(String numeroCuentaBuscar, LocalDate inicio, LocalDate fin);
-
-    default boolean soportaTransacciones() {
-        return false;
-    }
 }

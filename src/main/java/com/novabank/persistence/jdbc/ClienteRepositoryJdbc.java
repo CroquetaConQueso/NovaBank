@@ -9,12 +9,10 @@ import java.sql.*;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * Implementación JDBC del contrato de persistencia para clientes.
- *
- * Su responsabilidad es traducir operaciones del repositorio a sentencias SQL
- * contra PostgreSQL, sin incorporar lógica de negocio.
  */
 public class ClienteRepositoryJdbc implements ClienteRepository {
 
@@ -53,7 +51,7 @@ public class ClienteRepositoryJdbc implements ClienteRepository {
     }
 
     @Override
-    public Cliente buscarIdCliente(Long idBusqueda) {
+    public Optional<Cliente> buscarIdCliente(Long idBusqueda) {
         String sql = """
                 SELECT id, nombre, apellidos, dni, email, telefono, fecha_creacion
                 FROM clientes
@@ -67,9 +65,9 @@ public class ClienteRepositoryJdbc implements ClienteRepository {
 
             try (ResultSet resultSet = statement.executeQuery()) {
                 if (resultSet.next()) {
-                    return mapearCliente(resultSet);
+                    return Optional.of(mapearCliente(resultSet));
                 }
-                return null;
+                return Optional.empty();
             }
 
         } catch (SQLException ex) {
@@ -78,7 +76,7 @@ public class ClienteRepositoryJdbc implements ClienteRepository {
     }
 
     @Override
-    public Cliente buscarDniCliente(String dniNif) {
+    public Optional<Cliente> buscarDniCliente(String dniNif) {
         String sql = """
                 SELECT id, nombre, apellidos, dni, email, telefono, fecha_creacion
                 FROM clientes
@@ -92,9 +90,9 @@ public class ClienteRepositoryJdbc implements ClienteRepository {
 
             try (ResultSet resultSet = statement.executeQuery()) {
                 if (resultSet.next()) {
-                    return mapearCliente(resultSet);
+                    return Optional.of(mapearCliente(resultSet));
                 }
-                return null;
+                return Optional.empty();
             }
 
         } catch (SQLException ex) {
@@ -103,7 +101,7 @@ public class ClienteRepositoryJdbc implements ClienteRepository {
     }
 
     @Override
-    public Cliente buscarEmailCliente(String email) {
+    public Optional<Cliente> buscarEmailCliente(String email) {
         String sql = """
                 SELECT id, nombre, apellidos, dni, email, telefono, fecha_creacion
                 FROM clientes
@@ -117,9 +115,9 @@ public class ClienteRepositoryJdbc implements ClienteRepository {
 
             try (ResultSet resultSet = statement.executeQuery()) {
                 if (resultSet.next()) {
-                    return mapearCliente(resultSet);
+                    return Optional.of(mapearCliente(resultSet));
                 }
-                return null;
+                return Optional.empty();
             }
 
         } catch (SQLException ex) {
@@ -128,7 +126,7 @@ public class ClienteRepositoryJdbc implements ClienteRepository {
     }
 
     @Override
-    public Cliente buscarTelefonoCliente(int telefonoCli) {
+    public Optional<Cliente> buscarTelefonoCliente(int telefonoCli) {
         String sql = """
                 SELECT id, nombre, apellidos, dni, email, telefono, fecha_creacion
                 FROM clientes
@@ -142,9 +140,9 @@ public class ClienteRepositoryJdbc implements ClienteRepository {
 
             try (ResultSet resultSet = statement.executeQuery()) {
                 if (resultSet.next()) {
-                    return mapearCliente(resultSet);
+                    return Optional.of(mapearCliente(resultSet));
                 }
-                return null;
+                return Optional.empty();
             }
 
         } catch (SQLException ex) {

@@ -11,9 +11,6 @@ import java.util.List;
 
 /**
  * Servicio de clientes.
- *
- * Aquí vive la lógica de negocio relacionada con validación de datos,
- * control de duplicados y coordinación con el repositorio.
  */
 public class ClienteServicio {
 
@@ -34,15 +31,15 @@ public class ClienteServicio {
         validarEmail(emailNormalizado);
         validarTelefono(telefono);
 
-        if (repoCliente.buscarDniCliente(dniNormalizado) != null) {
+        if (repoCliente.buscarDniCliente(dniNormalizado).isPresent()) {
             throw new DuplicateResourceException("Ya existe un cliente con el DNI " + dniNormalizado);
         }
 
-        if (repoCliente.buscarEmailCliente(emailNormalizado) != null) {
+        if (repoCliente.buscarEmailCliente(emailNormalizado).isPresent()) {
             throw new DuplicateResourceException("Ya existe un cliente con el email " + emailNormalizado);
         }
 
-        if (repoCliente.buscarTelefonoCliente(telefono) != null) {
+        if (repoCliente.buscarTelefonoCliente(telefono).isPresent()) {
             throw new DuplicateResourceException("Ya existe un cliente con el teléfono " + telefono);
         }
 
@@ -64,26 +61,16 @@ public class ClienteServicio {
             throw new ValidationException("Debes introducir una ID correcta");
         }
 
-        Cliente cliente = repoCliente.buscarIdCliente(idBusqueda);
-
-        if (cliente == null) {
-            throw new ResourceNotFoundException("No existe ningún cliente con la ID " + idBusqueda);
-        }
-
-        return cliente;
+        return repoCliente.buscarIdCliente(idBusqueda)
+                .orElseThrow(() -> new ResourceNotFoundException("No existe ningún cliente con la ID " + idBusqueda));
     }
 
     public Cliente buscarDniCliente(String dni) {
         String dniNormalizado = normalizarDni(dni);
         validarDni(dniNormalizado);
 
-        Cliente cliente = repoCliente.buscarDniCliente(dniNormalizado);
-
-        if (cliente == null) {
-            throw new ResourceNotFoundException("No existe ningún cliente con el DNI/NIF indicado");
-        }
-
-        return cliente;
+        return repoCliente.buscarDniCliente(dniNormalizado)
+                .orElseThrow(() -> new ResourceNotFoundException("No existe ningún cliente con el DNI/NIF indicado"));
     }
 
     public List<Cliente> listarClientes() {

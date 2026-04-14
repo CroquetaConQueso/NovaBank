@@ -9,8 +9,6 @@ import com.novabank.exception.InsufficientBalanceException;
 import com.novabank.exception.NovaBankException;
 import com.novabank.exception.ResourceNotFoundException;
 import com.novabank.exception.ValidationException;
-import com.novabank.persistence.jdbc.CuentaRepositoryJdbc;
-import com.novabank.persistence.jdbc.MovimientoRepositoryJdbc;
 import com.novabank.persistence.repository.CuentaRepository;
 import com.novabank.persistence.repository.MovimientoRepository;
 import com.novabank.util.Utilidades;
@@ -23,9 +21,6 @@ import java.util.List;
 
 /**
  * Servicio de operaciones financieras.
- *
- * Centraliza la lógica de depósitos, retiros, transferencias y consulta
- * de movimientos.
  */
 public class MovimientoServicio {
 
@@ -38,7 +33,7 @@ public class MovimientoServicio {
     }
 
     public Cuenta depositar(String numeroCuenta, BigDecimal cantidad) {
-        if (usaJdbcTransaccional()) {
+        if (usaTransacciones()) {
             return depositarJdbc(numeroCuenta, cantidad);
         }
 
@@ -52,7 +47,7 @@ public class MovimientoServicio {
     }
 
     public Cuenta retirar(String numeroCuenta, BigDecimal cantidad) {
-        if (usaJdbcTransaccional()) {
+        if (usaTransacciones()) {
             return retirarJdbc(numeroCuenta, cantidad);
         }
 
@@ -73,7 +68,7 @@ public class MovimientoServicio {
     }
 
     public void transferir(String numeroOrigen, String numeroDestino, BigDecimal cantidad) {
-        if (usaJdbcTransaccional()) {
+        if (usaTransacciones()) {
             transferirJdbc(numeroOrigen, numeroDestino, cantidad);
             return;
         }
@@ -138,24 +133,18 @@ public class MovimientoServicio {
         validarNumeroCuenta(numeroNormalizado);
         validarCantidadPositiva(cantidad, "depositar");
 
-        CuentaRepositoryJdbc cuentaJdbc = (CuentaRepositoryJdbc) repoCuenta;
-        MovimientoRepositoryJdbc movimientoJdbc = (MovimientoRepositoryJdbc) repoMovi;
-
         try (Connection connection = DatabaseConnectionManager.getConnection()) {
             connection.setAutoCommit(false);
 
             try {
-                Cuenta cuenta = cuentaJdbc.buscarNumeroCuentaForUpdate(connection, numeroNormalizado);
-
-                if (cuenta == null) {
-                    throw new ResourceNotFoundException("No se ha encontrado la cuenta");
-                }
+                Cuenta cuenta = repoCuenta.buscarNumeroCuenta(numeroNormalizado, connection)
+                        .orElseThrow(() -> new ResourceNotFoundException("No se ha encontrado la cuenta"));
 
                 BigDecimal nuevoSaldo = cuenta.getSaldoCuenta().add(cantidad);
-                cuentaJdbc.actualizarSaldo(connection, numeroNormalizado, nuevoSaldo);
+                repoCuenta.actualizarSaldo(connection, numeroNormalizado, nuevoSaldo);
                 cuenta.setSaldoCuenta(nuevoSaldo);
 
-                registrarMovimiento(connection, movimientoJdbc, cuenta, TipoMovimiento.DEPOSITO, cantidad);
+                registrarMovimiento(connection, repoMovi, cuenta, TipoMovimiento.DEPOSITO, cantidad);
 
                 connection.commit();
                 return cuenta;
@@ -173,18 +162,12 @@ public class MovimientoServicio {
         validarNumeroCuenta(numeroNormalizado);
         validarCantidadPositiva(cantidad, "retirar");
 
-        CuentaRepositoryJdbc cuentaJdbc = (CuentaRepositoryJdbc) repoCuenta;
-        MovimientoRepositoryJdbc movimientoJdbc = (MovimientoRepositoryJdbc) repoMovi;
-
         try (Connection connection = DatabaseConnectionManager.getConnection()) {
             connection.setAutoCommit(false);
 
             try {
-                Cuenta cuenta = cuentaJdbc.buscarNumeroCuentaForUpdate(connection, numeroNormalizado);
-
-                if (cuenta == null) {
-                    throw new ResourceNotFoundException("No se ha encontrado la cuenta");
-                }
+                Cuenta cuenta = repoCuenta.buscarNumeroCuenta(numeroNormalizado, connection)
+                        .orElseThrow(() -> new ResourceNotFoundException("No se ha encontrado la cuenta"));
 
                 if (cuenta.getSaldoCuenta().compareTo(cantidad) < 0) {
                     throw new InsufficientBalanceException(
@@ -194,10 +177,10 @@ public class MovimientoServicio {
                 }
 
                 BigDecimal nuevoSaldo = cuenta.getSaldoCuenta().subtract(cantidad);
-                cuentaJdbc.actualizarSaldo(connection, numeroNormalizado, nuevoSaldo);
+                repoCuenta.actualizarSaldo(connection, numeroNormalizado, nuevoSaldo);
                 cuenta.setSaldoCuenta(nuevoSaldo);
 
-                registrarMovimiento(connection, movimientoJdbc, cuenta, TipoMovimiento.RETIRO, cantidad);
+                registrarMovimiento(connection, repoMovi, cuenta, TipoMovimiento.RETIRO, cantidad);
 
                 connection.commit();
                 return cuenta;
@@ -222,23 +205,15 @@ public class MovimientoServicio {
             throw new ValidationException("La cuenta origen y destino deben de ser diferentes");
         }
 
-        CuentaRepositoryJdbc cuentaJdbc = (CuentaRepositoryJdbc) repoCuenta;
-        MovimientoRepositoryJdbc movimientoJdbc = (MovimientoRepositoryJdbc) repoMovi;
-
         try (Connection connection = DatabaseConnectionManager.getConnection()) {
             connection.setAutoCommit(false);
 
             try {
-                Cuenta cuentaOrigen = cuentaJdbc.buscarNumeroCuentaForUpdate(connection, origenNormalizado);
-                Cuenta cuentaDestino = cuentaJdbc.buscarNumeroCuentaForUpdate(connection, destinoNormalizado);
+                Cuenta cuentaOrigen = repoCuenta.buscarNumeroCuenta(origenNormalizado, connection)
+                        .orElseThrow(() -> new ResourceNotFoundException("No se ha encontrado la cuenta origen"));
 
-                if (cuentaOrigen == null) {
-                    throw new ResourceNotFoundException("No se ha encontrado la cuenta origen");
-                }
-
-                if (cuentaDestino == null) {
-                    throw new ResourceNotFoundException("No se ha encontrado la cuenta destino");
-                }
+                Cuenta cuentaDestino = repoCuenta.buscarNumeroCuenta(destinoNormalizado, connection)
+                        .orElseThrow(() -> new ResourceNotFoundException("No se ha encontrado la cuenta destino"));
 
                 if (cuentaOrigen.getSaldoCuenta().compareTo(cantidad) < 0) {
                     throw new InsufficientBalanceException(
@@ -249,14 +224,14 @@ public class MovimientoServicio {
                 BigDecimal saldoOrigenNuevo = cuentaOrigen.getSaldoCuenta().subtract(cantidad);
                 BigDecimal saldoDestinoNuevo = cuentaDestino.getSaldoCuenta().add(cantidad);
 
-                cuentaJdbc.actualizarSaldo(connection, origenNormalizado, saldoOrigenNuevo);
-                cuentaJdbc.actualizarSaldo(connection, destinoNormalizado, saldoDestinoNuevo);
+                repoCuenta.actualizarSaldo(connection, origenNormalizado, saldoOrigenNuevo);
+                repoCuenta.actualizarSaldo(connection, destinoNormalizado, saldoDestinoNuevo);
 
                 cuentaOrigen.setSaldoCuenta(saldoOrigenNuevo);
                 cuentaDestino.setSaldoCuenta(saldoDestinoNuevo);
 
-                registrarMovimiento(connection, movimientoJdbc, cuentaOrigen, TipoMovimiento.TRANSFERENCIA_SALIENTE, cantidad);
-                registrarMovimiento(connection, movimientoJdbc, cuentaDestino, TipoMovimiento.TRANSFERENCIA_ENTRANTE, cantidad);
+                registrarMovimiento(connection, repoMovi, cuentaOrigen, TipoMovimiento.TRANSFERENCIA_SALIENTE, cantidad);
+                registrarMovimiento(connection, repoMovi, cuentaDestino, TipoMovimiento.TRANSFERENCIA_ENTRANTE, cantidad);
 
                 connection.commit();
             } catch (RuntimeException ex) {
@@ -268,8 +243,8 @@ public class MovimientoServicio {
         }
     }
 
-    private boolean usaJdbcTransaccional() {
-        return repoCuenta instanceof CuentaRepositoryJdbc && repoMovi instanceof MovimientoRepositoryJdbc;
+    private boolean usaTransacciones() {
+        return repoCuenta.soportaTransacciones() && repoMovi.soportaTransacciones();
     }
 
     private void registrarMovimiento(MovimientoRepository repo,
@@ -281,7 +256,7 @@ public class MovimientoServicio {
     }
 
     private void registrarMovimiento(Connection connection,
-                                     MovimientoRepositoryJdbc repo,
+                                     MovimientoRepository repo,
                                      Cuenta cuenta,
                                      TipoMovimiento tipoMovimiento,
                                      BigDecimal cantidad) {
@@ -304,13 +279,8 @@ public class MovimientoServicio {
         String numeroNormalizado = normalizarNumeroCuenta(numeroCuenta);
         validarNumeroCuenta(numeroNormalizado);
 
-        Cuenta cuenta = repoCuenta.buscarNumeroCuenta(numeroNormalizado);
-
-        if (cuenta == null) {
-            throw new ResourceNotFoundException("No se ha encontrado la cuenta");
-        }
-
-        return cuenta;
+        return repoCuenta.buscarNumeroCuenta(numeroNormalizado)
+                .orElseThrow(() -> new ResourceNotFoundException("No se ha encontrado la cuenta"));
     }
 
     private String normalizarNumeroCuenta(String numeroCuenta) {

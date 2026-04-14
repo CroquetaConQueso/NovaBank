@@ -20,8 +20,6 @@ import java.util.List;
 
 /**
  * Implementación JDBC del contrato de persistencia para movimientos.
- *
- * Traduce operaciones del repositorio a sentencias SQL contra PostgreSQL.
  */
 public class MovimientoRepositoryJdbc implements MovimientoRepository {
 
@@ -34,10 +32,7 @@ public class MovimientoRepositoryJdbc implements MovimientoRepository {
         }
     }
 
-    /**
-     * Guarda un movimiento usando una conexión ya abierta, para poder
-     * participar en una transacción mayor.
-     */
+    @Override
     public void guardarMovimiento(Connection connection, Movimiento nuevoMovimiento) {
         String sql = """
                 INSERT INTO movimientos (cuenta_id, tipo, cantidad, fecha)
@@ -160,6 +155,11 @@ public class MovimientoRepositoryJdbc implements MovimientoRepository {
         } catch (SQLException ex) {
             throw new NovaBankException("Error al obtener movimientos por rango de fechas.", ex);
         }
+    }
+
+    @Override
+    public boolean soportaTransacciones() {
+        return true;
     }
 
     private Movimiento mapearMovimiento(ResultSet resultSet) throws SQLException {

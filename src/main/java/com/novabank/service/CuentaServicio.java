@@ -2,17 +2,16 @@ package com.novabank.service;
 
 import com.novabank.domain.model.Cliente;
 import com.novabank.domain.model.Cuenta;
-import com.novabank.exception.NovaBankException;
 import com.novabank.exception.ResourceNotFoundException;
 import com.novabank.exception.ValidationException;
 import com.novabank.persistence.repository.ClienteRepository;
 import com.novabank.persistence.repository.CuentaRepository;
+import com.novabank.service.strategy.GeneradorNumeroCuentaStrategy;
 import com.novabank.util.Utilidades;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.concurrent.ThreadLocalRandom;
 
 /**
  * Servicio de cuentas.
@@ -21,10 +20,16 @@ public class CuentaServicio {
 
     private final CuentaRepository repoCuenta;
     private final ClienteRepository repoCliente;
+    private final GeneradorNumeroCuentaStrategy generadorNumeroCuentaStrategy;
 
-    public CuentaServicio(CuentaRepository repoCuenta, ClienteRepository repoCliente) {
+    public CuentaServicio(
+            CuentaRepository repoCuenta,
+            ClienteRepository repoCliente,
+            GeneradorNumeroCuentaStrategy generadorNumeroCuentaStrategy
+    ) {
         this.repoCuenta = repoCuenta;
         this.repoCliente = repoCliente;
+        this.generadorNumeroCuentaStrategy = generadorNumeroCuentaStrategy;
     }
 
     public Cuenta buscarNumero(String numeroCuenta) {
@@ -52,26 +57,13 @@ public class CuentaServicio {
 
         Cuenta nuevaCuenta = Cuenta.builder()
                 .dueñoCuenta(cliente)
-                .numeroCuenta(generadorNumero())
+                .numeroCuenta(generadorNumeroCuentaStrategy.generarNumeroCuenta())
                 .saldoCuenta(BigDecimal.ZERO)
                 .fechaCreacionCuenta(LocalDateTime.now())
                 .build();
 
         repoCuenta.guardarCuenta(nuevaCuenta);
         return nuevaCuenta;
-    }
-
-    public String generadorNumero() {
-        for (int intento = 0; intento < 100; intento++) {
-            long sufijo = ThreadLocalRandom.current().nextLong(1_000_000_000_000L);
-            String numeroCuenta = "ES91210000" + String.format("%012d", sufijo);
-
-            if (repoCuenta.buscarNumeroCuenta(numeroCuenta).isEmpty()) {
-                return numeroCuenta;
-            }
-        }
-
-        throw new NovaBankException("No se pudo generar un número de cuenta único.");
     }
 
     private void validarIdCliente(Long idCliente) {

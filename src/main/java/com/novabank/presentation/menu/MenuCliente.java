@@ -31,31 +31,43 @@ public class MenuCliente {
             entrada.nextLine();
 
             Cliente cliente = clienteServicio.buscarIdCliente(idBuscar);
-            System.out.println(cliente);
+
+            System.out.println("Cliente encontrado:");
+            System.out.println("ID: " + cliente.getIdCliente());
+            System.out.println("Nombre: " + cliente.getNombreCliente() + " " + cliente.getApellidosCliente());
+            System.out.println("DNI: " + cliente.getDniNifCliente());
+            System.out.println("Email: " + cliente.getEmailCliente());
+            System.out.println("Teléfono: " + cliente.getTelefonoCliente());
         } catch (NovaBankException ex) {
             System.err.println("ERROR: " + ex.getMessage());
         } catch (InputMismatchException ex) {
-            System.err.println("Debes de introducir un valor numérico");
+            System.err.println("ERROR: Debes introducir un valor numérico.");
             entrada.nextLine();
         }
     }
 
     public void buscarClienteDni() {
         try {
-            System.out.print("Introduzca el dni/nif del cliente: ");
+            System.out.print("Introduzca el DNI/NIF del cliente: ");
             String dniBuscar = entrada.nextLine().trim().toUpperCase();
 
             Cliente cliente = clienteServicio.buscarDniCliente(dniBuscar);
-            System.out.println(cliente);
+
+            System.out.println("Cliente encontrado:");
+            System.out.println("ID: " + cliente.getIdCliente());
+            System.out.println("Nombre: " + cliente.getNombreCliente() + " " + cliente.getApellidosCliente());
+            System.out.println("DNI: " + cliente.getDniNifCliente());
+            System.out.println("Email: " + cliente.getEmailCliente());
+            System.out.println("Teléfono: " + cliente.getTelefonoCliente());
         } catch (NovaBankException ex) {
             System.err.println("ERROR: " + ex.getMessage());
         }
     }
 
     public void buscarCliente() {
-        System.out.println("Busqueda:");
-        System.out.println("1.DNI");
-        System.out.println("2.ID");
+        System.out.println("Búsqueda de cliente:");
+        System.out.println("1. Por DNI");
+        System.out.println("2. Por ID");
         System.out.print("Seleccione una opción: ");
 
         try {
@@ -65,10 +77,10 @@ public class MenuCliente {
             switch (opcionSwitch) {
                 case 1 -> buscarClienteDni();
                 case 2 -> buscarClienteId();
-                default -> System.out.println("Opción no válida.");
+                default -> System.err.println("ERROR: Opción no válida.");
             }
         } catch (InputMismatchException ex) {
-            System.err.println("Error: Debes introducir un valor numérico");
+            System.err.println("ERROR: Debes introducir un valor numérico.");
             entrada.nextLine();
         }
     }
@@ -76,18 +88,26 @@ public class MenuCliente {
     private void listarClientes() {
         List<Cliente> clientes = clienteServicio.listarClientes();
 
-        System.out.println("\n--- LISTADO DE CLIENTES ---");
-        System.out.println("ID    | Nombre      | DNI        | Email          | Teléfono");
-
-        for (Cliente cliente : clientes) {
-            System.out.println(
-                    cliente.getIdCliente() + " | "
-                            + cliente.getNombreCliente() + " | "
-                            + cliente.getDniNifCliente() + " | "
-                            + cliente.getEmailCliente() + " | "
-                            + cliente.getTelefonoCliente()
-            );
+        if (clientes.isEmpty()) {
+            System.out.println("No hay clientes registrados en el sistema.");
+            return;
         }
+
+        System.out.println("ID | Nombre | DNI | Email | Teléfono");
+        System.out.println("-----|------------------|------------|-----------------------------------|-----------");
+
+        clientes.forEach(cliente -> {
+            String nombreCompleto = cliente.getNombreCliente() + " " + cliente.getApellidosCliente();
+
+            System.out.printf(
+                    "%d | %s | %s | %s | %d%n",
+                    cliente.getIdCliente(),
+                    nombreCompleto,
+                    cliente.getDniNifCliente(),
+                    cliente.getEmailCliente(),
+                    cliente.getTelefonoCliente()
+            );
+        });
     }
 
     public void registrarCliente() {
@@ -119,9 +139,9 @@ public class MenuCliente {
             System.out.println("Cliente creado correctamente.");
             System.out.println("ID cliente: " + cliente.getIdCliente());
         } catch (NovaBankException ex) {
-            System.out.println("Error: " + ex.getMessage());
+            System.err.println("ERROR: " + ex.getMessage());
         } catch (InputMismatchException ex) {
-            System.err.println("Error: El teléfono debe de ser numérico");
+            System.err.println("ERROR: El teléfono debe ser numérico.");
             entrada.nextLine();
         }
     }
@@ -129,10 +149,8 @@ public class MenuCliente {
     public void menuClientes() {
         while (true) {
             System.out.println();
-            System.out.println("====================================");
-            System.out.println("         GESTIÓN DE CLIENTES");
-            System.out.println("====================================");
-            System.out.println("1. Registrar cliente");
+            System.out.println("--- GESTIÓN DE CLIENTES ---");
+            System.out.println("1. Crear cliente");
             System.out.println("2. Buscar cliente");
             System.out.println("3. Listar clientes");
             System.out.println("4. Volver");
@@ -150,12 +168,10 @@ public class MenuCliente {
                         System.out.println("Volviendo al menú principal...");
                         return;
                     }
-                    default -> System.err.println("Debes de escoger una opción encontrada en el menu");
+                    default -> System.err.println("ERROR: Debes escoger una opción encontrada en el menú.");
                 }
-            } catch (IllegalArgumentException ex) {
-                System.err.println("Debes de introducir un valor numérico");
             } catch (InputMismatchException ex) {
-                System.err.println("Error: " + ex.getMessage());
+                System.err.println("ERROR: Debes introducir un valor numérico.");
                 entrada.nextLine();
             }
         }

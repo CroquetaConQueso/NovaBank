@@ -23,6 +23,7 @@ import java.util.List;
  * Servicio de operaciones financieras.
  */
 public class MovimientoServicio {
+
     private final CuentaRepository repoCuenta;
     private final MovimientoRepository repoMovi;
 

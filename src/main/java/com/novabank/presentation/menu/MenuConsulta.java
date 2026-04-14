@@ -7,9 +7,13 @@ import com.novabank.service.CuentaServicio;
 import com.novabank.service.MovimientoServicio;
 import com.novabank.util.Utilidades;
 
+import java.math.BigDecimal;
+import java.text.DecimalFormat;
+import java.text.DecimalFormatSymbols;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.Locale;
 import java.util.Scanner;
 
 /**
@@ -37,7 +41,7 @@ public class MenuConsulta {
                 String entradaFecha = entrada.nextLine().trim();
                 return LocalDate.parse(entradaFecha, formato);
             } catch (Exception ex) {
-                System.err.println("Formato inválido. El valor debe de tener la estructura: yyyy-MM-dd");
+                System.err.println("ERROR: Formato inválido. El valor debe tener la estructura yyyy-MM-dd.");
             }
         }
     }
@@ -72,12 +76,14 @@ public class MenuConsulta {
                 System.out.println("Fecha                | Tipo                        | Cantidad");
                 System.out.println("---------------------|-----------------------------|------------");
 
-                for (Movimiento movimiento : movimientosRango) {
-                    System.out.printf("%s | %-27s | %10.2f €%n",
-                            movimiento.getFechaCreacionMov().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")),
-                            movimiento.getTipoMov(),
-                            movimiento.getCantidadMovimiento());
-                }
+                movimientosRango.forEach(movimiento ->
+                        System.out.printf(
+                                "%s | %-27s | %12s%n",
+                                movimiento.getFechaCreacionMov().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")),
+                                movimiento.getTipoMov(),
+                                formatearCantidadSegunTipo(movimiento)
+                        )
+                );
             }
         } catch (NovaBankException ex) {
             System.err.println("ERROR: " + ex.getMessage());
@@ -89,7 +95,7 @@ public class MenuConsulta {
             String numeroCuenta = tomarNumeroCuenta();
             Cuenta cuenta = cuSer.buscarNumero(numeroCuenta);
 
-            System.out.println("Saldo actual: " + cuenta.getSaldoCuenta() + " €");
+            System.out.println("Saldo actual: " + formatearImporte(cuenta.getSaldoCuenta()));
         } catch (NovaBankException ex) {
             System.err.println("ERROR: " + ex.getMessage());
         }
@@ -103,18 +109,20 @@ public class MenuConsulta {
             List<Movimiento> listaMovimientos = moSer.obtenerLista(numeroCuenta);
 
             if (listaMovimientos.isEmpty()) {
-                System.out.println("No hay movimientos registrados para esta cuenta");
+                System.out.println("No hay movimientos registrados para esta cuenta.");
             } else {
                 System.out.println("Historial de movimientos - " + numeroCuenta + ":");
                 System.out.println("Fecha                | Tipo                        | Cantidad");
                 System.out.println("---------------------|-----------------------------|------------");
 
-                for (Movimiento movimiento : listaMovimientos) {
-                    System.out.printf("%s | %-27s | %10.2f €%n",
-                            movimiento.getFechaCreacionMov().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")),
-                            movimiento.getTipoMov(),
-                            movimiento.getCantidadMovimiento());
-                }
+                listaMovimientos.forEach(movimiento ->
+                        System.out.printf(
+                                "%s | %-27s | %12s%n",
+                                movimiento.getFechaCreacionMov().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")),
+                                movimiento.getTipoMov(),
+                                formatearCantidadSegunTipo(movimiento)
+                        )
+                );
             }
         } catch (NovaBankException ex) {
             System.err.println("ERROR: " + ex.getMessage());
@@ -142,11 +150,33 @@ public class MenuConsulta {
                         System.out.println("Volviendo al menú principal...");
                         return;
                     }
-                    default -> System.out.println("Opción no válida.");
+                    default -> System.err.println("ERROR: Opción no válida.");
                 }
             } catch (NumberFormatException ex) {
                 System.err.println("ERROR: Debes introducir un valor numérico.");
             }
         }
+    }
+
+    private String formatearCantidadSegunTipo(Movimiento movimiento) {
+        BigDecimal cantidad = movimiento.getCantidadMovimiento();
+
+        return switch (movimiento.getTipoMov()) {
+            case DEPOSITO, TRANSFERENCIA_ENTRANTE -> "+" + formatearImporteSinSigno(cantidad);
+            case RETIRO, TRANSFERENCIA_SALIENTE -> "-" + formatearImporteSinSigno(cantidad);
+        };
+    }
+
+    private String formatearImporte(BigDecimal importe) {
+        return formatearImporteSinSigno(importe);
+    }
+
+    private String formatearImporteSinSigno(BigDecimal importe) {
+        DecimalFormatSymbols symbols = new DecimalFormatSymbols(new Locale("es", "ES"));
+        symbols.setDecimalSeparator(',');
+        symbols.setGroupingSeparator('.');
+
+        DecimalFormat formato = new DecimalFormat("#,##0.00", symbols);
+        return formato.format(importe) + " €";
     }
 }

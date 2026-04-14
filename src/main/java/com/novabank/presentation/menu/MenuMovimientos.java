@@ -5,7 +5,10 @@ import com.novabank.exception.NovaBankException;
 import com.novabank.service.MovimientoServicio;
 
 import java.math.BigDecimal;
+import java.text.DecimalFormat;
+import java.text.DecimalFormatSymbols;
 import java.util.InputMismatchException;
+import java.util.Locale;
 import java.util.Scanner;
 
 /**
@@ -36,14 +39,13 @@ public class MenuMovimientos {
             Cuenta cuenta = moviServ.depositar(numeroCuenta, cantidad);
 
             System.out.println("Depósito realizado correctamente.");
-            System.out.println("Cuenta: " + cuenta.getNumeroCuenta()
-                    + "\nImporte: +" + cantidad + " €"
-                    + "\nNuevo saldo: " + cuenta.getSaldoCuenta() + " €");
-
+            System.out.println("Cuenta: " + cuenta.getNumeroCuenta());
+            System.out.println("Importe: +" + formatearImporte(cantidad));
+            System.out.println("Nuevo saldo: " + formatearImporte(cuenta.getSaldoCuenta()));
         } catch (NovaBankException ex) {
             System.err.println("ERROR: " + ex.getMessage());
         } catch (InputMismatchException ex) {
-            System.err.println("El valor debe de ser numérico");
+            System.err.println("ERROR: El valor debe ser numérico.");
             entrada.nextLine();
         }
     }
@@ -60,14 +62,13 @@ public class MenuMovimientos {
             Cuenta cuenta = moviServ.retirar(numeroCuenta, cantidad);
 
             System.out.println("Retiro realizado correctamente.");
-            System.out.println("Cuenta: " + cuenta.getNumeroCuenta()
-                    + "\nImporte: -" + cantidad + " €"
-                    + "\nNuevo saldo: " + cuenta.getSaldoCuenta() + " €");
-
+            System.out.println("Cuenta: " + cuenta.getNumeroCuenta());
+            System.out.println("Importe: -" + formatearImporte(cantidad));
+            System.out.println("Nuevo saldo: " + formatearImporte(cuenta.getSaldoCuenta()));
         } catch (NovaBankException ex) {
             System.err.println("ERROR: " + ex.getMessage());
         } catch (InputMismatchException ex) {
-            System.err.println("El valor debe de ser numérico");
+            System.err.println("ERROR: El valor debe ser numérico.");
             entrada.nextLine();
         }
     }
@@ -87,13 +88,12 @@ public class MenuMovimientos {
             moviServ.transferir(numeroOrigen, numeroDestino, cantidad);
 
             System.out.println("Transferencia realizada correctamente.");
-            System.out.println("Cuenta origen: " + numeroOrigen + " -> -" + cantidad + " €");
-            System.out.println("Cuenta destino: " + numeroDestino + " -> +" + cantidad + " €");
-
+            System.out.println("Cuenta origen: " + numeroOrigen + " → -" + formatearImporte(cantidad));
+            System.out.println("Cuenta destino: " + numeroDestino + " → +" + formatearImporte(cantidad));
         } catch (NovaBankException ex) {
             System.err.println("ERROR: " + ex.getMessage());
         } catch (InputMismatchException ex) {
-            System.err.println("El valor debe de ser numérico");
+            System.err.println("ERROR: El valor debe ser numérico.");
             entrada.nextLine();
         }
     }
@@ -120,12 +120,21 @@ public class MenuMovimientos {
                         System.out.println("Volviendo al menú principal...");
                         return;
                     }
-                    default -> System.err.println("Debes de escoger una opción encontrada en el menú");
+                    default -> System.err.println("ERROR: Debes escoger una opción encontrada en el menú.");
                 }
             } catch (InputMismatchException ex) {
-                System.err.println("Debes introducir un valor numérico");
+                System.err.println("ERROR: Debes introducir un valor numérico.");
                 entrada.nextLine();
             }
         }
+    }
+
+    private String formatearImporte(BigDecimal importe) {
+        DecimalFormatSymbols symbols = new DecimalFormatSymbols(new Locale("es", "ES"));
+        symbols.setDecimalSeparator(',');
+        symbols.setGroupingSeparator('.');
+
+        DecimalFormat formato = new DecimalFormat("#,##0.00", symbols);
+        return formato.format(importe) + " €";
     }
 }

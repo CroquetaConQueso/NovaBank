@@ -17,6 +17,9 @@ import com.novabank.service.strategy.GeneradorNumeroCuentaStrategy;
 
 import java.util.Scanner;
 
+/**
+ * Punto de entrada de la aplicación NovaBank.
+ */
 public class Main {
 
     public static void main(String[] args) {
@@ -30,7 +33,12 @@ public class Main {
                 new GeneradorNumeroCuentaAleatorio(repoCuenta);
 
         ClienteServicio cliServ = new ClienteServicio(repoCliente);
-        CuentaServicio cuServ = new CuentaServicio(repoCuenta, repoCliente, generadorNumeroCuentaStrategy);
+        CuentaServicio cuServ = new CuentaServicio(
+                repoCuenta,
+                repoCliente,
+                generadorNumeroCuentaStrategy
+        );
+
         MovimientoServicio moviServ = new MovimientoServicio(repoCuenta, repoMovimiento);
 
         MenuCliente menuCli = new MenuCliente(cliServ, entrada);

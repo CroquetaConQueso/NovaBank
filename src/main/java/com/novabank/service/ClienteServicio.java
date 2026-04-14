@@ -96,10 +96,12 @@ public class ClienteServicio {
             throw new ValidationException("El cliente debe de tener un nombre válido.");
         }
 
-        for (char c : nombre.trim().toCharArray()) {
-            if (!Character.isLetter(c) && !Character.isWhitespace(c)) {
-                throw new ValidationException("El nombre solo puede contener caracteres alfabéticos.");
-            }
+        boolean nombreValido = nombre.trim()
+                .chars()
+                .allMatch(c -> Character.isLetter(c) || Character.isWhitespace(c));
+
+        if (!nombreValido) {
+            throw new ValidationException("El nombre solo puede contener caracteres alfabéticos.");
         }
     }
 
@@ -108,10 +110,12 @@ public class ClienteServicio {
             throw new ValidationException("El cliente debe de tener apellidos válidos.");
         }
 
-        for (char c : apellidos.trim().toCharArray()) {
-            if (!Character.isLetter(c) && !Character.isWhitespace(c)) {
-                throw new ValidationException("Los apellidos solo pueden contener letras y espacios.");
-            }
+        boolean apellidosValidos = apellidos.trim()
+                .chars()
+                .allMatch(c -> Character.isLetter(c) || Character.isWhitespace(c));
+
+        if (!apellidosValidos) {
+            throw new ValidationException("Los apellidos solo pueden contener letras y espacios.");
         }
     }
 
@@ -120,10 +124,12 @@ public class ClienteServicio {
             throw new ValidationException("El DNI/NIF debe tener 9 caracteres.");
         }
 
-        for (int i = 0; i < 8; i++) {
-            if (!Character.isDigit(dni.charAt(i))) {
-                throw new ValidationException("Los primeros 8 caracteres del DNI/NIF deben ser numéricos.");
-            }
+        boolean primerosOchoNumericos = dni.substring(0, 8)
+                .chars()
+                .allMatch(Character::isDigit);
+
+        if (!primerosOchoNumericos) {
+            throw new ValidationException("Los primeros 8 caracteres del DNI/NIF deben ser numéricos.");
         }
 
         if (!Character.isLetter(dni.charAt(8))) {

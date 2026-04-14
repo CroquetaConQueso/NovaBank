@@ -5,9 +5,13 @@ import com.novabank.domain.model.Cuenta;
 import com.novabank.exception.NovaBankException;
 import com.novabank.service.CuentaServicio;
 
+import java.math.BigDecimal;
+import java.text.DecimalFormat;
+import java.text.DecimalFormatSymbols;
 import java.time.format.DateTimeFormatter;
 import java.util.InputMismatchException;
 import java.util.List;
+import java.util.Locale;
 import java.util.Scanner;
 
 /**
@@ -48,10 +52,10 @@ public class MenuCuenta {
                         System.out.println("Volviendo al menú principal...");
                         return;
                     }
-                    default -> System.out.println("ERROR: Debes escoger una opción válida del menú.");
+                    default -> System.err.println("ERROR: Debes escoger una opción válida del menú.");
                 }
             } catch (InputMismatchException ex) {
-                System.out.println("Debes de introducir un valor numérico");
+                System.err.println("ERROR: Debes introducir un valor numérico.");
                 entrada.nextLine();
             }
         }
@@ -66,43 +70,51 @@ public class MenuCuenta {
             Cuenta cuenta = cuentaServicio.crearCuenta(idCliente);
 
             System.out.println("Cuenta creada correctamente.");
-            System.out.println("\nNúmero de la cuenta: " + cuenta.getNumeroCuenta()
-                    + "\nTitular: " + cuenta.getDueñoCuenta().getNombreCliente() + " " + cuenta.getDueñoCuenta().getApellidosCliente()
-                    + " (ID: " + cuenta.getDueñoCuenta().getIdCliente() + ")"
-                    + "\nSaldo inicial: " + cuenta.getSaldoCuenta() + " €");
+            System.out.println("Número de cuenta: " + cuenta.getNumeroCuenta());
+            System.out.println(
+                    "Titular: " + cuenta.getDueñoCuenta().getNombreCliente()
+                            + " " + cuenta.getDueñoCuenta().getApellidosCliente()
+                            + " (ID: " + cuenta.getDueñoCuenta().getIdCliente() + ")"
+            );
+            System.out.println("Saldo inicial: " + formatearImporte(cuenta.getSaldoCuenta()));
         } catch (NovaBankException ex) {
             System.err.println("ERROR: " + ex.getMessage());
         } catch (InputMismatchException ex) {
-            System.err.println("El valor debe de ser numérico");
+            System.err.println("ERROR: El valor debe ser numérico.");
             entrada.nextLine();
         }
     }
 
     public void listarCuentasCli() {
         try {
-            System.out.print("Introduce el ID del cliente: ");
+            System.out.print("Introduzca ID del cliente: ");
             Long idCliente = entrada.nextLong();
             entrada.nextLine();
 
             Cliente cliente = cuentaServicio.obtenerTitular(idCliente);
             List<Cuenta> cuentasCliente = cuentaServicio.obtenerCuentas(idCliente);
 
-            System.out.println("Cuentas del cliente " + cliente.getNombreCliente() + " " + cliente.getApellidosCliente());
-            System.out.println("Número de cuenta         | Saldo");
-            System.out.println("-------------------------|----------");
+            System.out.println("Cuentas del cliente " + cliente.getNombreCliente() + " " + cliente.getApellidosCliente() + ":");
 
             if (cuentasCliente.isEmpty()) {
-                System.out.println("El cliente no tiene cuentas registradas");
+                System.out.println("No hay cuentas registradas para este cliente.");
                 return;
             }
 
-            for (Cuenta cuenta : cuentasCliente) {
-                System.out.println(cuenta.getNumeroCuenta() + " | " + cuenta.getSaldoCuenta() + " €");
-            }
+            System.out.println("Número de cuenta | Saldo");
+            System.out.println("-------------------------|----------");
+
+            cuentasCliente.forEach(cuenta ->
+                    System.out.printf(
+                            "%s | %s%n",
+                            cuenta.getNumeroCuenta(),
+                            formatearImporte(cuenta.getSaldoCuenta())
+                    )
+            );
         } catch (NovaBankException ex) {
-            System.out.println("ERROR: " + ex.getMessage());
+            System.err.println("ERROR: " + ex.getMessage());
         } catch (InputMismatchException ex) {
-            System.out.println("El valor debe de ser numérico");
+            System.err.println("ERROR: El valor debe ser numérico.");
             entrada.nextLine();
         }
     }
@@ -114,14 +126,28 @@ public class MenuCuenta {
 
             Cuenta cuenta = cuentaServicio.buscarNumero(numeroCuenta);
 
-            System.out.println("Número de cuenta: " + cuenta.getNumeroCuenta()
-                    + "\nTitular: " + cuenta.getDueñoCuenta().getNombreCliente() + " " + cuenta.getDueñoCuenta().getApellidosCliente()
-                    + "\nSaldo: " + cuenta.getSaldoCuenta() + " €"
-                    + "\nFecha de creación: " + cuenta.getFechaCreacionCuenta().format(
-                    DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
-            ));
+            System.out.println("Número de cuenta: " + cuenta.getNumeroCuenta());
+            System.out.println(
+                    "Titular: " + cuenta.getDueñoCuenta().getNombreCliente()
+                            + " " + cuenta.getDueñoCuenta().getApellidosCliente()
+            );
+            System.out.println("Saldo: " + formatearImporte(cuenta.getSaldoCuenta()));
+            System.out.println(
+                    "Fecha de creación: " + cuenta.getFechaCreacionCuenta().format(
+                            DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
+                    )
+            );
         } catch (NovaBankException ex) {
-            System.out.println("ERROR: " + ex.getMessage());
+            System.err.println("ERROR: " + ex.getMessage());
         }
+    }
+
+    private String formatearImporte(BigDecimal importe) {
+        DecimalFormatSymbols symbols = new DecimalFormatSymbols(new Locale("es", "ES"));
+        symbols.setDecimalSeparator(',');
+        symbols.setGroupingSeparator('.');
+
+        DecimalFormat formato = new DecimalFormat("#,##0.00", symbols);
+        return formato.format(importe) + " €";
     }
 }

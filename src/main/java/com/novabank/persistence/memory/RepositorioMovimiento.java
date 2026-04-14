@@ -12,18 +12,22 @@ import java.util.Map;
 
 /**
  * Repositorio en memoria para movimientos financieros.
+ *
+ * En memoria sí se asignan IDs manualmente porque no existe una base
+ * de datos que los genere automáticamente.
  */
 public class RepositorioMovimiento implements MovimientoRepository {
 
+    private long contadorIds = 0L;
     private final Map<Long, Movimiento> registroMovimientos = new HashMap<>();
 
     @Override
     public void guardarMovimiento(Movimiento nuevoMovimiento) {
-        if (!registroMovimientos.containsKey(nuevoMovimiento.getIdMovimiento())) {
-            registroMovimientos.put(nuevoMovimiento.getIdMovimiento(), nuevoMovimiento);
-        } else {
-            System.err.println("Ya existe un movimiento con esa id");
+        if (nuevoMovimiento.getIdMovimiento() == null || nuevoMovimiento.getIdMovimiento() <= 0) {
+            nuevoMovimiento.setIdMovimiento(++contadorIds);
         }
+
+        registroMovimientos.put(nuevoMovimiento.getIdMovimiento(), nuevoMovimiento);
     }
 
     @Override

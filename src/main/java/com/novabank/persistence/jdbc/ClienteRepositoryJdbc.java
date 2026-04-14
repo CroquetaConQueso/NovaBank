@@ -17,36 +17,33 @@ import java.util.Optional;
 public class ClienteRepositoryJdbc implements ClienteRepository {
 
     @Override
-    public void anadirCliente(Cliente nuevoCliente) {
+    public void anadirCliente(Cliente cliente) {
         String sql = """
-                INSERT INTO clientes (nombre, apellidos, dni, email, telefono, fecha_creacion)
-                VALUES (?, ?, ?, ?, ?, ?)
-                """;
+            INSERT INTO clientes (nombre, apellidos, dni, email, telefono, fecha_creacion)
+            VALUES (?, ?, ?, ?, ?, ?)
+            RETURNING id
+            """;
 
         try (Connection connection = DatabaseConnectionManager.getConnection();
-             PreparedStatement statement = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
+             PreparedStatement statement = connection.prepareStatement(sql)) {
 
-            statement.setString(1, nuevoCliente.getNombreCliente());
-            statement.setString(2, nuevoCliente.getApellidosCliente());
-            statement.setString(3, nuevoCliente.getDniNifCliente());
-            statement.setString(4, nuevoCliente.getEmailCliente());
-            statement.setString(5, String.valueOf(nuevoCliente.getTelefonoCliente()));
-            statement.setTimestamp(6, Timestamp.valueOf(nuevoCliente.getFechaCreacionCliente()));
+            statement.setString(1, cliente.getNombreCliente());
+            statement.setString(2, cliente.getApellidosCliente());
+            statement.setString(3, cliente.getDniNifCliente());
+            statement.setString(4, cliente.getEmailCliente());
+            statement.setString(5, String.valueOf(cliente.getTelefonoCliente()));
+            statement.setTimestamp(6, Timestamp.valueOf(cliente.getFechaCreacionCliente()));
 
-            int filasAfectadas = statement.executeUpdate();
-
-            if (filasAfectadas == 0) {
-                throw new NovaBankException("No se pudo insertar el cliente en la base de datos.");
-            }
-
-            try (ResultSet generatedKeys = statement.getGeneratedKeys()) {
-                if (generatedKeys.next()) {
-                    nuevoCliente.setIdCliente(generatedKeys.getLong(1));
+            try (ResultSet resultSet = statement.executeQuery()) {
+                if (resultSet.next()) {
+                    cliente.setIdCliente(resultSet.getLong("id"));
+                } else {
+                    throw new NovaBankException("No se pudo recuperar el id del cliente guardado.");
                 }
             }
 
         } catch (SQLException ex) {
-            throw new NovaBankException("Error al insertar cliente en la base de datos.", ex);
+            throw new NovaBankException("Error al guardar el cliente en la base de datos.", ex);
         }
     }
 

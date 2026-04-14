@@ -13,13 +13,21 @@ import java.util.Optional;
 
 /**
  * Repositorio en memoria para cuentas bancarias.
+ *
+ * En memoria sí se asignan IDs manualmente porque no existe una base
+ * de datos que los genere automáticamente.
  */
 public class RepositorioCuenta implements CuentaRepository {
 
+    private long contadorIds = 0L;
     private final Map<String, Cuenta> registroCuentas = new HashMap<>();
 
     @Override
     public void guardarCuenta(Cuenta nuevaCuenta) {
+        if (nuevaCuenta.getIdCuenta() <= 0) {
+            nuevaCuenta.setIdCuenta(++contadorIds);
+        }
+
         registroCuentas.put(nuevaCuenta.getNumeroCuenta(), nuevaCuenta);
     }
 
@@ -46,13 +54,9 @@ public class RepositorioCuenta implements CuentaRepository {
 
     @Override
     public List<Cuenta> listarCuentasCliente(Long idBuscar) {
-        if (idBuscar == null) {
-            return List.of();
-        }
-
         return registroCuentas.values()
                 .stream()
-                .filter(cuenta -> cuenta.getDueñoCuenta().getIdCliente() == idBuscar.longValue())
+                .filter(cuenta -> cuenta.getDueñoCuenta().getIdCliente() == idBuscar)
                 .toList();
     }
 }

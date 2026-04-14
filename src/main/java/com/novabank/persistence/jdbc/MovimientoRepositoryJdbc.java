@@ -35,12 +35,13 @@ public class MovimientoRepositoryJdbc implements MovimientoRepository {
     @Override
     public void guardarMovimiento(Connection connection, Movimiento nuevoMovimiento) {
         String sql = """
-                INSERT INTO movimientos (cuenta_id, tipo, cantidad, fecha)
-                VALUES (
-                    (SELECT id FROM cuentas WHERE numero_cuenta = ?),
-                    ?, ?, ?
-                )
-                """;
+            INSERT INTO movimientos (cuenta_id, tipo, cantidad, fecha)
+            VALUES (
+                (SELECT id FROM cuentas WHERE numero_cuenta = ?),
+                ?, ?, ?
+            )
+            RETURNING id
+            """;
 
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setString(1, nuevoMovimiento.getCuentaAsignada().getNumeroCuenta());
@@ -48,10 +49,12 @@ public class MovimientoRepositoryJdbc implements MovimientoRepository {
             statement.setBigDecimal(3, nuevoMovimiento.getCantidadMovimiento());
             statement.setTimestamp(4, Timestamp.valueOf(nuevoMovimiento.getFechaCreacionMov()));
 
-            int filasAfectadas = statement.executeUpdate();
-
-            if (filasAfectadas == 0) {
-                throw new NovaBankException("No se pudo guardar el movimiento en la base de datos.");
+            try (ResultSet resultSet = statement.executeQuery()) {
+                if (resultSet.next()) {
+                    nuevoMovimiento.setIdMovimiento(resultSet.getLong("id"));
+                } else {
+                    throw new NovaBankException("No se pudo recuperar el id del movimiento guardado.");
+                }
             }
         } catch (SQLException ex) {
             throw new NovaBankException("Error al guardar el movimiento en la base de datos.", ex);

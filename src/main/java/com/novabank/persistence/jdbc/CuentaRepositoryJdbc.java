@@ -25,12 +25,13 @@ public class CuentaRepositoryJdbc implements CuentaRepository {
     @Override
     public void guardarCuenta(Cuenta nuevaCuenta) {
         String sql = """
-                INSERT INTO cuentas (numero_cuenta, cliente_id, saldo, fecha_creacion)
-                VALUES (?, ?, ?, ?)
-                ON CONFLICT (numero_cuenta) DO UPDATE SET
-                    cliente_id = EXCLUDED.cliente_id,
-                    saldo = EXCLUDED.saldo
-                """;
+            INSERT INTO cuentas (numero_cuenta, cliente_id, saldo, fecha_creacion)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT (numero_cuenta) DO UPDATE SET
+                cliente_id = EXCLUDED.cliente_id,
+                saldo = EXCLUDED.saldo
+            RETURNING id
+            """;
 
         try (Connection connection = DatabaseConnectionManager.getConnection();
              PreparedStatement statement = connection.prepareStatement(sql)) {
@@ -40,10 +41,12 @@ public class CuentaRepositoryJdbc implements CuentaRepository {
             statement.setBigDecimal(3, nuevaCuenta.getSaldoCuenta());
             statement.setTimestamp(4, Timestamp.valueOf(nuevaCuenta.getFechaCreacionCuenta()));
 
-            int filasAfectadas = statement.executeUpdate();
-
-            if (filasAfectadas == 0) {
-                throw new NovaBankException("No se pudo guardar la cuenta en la base de datos.");
+            try (ResultSet resultSet = statement.executeQuery()) {
+                if (resultSet.next()) {
+                    nuevaCuenta.setIdCuenta(resultSet.getLong("id"));
+                } else {
+                    throw new NovaBankException("No se pudo recuperar el id de la cuenta guardada.");
+                }
             }
 
         } catch (SQLException ex) {

@@ -10,13 +10,21 @@ import java.util.Optional;
 
 /**
  * Repositorio en memoria para clientes.
+ *
+ * En memoria sí se asignan IDs manualmente porque no existe una base
+ * de datos que los genere automáticamente.
  */
 public class RepositorioCliente implements ClienteRepository {
 
+    private long contadorIds = 1000L;
     private final Map<Long, Cliente> registroClientes = new HashMap<>();
 
     @Override
     public void anadirCliente(Cliente nuevoCliente) {
+        if (nuevoCliente.getIdCliente() <= 0) {
+            nuevoCliente.setIdCliente(++contadorIds);
+        }
+
         registroClientes.put(nuevoCliente.getIdCliente(), nuevoCliente);
     }
 
@@ -51,6 +59,8 @@ public class RepositorioCliente implements ClienteRepository {
 
     @Override
     public List<Cliente> obtenerClientes() {
-        return registroClientes.values().stream().toList();
+        return registroClientes.values()
+                .stream()
+                .toList();
     }
 }

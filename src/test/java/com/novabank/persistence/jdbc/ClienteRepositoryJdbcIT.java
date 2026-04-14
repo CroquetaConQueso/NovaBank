@@ -1,9 +1,14 @@
 package com.novabank.persistence.jdbc;
 
+import com.novabank.config.DatabaseConnectionManager;
 import com.novabank.domain.model.Cliente;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.sql.Connection;
+import java.sql.SQLException;
+import java.sql.Statement;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -20,8 +25,14 @@ class ClienteRepositoryJdbcIT {
     private ClienteRepositoryJdbc clienteRepositoryJdbc;
 
     @BeforeEach
-    void setUp() {
+    void setUp() throws SQLException {
+        limpiarBaseDeDatos();
         clienteRepositoryJdbc = new ClienteRepositoryJdbc();
+    }
+
+    @AfterEach
+    void tearDown() throws SQLException {
+        limpiarBaseDeDatos();
     }
 
     @Test
@@ -82,21 +93,6 @@ class ClienteRepositoryJdbcIT {
         );
     }
 
-    private Cliente crearClienteUnico() {
-        String sufijo = String.valueOf(System.nanoTime());
-        String ochoDigitos = String.format("%08d", Math.abs((int) (System.nanoTime() % 100_000_000L)));
-        int telefono = Integer.parseInt("6" + ochoDigitos.substring(1));
-
-        return Cliente.builder()
-                .nombreCliente("Carlos")
-                .apellidosCliente("Torres")
-                .dniNifCliente(ochoDigitos + "Z")
-                .emailCliente("carlos" + sufijo + "@example.com")
-                .telefonoCliente(telefono)
-                .fechaCreacionCliente(LocalDateTime.now())
-                .build();
-    }
-
     @Test
     void buscarIdCliente_inexistente_debeRetornarOptionalVacio() {
         Optional<Cliente> resultado = clienteRepositoryJdbc.buscarIdCliente(Long.MAX_VALUE);
@@ -121,5 +117,27 @@ class ClienteRepositoryJdbcIT {
         Optional<Cliente> recuperado = clienteRepositoryJdbc.buscarTelefonoCliente(699999999);
 
         assertTrue(recuperado.isEmpty());
+    }
+
+    private void limpiarBaseDeDatos() throws SQLException {
+        try (Connection connection = DatabaseConnectionManager.getConnection();
+             Statement statement = connection.createStatement()) {
+            statement.execute("TRUNCATE TABLE movimientos, cuentas, clientes RESTART IDENTITY CASCADE");
+        }
+    }
+
+    private Cliente crearClienteUnico() {
+        String sufijo = String.valueOf(System.nanoTime());
+        String ochoDigitos = String.format("%08d", Math.abs((int) (System.nanoTime() % 100_000_000L)));
+        int telefono = Integer.parseInt("6" + ochoDigitos.substring(1));
+
+        return Cliente.builder()
+                .nombreCliente("Carlos")
+                .apellidosCliente("Torres")
+                .dniNifCliente(ochoDigitos + "Z")
+                .emailCliente("carlos" + sufijo + "@example.com")
+                .telefonoCliente(telefono)
+                .fechaCreacionCliente(LocalDateTime.now())
+                .build();
     }
 }

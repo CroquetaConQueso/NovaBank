@@ -12,7 +12,7 @@ import com.novabank.presentation.menu.MenuPrincipal;
 import com.novabank.service.ClienteServicio;
 import com.novabank.service.CuentaServicio;
 import com.novabank.service.MovimientoServicio;
-import com.novabank.service.strategy.GeneradorNumeroCuentaAleatorio;
+import com.novabank.service.strategy.GeneradorNumeroCuentaSecuencial;
 import com.novabank.service.strategy.GeneradorNumeroCuentaStrategy;
 
 import java.util.Scanner;
@@ -30,15 +30,10 @@ public class Main {
         MovimientoRepository repoMovimiento = RepositoryFactory.crearMovimientoRepository();
 
         GeneradorNumeroCuentaStrategy generadorNumeroCuentaStrategy =
-                new GeneradorNumeroCuentaAleatorio(repoCuenta);
+                new GeneradorNumeroCuentaSecuencial(repoCuenta);
 
         ClienteServicio cliServ = new ClienteServicio(repoCliente);
-        CuentaServicio cuServ = new CuentaServicio(
-                repoCuenta,
-                repoCliente,
-                generadorNumeroCuentaStrategy
-        );
-
+        CuentaServicio cuServ = new CuentaServicio(repoCuenta, repoCliente, generadorNumeroCuentaStrategy);
         MovimientoServicio moviServ = new MovimientoServicio(repoCuenta, repoMovimiento);
 
         MenuCliente menuCli = new MenuCliente(cliServ, entrada);

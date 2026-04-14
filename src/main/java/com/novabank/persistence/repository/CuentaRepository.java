@@ -18,11 +18,9 @@ public interface CuentaRepository {
 
     Optional<Cuenta> buscarNumeroCuenta(String numeroCuenta, Connection connection);
 
-    void actualizarSaldo(Connection connection, String numeroCuenta, BigDecimal nuevoSaldo);
-
     List<Cuenta> listarCuentasCliente(Long idBuscar);
 
-    default boolean soportaTransacciones() {
-        return false;
-    }
+    void actualizarSaldo(String numeroCuenta, BigDecimal nuevoSaldo);
+
+    void actualizarSaldo(Connection connection, String numeroCuenta, BigDecimal nuevoSaldo);
 }

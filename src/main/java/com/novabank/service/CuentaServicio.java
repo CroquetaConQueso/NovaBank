@@ -2,6 +2,7 @@ package com.novabank.service;
 
 import com.novabank.domain.model.Cliente;
 import com.novabank.domain.model.Cuenta;
+import com.novabank.exception.NovaBankException;
 import com.novabank.exception.ResourceNotFoundException;
 import com.novabank.exception.ValidationException;
 import com.novabank.persistence.repository.ClienteRepository;
@@ -11,6 +12,7 @@ import com.novabank.util.Utilidades;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.concurrent.ThreadLocalRandom;
 
 /**
  * Servicio de cuentas.
@@ -19,7 +21,6 @@ public class CuentaServicio {
 
     private final CuentaRepository repoCuenta;
     private final ClienteRepository repoCliente;
-    private long contadorNumCuentas = 0L;
 
     public CuentaServicio(CuentaRepository repoCuenta, ClienteRepository repoCliente) {
         this.repoCuenta = repoCuenta;
@@ -61,7 +62,16 @@ public class CuentaServicio {
     }
 
     public String generadorNumero() {
-        return "ES91210000" + String.format("%012d", ++contadorNumCuentas);
+        for (int intento = 0; intento < 100; intento++) {
+            long sufijo = ThreadLocalRandom.current().nextLong(1_000_000_000_000L);
+            String numeroCuenta = "ES91210000" + String.format("%012d", sufijo);
+
+            if (repoCuenta.buscarNumeroCuenta(numeroCuenta).isEmpty()) {
+                return numeroCuenta;
+            }
+        }
+
+        throw new NovaBankException("No se pudo generar un número de cuenta único.");
     }
 
     private void validarIdCliente(Long idCliente) {

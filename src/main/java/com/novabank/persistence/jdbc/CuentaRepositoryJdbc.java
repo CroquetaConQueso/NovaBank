@@ -15,12 +15,10 @@ import java.sql.Timestamp;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * Implementación JDBC del contrato de persistencia para cuentas.
- *
- * Traduce operaciones del repositorio a sentencias SQL contra PostgreSQL,
- * sin incorporar lógica de negocio.
  */
 public class CuentaRepositoryJdbc implements CuentaRepository {
 
@@ -54,24 +52,72 @@ public class CuentaRepositoryJdbc implements CuentaRepository {
     }
 
     @Override
-    public Cuenta buscarNumeroCuenta(String numeroCuenta) {
+    public Optional<Cuenta> buscarNumeroCuenta(String numeroCuenta) {
         try (Connection connection = DatabaseConnectionManager.getConnection()) {
-            return buscarNumeroCuentaInternal(connection, numeroCuenta, false);
+            return buscarNumeroCuenta(numeroCuenta, connection);
         } catch (SQLException ex) {
             throw new NovaBankException("Error al buscar la cuenta por número.", ex);
         }
     }
 
-    /**
-     * Recupera la cuenta bloqueando su fila para una operación transaccional.
-     */
-    public Cuenta buscarNumeroCuentaForUpdate(Connection connection, String numeroCuenta) {
-        return buscarNumeroCuentaInternal(connection, numeroCuenta, true);
+    @Override
+    public Optional<Cuenta> buscarNumeroCuenta(String numeroCuenta, Connection connection) {
+        String sqlConBloqueo = """
+            SELECT
+                c.id AS cuenta_id,
+                c.numero_cuenta,
+                c.saldo,
+                c.fecha_creacion AS cuenta_fecha_creacion,
+                cl.id AS cliente_id,
+                cl.nombre,
+                cl.apellidos,
+                cl.dni,
+                cl.email,
+                cl.telefono,
+                cl.fecha_creacion AS cliente_fecha_creacion
+            FROM cuentas c
+            JOIN clientes cl ON cl.id = c.cliente_id
+            WHERE c.numero_cuenta = ?
+            FOR UPDATE
+            """;
+
+        String sqlSinBloqueo = """
+            SELECT
+                c.id AS cuenta_id,
+                c.numero_cuenta,
+                c.saldo,
+                c.fecha_creacion AS cuenta_fecha_creacion,
+                cl.id AS cliente_id,
+                cl.nombre,
+                cl.apellidos,
+                cl.dni,
+                cl.email,
+                cl.telefono,
+                cl.fecha_creacion AS cliente_fecha_creacion
+            FROM cuentas c
+            JOIN clientes cl ON cl.id = c.cliente_id
+            WHERE c.numero_cuenta = ?
+            """;
+
+        try {
+            String consulta = connection.getAutoCommit() ? sqlSinBloqueo : sqlConBloqueo;
+
+            try (PreparedStatement statement = connection.prepareStatement(consulta)) {
+                statement.setString(1, numeroCuenta);
+
+                try (ResultSet resultSet = statement.executeQuery()) {
+                    if (resultSet.next()) {
+                        return Optional.of(mapearCuenta(resultSet));
+                    }
+                    return Optional.empty();
+                }
+            }
+        } catch (SQLException ex) {
+            throw new NovaBankException("Error al buscar la cuenta por número.", ex);
+        }
     }
 
-    /**
-     * Actualiza el saldo de una cuenta dentro de una transacción ya abierta.
-     */
+    @Override
     public void actualizarSaldo(Connection connection, String numeroCuenta, BigDecimal nuevoSaldo) {
         String sql = """
                 UPDATE cuentas
@@ -134,37 +180,9 @@ public class CuentaRepositoryJdbc implements CuentaRepository {
         }
     }
 
-    private Cuenta buscarNumeroCuentaInternal(Connection connection, String numeroCuenta, boolean forUpdate) {
-        String sql = """
-                SELECT
-                    c.id AS cuenta_id,
-                    c.numero_cuenta,
-                    c.saldo,
-                    c.fecha_creacion AS cuenta_fecha_creacion,
-                    cl.id AS cliente_id,
-                    cl.nombre,
-                    cl.apellidos,
-                    cl.dni,
-                    cl.email,
-                    cl.telefono,
-                    cl.fecha_creacion AS cliente_fecha_creacion
-                FROM cuentas c
-                JOIN clientes cl ON cl.id = c.cliente_id
-                WHERE c.numero_cuenta = ?
-                """ + (forUpdate ? " FOR UPDATE" : "");
-
-        try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setString(1, numeroCuenta);
-
-            try (ResultSet resultSet = statement.executeQuery()) {
-                if (resultSet.next()) {
-                    return mapearCuenta(resultSet);
-                }
-                return null;
-            }
-        } catch (SQLException ex) {
-            throw new NovaBankException("Error al buscar la cuenta por número.", ex);
-        }
+    @Override
+    public boolean soportaTransacciones() {
+        return true;
     }
 
     private Cuenta mapearCuenta(ResultSet resultSet) throws SQLException {

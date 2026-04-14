@@ -2,7 +2,10 @@ package com.novabank.persistence.repository;
 
 import com.novabank.domain.model.Cuenta;
 
+import java.math.BigDecimal;
+import java.sql.Connection;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * Contrato de persistencia para cuentas.
@@ -11,7 +14,15 @@ public interface CuentaRepository {
 
     void guardarCuenta(Cuenta nuevaCuenta);
 
-    Cuenta buscarNumeroCuenta(String numeroCuenta);
+    Optional<Cuenta> buscarNumeroCuenta(String numeroCuenta);
+
+    Optional<Cuenta> buscarNumeroCuenta(String numeroCuenta, Connection connection);
+
+    void actualizarSaldo(Connection connection, String numeroCuenta, BigDecimal nuevoSaldo);
 
     List<Cuenta> listarCuentasCliente(Long idBuscar);
+
+    default boolean soportaTransacciones() {
+        return false;
+    }
 }

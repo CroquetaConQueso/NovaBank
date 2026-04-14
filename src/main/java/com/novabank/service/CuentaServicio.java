@@ -14,10 +14,6 @@ import java.util.List;
 
 /**
  * Servicio de cuentas.
- *
- * Centraliza la lógica de negocio relacionada con creación, búsqueda y
- * consulta de cuentas, dejando al repositorio únicamente la persistencia
- * y al menú la interacción por consola.
  */
 public class CuentaServicio {
 
@@ -34,25 +30,15 @@ public class CuentaServicio {
         String numeroNormalizado = normalizarNumeroCuenta(numeroCuenta);
         validarNumeroCuenta(numeroNormalizado);
 
-        Cuenta cuentaEncontrada = repoCuenta.buscarNumeroCuenta(numeroNormalizado);
-
-        if (cuentaEncontrada == null) {
-            throw new ResourceNotFoundException("No se ha encontrado ninguna cuenta con ese número.");
-        }
-
-        return cuentaEncontrada;
+        return repoCuenta.buscarNumeroCuenta(numeroNormalizado)
+                .orElseThrow(() -> new ResourceNotFoundException("No se ha encontrado ninguna cuenta con ese número."));
     }
 
     public Cliente obtenerTitular(Long idCliente) {
         validarIdCliente(idCliente);
 
-        Cliente cliente = repoCliente.buscarIdCliente(idCliente);
-
-        if (cliente == null) {
-            throw new ResourceNotFoundException("No existe ningún cliente con ID " + idCliente + ".");
-        }
-
-        return cliente;
+        return repoCliente.buscarIdCliente(idCliente)
+                .orElseThrow(() -> new ResourceNotFoundException("No existe ningún cliente con ID " + idCliente + "."));
     }
 
     public List<Cuenta> obtenerCuentas(Long idCliente) {

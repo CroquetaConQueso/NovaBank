@@ -121,28 +121,6 @@ public class CuentaRepositoryJdbc implements CuentaRepository {
     }
 
     @Override
-    public void actualizarSaldo(Connection connection, String numeroCuenta, BigDecimal nuevoSaldo) {
-        String sql = """
-                UPDATE cuentas
-                SET saldo = ?
-                WHERE numero_cuenta = ?
-                """;
-
-        try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setBigDecimal(1, nuevoSaldo);
-            statement.setString(2, numeroCuenta);
-
-            int filasAfectadas = statement.executeUpdate();
-
-            if (filasAfectadas == 0) {
-                throw new NovaBankException("No se pudo actualizar el saldo de la cuenta.");
-            }
-        } catch (SQLException ex) {
-            throw new NovaBankException("Error al actualizar el saldo de la cuenta.", ex);
-        }
-    }
-
-    @Override
     public List<Cuenta> listarCuentasCliente(Long idBuscar) {
         String sql = """
                 SELECT
@@ -183,6 +161,57 @@ public class CuentaRepositoryJdbc implements CuentaRepository {
         }
     }
 
+    @Override
+    public void actualizarSaldo(String numeroCuenta, BigDecimal nuevoSaldo) {
+        try (Connection connection = DatabaseConnectionManager.getConnection()) {
+            actualizarSaldo(connection, numeroCuenta, nuevoSaldo);
+        } catch (SQLException ex) {
+            throw new NovaBankException("Error al actualizar el saldo de la cuenta.", ex);
+        }
+    }
+
+    @Override
+    public void actualizarSaldo(Connection connection, String numeroCuenta, BigDecimal nuevoSaldo) {
+        String sql = """
+                UPDATE cuentas
+                SET saldo = ?
+                WHERE numero_cuenta = ?
+                """;
+
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setBigDecimal(1, nuevoSaldo);
+            statement.setString(2, numeroCuenta);
+
+            int filasAfectadas = statement.executeUpdate();
+
+            if (filasAfectadas == 0) {
+                throw new NovaBankException("No se pudo actualizar el saldo de la cuenta.");
+            }
+        } catch (SQLException ex) {
+            throw new NovaBankException("Error al actualizar el saldo de la cuenta.", ex);
+        }
+    }
+
+    @Override
+    public long obtenerUltimoIdCuenta() {
+        String sql = """
+                SELECT COALESCE(MAX(id), 0) AS ultimo_id
+                FROM cuentas
+                """;
+
+        try (Connection connection = DatabaseConnectionManager.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql);
+             ResultSet resultSet = statement.executeQuery()) {
+
+            if (resultSet.next()) {
+                return resultSet.getLong("ultimo_id");
+            }
+
+            return 0L;
+        } catch (SQLException ex) {
+            throw new NovaBankException("Error al obtener el último id de cuenta.", ex);
+        }
+    }
 
     private Cuenta mapearCuenta(ResultSet resultSet) throws SQLException {
         Cliente cliente = mapearCliente(resultSet);
@@ -216,14 +245,5 @@ public class CuentaRepositoryJdbc implements CuentaRepository {
 
         cliente.setIdCliente(resultSet.getLong("cliente_id"));
         return cliente;
-    }
-
-    @Override
-    public void actualizarSaldo(String numeroCuenta, BigDecimal nuevoSaldo) {
-        try (Connection connection = DatabaseConnectionManager.getConnection()) {
-            actualizarSaldo(connection, numeroCuenta, nuevoSaldo);
-        } catch (SQLException ex) {
-            throw new NovaBankException("Error al actualizar el saldo de la cuenta.", ex);
-        }
     }
 }

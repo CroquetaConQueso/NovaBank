@@ -1,5 +1,6 @@
 package com.novabank.service;
 
+import com.novabank.config.DatabaseConnectionManager;
 import com.novabank.domain.model.Cliente;
 import com.novabank.domain.model.Cuenta;
 import com.novabank.domain.model.Movimiento;
@@ -10,14 +11,20 @@ import com.novabank.exception.ValidationException;
 import com.novabank.persistence.jdbc.ClienteRepositoryJdbc;
 import com.novabank.persistence.jdbc.CuentaRepositoryJdbc;
 import com.novabank.persistence.jdbc.MovimientoRepositoryJdbc;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
+import java.sql.Connection;
+import java.sql.SQLException;
+import java.sql.Statement;
 import java.time.LocalDateTime;
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Test de integración para las operaciones JDBC transaccionales.
@@ -32,11 +39,18 @@ class MovimientoServicioJdbcIT {
     private MovimientoServicio movimientoServicio;
 
     @BeforeEach
-    void setUp() {
+    void setUp() throws SQLException {
+        limpiarBaseDeDatos();
+
         clienteRepositoryJdbc = new ClienteRepositoryJdbc();
         cuentaRepositoryJdbc = new CuentaRepositoryJdbc();
         movimientoRepositoryJdbc = new MovimientoRepositoryJdbc();
         movimientoServicio = new MovimientoServicio(cuentaRepositoryJdbc, movimientoRepositoryJdbc);
+    }
+
+    @AfterEach
+    void tearDown() throws SQLException {
+        limpiarBaseDeDatos();
     }
 
     @Test
@@ -175,43 +189,6 @@ class MovimientoServicioJdbcIT {
         );
     }
 
-    private Cuenta crearCuentaPersistida(BigDecimal saldoInicial) {
-        Cliente cliente = crearClientePersistido();
-
-        Cuenta cuenta = Cuenta.builder()
-                .dueñoCuenta(cliente)
-                .numeroCuenta(generarNumeroCuentaUnico())
-                .saldoCuenta(saldoInicial)
-                .fechaCreacionCuenta(LocalDateTime.now())
-                .build();
-
-        cuentaRepositoryJdbc.guardarCuenta(cuenta);
-        return cuenta;
-    }
-
-    private Cliente crearClientePersistido() {
-        String sufijo = String.valueOf(System.nanoTime());
-        String ochoDigitos = String.format("%08d", Math.abs((int) (System.nanoTime() % 100_000_000L)));
-        int telefono = Integer.parseInt("6" + ochoDigitos.substring(1));
-
-        Cliente cliente = Cliente.builder()
-                .nombreCliente("Carlos")
-                .apellidosCliente("Torres")
-                .dniNifCliente(ochoDigitos + "Z")
-                .emailCliente("carlos" + sufijo + "@example.com")
-                .telefonoCliente(telefono)
-                .fechaCreacionCliente(LocalDateTime.now())
-                .build();
-
-        clienteRepositoryJdbc.anadirCliente(cliente);
-        return cliente;
-    }
-
-    private String generarNumeroCuentaUnico() {
-        long sufijo = Math.abs(System.nanoTime() % 1_000_000_000_000_000_000L);
-        return "ES91" + String.format("%018d", sufijo);
-    }
-
     @Test
     void depositar_conCuentaInexistente_debeLanzarExcepcionSinPersistirMovimiento() {
         assertThrows(
@@ -266,5 +243,49 @@ class MovimientoServicioJdbcIT {
                                 && BigDecimal.valueOf(10).compareTo(m.getCantidadMovimiento()) == 0
                 )
         );
+    }
+
+    private void limpiarBaseDeDatos() throws SQLException {
+        try (Connection connection = DatabaseConnectionManager.getConnection();
+             Statement statement = connection.createStatement()) {
+            statement.execute("TRUNCATE TABLE movimientos, cuentas, clientes RESTART IDENTITY CASCADE");
+        }
+    }
+
+    private Cuenta crearCuentaPersistida(BigDecimal saldoInicial) {
+        Cliente cliente = crearClientePersistido();
+
+        Cuenta cuenta = Cuenta.builder()
+                .dueñoCuenta(cliente)
+                .numeroCuenta(generarNumeroCuentaUnico())
+                .saldoCuenta(saldoInicial)
+                .fechaCreacionCuenta(LocalDateTime.now())
+                .build();
+
+        cuentaRepositoryJdbc.guardarCuenta(cuenta);
+        return cuenta;
+    }
+
+    private Cliente crearClientePersistido() {
+        String sufijo = String.valueOf(System.nanoTime());
+        String ochoDigitos = String.format("%08d", Math.abs((int) (System.nanoTime() % 100_000_000L)));
+        int telefono = Integer.parseInt("6" + ochoDigitos.substring(1));
+
+        Cliente cliente = Cliente.builder()
+                .nombreCliente("Carlos")
+                .apellidosCliente("Torres")
+                .dniNifCliente(ochoDigitos + "Z")
+                .emailCliente("carlos" + sufijo + "@example.com")
+                .telefonoCliente(telefono)
+                .fechaCreacionCliente(LocalDateTime.now())
+                .build();
+
+        clienteRepositoryJdbc.anadirCliente(cliente);
+        return cliente;
+    }
+
+    private String generarNumeroCuentaUnico() {
+        long sufijo = Math.abs(System.nanoTime() % 1_000_000_000_000_000_000L);
+        return "ES91" + String.format("%018d", sufijo);
     }
 }

@@ -1,166 +1,163 @@
 package com.novabank.service;
 
+import com.novabank.config.DatabaseConnectionManager;
 import com.novabank.domain.model.Cliente;
 import com.novabank.domain.model.Cuenta;
 import com.novabank.domain.model.Movimiento;
+import com.novabank.exception.NovaBankException;
 import com.novabank.persistence.jdbc.ClienteRepositoryJdbc;
 import com.novabank.persistence.jdbc.CuentaRepositoryJdbc;
 import com.novabank.persistence.jdbc.MovimientoRepositoryJdbc;
+import com.novabank.persistence.repository.ClienteRepository;
+import com.novabank.persistence.repository.CuentaRepository;
+import com.novabank.persistence.repository.MovimientoRepository;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
 import java.sql.Connection;
+import java.sql.SQLException;
+import java.sql.Statement;
 import java.time.LocalDateTime;
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class MovimientoServicioRollbackIT {
 
-    private ClienteRepositoryJdbc clienteRepositoryJdbc;
-    private CuentaRepositoryJdbc cuentaRepositoryJdbc;
-    private MovimientoRepositoryJdbc movimientoRepositoryJdbc;
+    private final ClienteRepository repoClienteReal = new ClienteRepositoryJdbc();
+    private final CuentaRepository repoCuentaReal = new CuentaRepositoryJdbc();
+    private final MovimientoRepository repoMovimientoReal = new MovimientoRepositoryJdbc();
 
     @BeforeEach
-    void setUp() {
-        clienteRepositoryJdbc = new ClienteRepositoryJdbc();
-        cuentaRepositoryJdbc = new CuentaRepositoryJdbc();
-        movimientoRepositoryJdbc = new MovimientoRepositoryJdbc();
+    void limpiarBaseDeDatosAntes() throws SQLException {
+        limpiarBaseDeDatos();
+    }
+
+    @AfterEach
+    void limpiarBaseDeDatosDespues() throws SQLException {
+        limpiarBaseDeDatos();
     }
 
     @Test
     void transferir_siFallaElSegundoMovimiento_debeHacerRollbackReal() {
-        Cuenta origen = crearCuentaPersistida(BigDecimal.valueOf(100));
-        Cuenta destino = crearCuentaPersistida(BigDecimal.valueOf(50));
+        Cuenta cuentaOrigen = crearCuentaPersistida(BigDecimal.valueOf(500));
+        Cuenta cuentaDestino = crearCuentaPersistida(BigDecimal.valueOf(100));
 
-        MovimientoRepositoryJdbc movimientoSpy = new MovimientoRepositoryJdbc() {
-            private int llamadas = 0;
+        MovimientoRepository repoMovimientoQueFalla =
+                new MovimientoRepositoryFalloEnSegundoGuardado(repoMovimientoReal);
 
-            @Override
-            public void guardarMovimiento(Connection connection, Movimiento nuevoMovimiento) {
-                llamadas++;
-                if (llamadas == 2) {
-                    throw new RuntimeException("Fallo provocado en el segundo movimiento");
-                }
-                super.guardarMovimiento(connection, nuevoMovimiento);
-            }
-        };
+        MovimientoServicio servicio = new MovimientoServicio(repoCuentaReal, repoMovimientoQueFalla);
 
-        MovimientoServicio movimientoServicio =
-                new MovimientoServicio(cuentaRepositoryJdbc, movimientoSpy);
-
-        RuntimeException ex = assertThrows(
-                RuntimeException.class,
-                () -> movimientoServicio.transferir(
-                        origen.getNumeroCuenta(),
-                        destino.getNumeroCuenta(),
-                        BigDecimal.valueOf(30)
+        assertThrows(
+                NovaBankException.class,
+                () -> servicio.transferir(
+                        cuentaOrigen.getNumeroCuenta(),
+                        cuentaDestino.getNumeroCuenta(),
+                        BigDecimal.valueOf(50)
                 )
         );
 
-        assertEquals("Fallo provocado en el segundo movimiento", ex.getMessage());
+        Cuenta origenRecargada = repoCuentaReal.buscarNumeroCuenta(cuentaOrigen.getNumeroCuenta()).orElseThrow();
+        Cuenta destinoRecargada = repoCuentaReal.buscarNumeroCuenta(cuentaDestino.getNumeroCuenta()).orElseThrow();
 
-        Cuenta origenRecuperada =
-                cuentaRepositoryJdbc.buscarNumeroCuenta(origen.getNumeroCuenta()).orElseThrow();
-        Cuenta destinoRecuperada =
-                cuentaRepositoryJdbc.buscarNumeroCuenta(destino.getNumeroCuenta()).orElseThrow();
-
-        assertEquals(0, BigDecimal.valueOf(100).compareTo(origenRecuperada.getSaldoCuenta()));
-        assertEquals(0, BigDecimal.valueOf(50).compareTo(destinoRecuperada.getSaldoCuenta()));
+        assertEquals(0, BigDecimal.valueOf(500).compareTo(origenRecargada.getSaldoCuenta()));
+        assertEquals(0, BigDecimal.valueOf(100).compareTo(destinoRecargada.getSaldoCuenta()));
 
         List<Movimiento> movimientosOrigen =
-                movimientoRepositoryJdbc.obtenerMovimientosCuenta(origen.getNumeroCuenta());
+                repoMovimientoReal.obtenerMovimientosCuenta(cuentaOrigen.getNumeroCuenta());
         List<Movimiento> movimientosDestino =
-                movimientoRepositoryJdbc.obtenerMovimientosCuenta(destino.getNumeroCuenta());
+                repoMovimientoReal.obtenerMovimientosCuenta(cuentaDestino.getNumeroCuenta());
 
-        assertTrue(movimientosOrigen.isEmpty());
-        assertTrue(movimientosDestino.isEmpty());
+        assertEquals(0, movimientosOrigen.size());
+        assertEquals(0, movimientosDestino.size());
     }
 
     @Test
     void transferir_siFallaLaSegundaActualizacionDeSaldo_debeHacerRollbackReal() {
-        Cuenta origen = crearCuentaPersistida(BigDecimal.valueOf(100));
-        Cuenta destino = crearCuentaPersistida(BigDecimal.valueOf(50));
+        Cuenta cuentaOrigen = crearCuentaPersistida(BigDecimal.valueOf(800));
+        Cuenta cuentaDestino = crearCuentaPersistida(BigDecimal.valueOf(120));
 
-        CuentaRepositoryJdbc cuentaSpy = new CuentaRepositoryJdbc() {
-            private int llamadas = 0;
+        CuentaRepository repoCuentaQueFalla =
+                new CuentaRepositoryFalloEnSegundaActualizacion(repoCuentaReal);
 
-            @Override
-            public void actualizarSaldo(Connection connection, String numeroCuenta, BigDecimal nuevoSaldo) {
-                llamadas++;
-                if (llamadas == 2) {
-                    throw new RuntimeException("Fallo provocado en la segunda actualización");
-                }
-                super.actualizarSaldo(connection, numeroCuenta, nuevoSaldo);
-            }
-        };
+        MovimientoServicio servicio = new MovimientoServicio(repoCuentaQueFalla, repoMovimientoReal);
 
-        MovimientoServicio movimientoServicio =
-                new MovimientoServicio(cuentaSpy, movimientoRepositoryJdbc);
-
-        RuntimeException ex = assertThrows(
-                RuntimeException.class,
-                () -> movimientoServicio.transferir(
-                        origen.getNumeroCuenta(),
-                        destino.getNumeroCuenta(),
-                        BigDecimal.valueOf(30)
+        assertThrows(
+                NovaBankException.class,
+                () -> servicio.transferir(
+                        cuentaOrigen.getNumeroCuenta(),
+                        cuentaDestino.getNumeroCuenta(),
+                        BigDecimal.valueOf(75)
                 )
         );
 
-        assertEquals("Fallo provocado en la segunda actualización", ex.getMessage());
+        Cuenta origenRecargada = repoCuentaReal.buscarNumeroCuenta(cuentaOrigen.getNumeroCuenta()).orElseThrow();
+        Cuenta destinoRecargada = repoCuentaReal.buscarNumeroCuenta(cuentaDestino.getNumeroCuenta()).orElseThrow();
 
-        Cuenta origenRecuperada =
-                cuentaRepositoryJdbc.buscarNumeroCuenta(origen.getNumeroCuenta()).orElseThrow();
-        Cuenta destinoRecuperada =
-                cuentaRepositoryJdbc.buscarNumeroCuenta(destino.getNumeroCuenta()).orElseThrow();
-
-        assertEquals(0, BigDecimal.valueOf(100).compareTo(origenRecuperada.getSaldoCuenta()));
-        assertEquals(0, BigDecimal.valueOf(50).compareTo(destinoRecuperada.getSaldoCuenta()));
+        assertEquals(0, BigDecimal.valueOf(800).compareTo(origenRecargada.getSaldoCuenta()));
+        assertEquals(0, BigDecimal.valueOf(120).compareTo(destinoRecargada.getSaldoCuenta()));
 
         List<Movimiento> movimientosOrigen =
-                movimientoRepositoryJdbc.obtenerMovimientosCuenta(origen.getNumeroCuenta());
+                repoMovimientoReal.obtenerMovimientosCuenta(cuentaOrigen.getNumeroCuenta());
         List<Movimiento> movimientosDestino =
-                movimientoRepositoryJdbc.obtenerMovimientosCuenta(destino.getNumeroCuenta());
+                repoMovimientoReal.obtenerMovimientosCuenta(cuentaDestino.getNumeroCuenta());
 
-        assertTrue(movimientosOrigen.isEmpty());
-        assertTrue(movimientosDestino.isEmpty());
+        assertEquals(0, movimientosOrigen.size());
+        assertEquals(0, movimientosDestino.size());
+    }
+
+    private void limpiarBaseDeDatos() throws SQLException {
+        try (Connection connection = DatabaseConnectionManager.getConnection();
+             Statement statement = connection.createStatement()) {
+            statement.execute("TRUNCATE TABLE movimientos, cuentas, clientes RESTART IDENTITY CASCADE");
+        }
     }
 
     private Cuenta crearCuentaPersistida(BigDecimal saldoInicial) {
         Cliente cliente = crearClientePersistido();
+        String numeroCuenta = generarNumeroCuentaUnico();
 
         Cuenta cuenta = Cuenta.builder()
                 .dueñoCuenta(cliente)
-                .numeroCuenta(generarNumeroCuentaUnico())
+                .numeroCuenta(numeroCuenta)
                 .saldoCuenta(saldoInicial)
                 .fechaCreacionCuenta(LocalDateTime.now())
                 .build();
 
-        cuentaRepositoryJdbc.guardarCuenta(cuenta);
+        repoCuentaReal.guardarCuenta(cuenta);
         return cuenta;
     }
 
     private Cliente crearClientePersistido() {
-        String sufijo = String.valueOf(System.nanoTime());
-        String ochoDigitos = String.format("%08d", Math.abs((int) (System.nanoTime() % 100_000_000L)));
-        int telefono = Integer.parseInt("6" + ochoDigitos.substring(1));
+        long sufijo = System.nanoTime();
 
         Cliente cliente = Cliente.builder()
                 .nombreCliente("Carlos")
                 .apellidosCliente("Torres")
-                .dniNifCliente(ochoDigitos + "Z")
-                .emailCliente("carlos" + sufijo + "@example.com")
-                .telefonoCliente(telefono)
+                .dniNifCliente(generarDniValido(sufijo))
+                .emailCliente("carlos" + sufijo + "@test.com")
+                .telefonoCliente(generarTelefonoValido(sufijo))
                 .fechaCreacionCliente(LocalDateTime.now())
                 .build();
 
-        clienteRepositoryJdbc.anadirCliente(cliente);
+        repoClienteReal.anadirCliente(cliente);
         return cliente;
     }
 
     private String generarNumeroCuentaUnico() {
         long sufijo = Math.abs(System.nanoTime() % 1_000_000_000_000L);
         return "ES91210000" + String.format("%012d", sufijo);
+    }
+
+    private String generarDniValido(long base) {
+        String numeros = String.format("%08d", Math.abs(base % 100_000_000L));
+        return numeros + "Z";
+    }
+
+    private int generarTelefonoValido(long base) {
+        return Integer.parseInt("6" + String.format("%08d", Math.abs(base % 100_000_000L)));
     }
 }

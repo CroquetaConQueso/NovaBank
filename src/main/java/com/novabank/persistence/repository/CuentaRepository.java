@@ -7,9 +7,6 @@ import java.sql.Connection;
 import java.util.List;
 import java.util.Optional;
 
-/**
- * Contrato de persistencia para cuentas.
- */
 public interface CuentaRepository {
 
     void guardarCuenta(Cuenta nuevaCuenta);
@@ -23,4 +20,6 @@ public interface CuentaRepository {
     void actualizarSaldo(String numeroCuenta, BigDecimal nuevoSaldo);
 
     void actualizarSaldo(Connection connection, String numeroCuenta, BigDecimal nuevoSaldo);
+
+    long obtenerUltimoIdCuenta();
 }

@@ -47,6 +47,32 @@ El sistema permite:
 
 ## Arquitectura por capas
 
+El sistema se estructura en las siguientes capas, con dependencias que fluyen estrictamente hacia abajo:
+
+```text
+┌──────────────────────────────────────────┐
+│          CAPA DE PRESENTACIÓN            │
+│  Menús de consola · Lectura de entrada   │
+└─────────────────────┬────────────────────┘
+                      │ llama a
+┌─────────────────────▼────────────────────┐
+│           CAPA DE SERVICIOS              │
+│  Lógica de negocio · Validaciones        │
+└─────────────────────┬────────────────────┘
+                      │ usa
+┌─────────────────────▼────────────────────┐
+│            CAPA DE DOMINIO               │
+│  Entidades: Cliente, Cuenta, Movimiento  │
+└──────────────────────────────────────────┘
+
+┌──────────────────────────────────────────┐
+│          CAPA DE PERSISTENCIA            │
+│  Repositorios · Consultas SQL · JDBC     │
+└──────────────────────────────────────────┘
+                      │
+                 PostgreSQL
+```
+
 El proyecto sigue una arquitectura en capas con separación clara de responsabilidades:
 
 - **domain**
@@ -163,6 +189,15 @@ java -version
 mvn -version
 
 ```
+
+---
+
+## Configuración de la base de datos
+
+Antes de ejecutar la aplicación, es necesario preparar el entorno de base de datos:
+
+1. Crea una base de datos en tu servidor PostgreSQL llamada `NovaBank`.
+2. Ejecuta el script de inicialización `schema.sql` ubicado en la ruta `src/main/resources/schema.sql` sobre la base de datos recién creada. Este script generará automáticamente las tablas necesarias (`clientes`, `cuentas`, `movimientos`) con sus respectivas restricciones.
 
 ---
 
@@ -310,7 +345,7 @@ integradas.
 
 Enlace al repositorio público de GitHub:
 
-https://github.com/CroquetaConQueso/NovaBank
+[https://github.com/CroquetaConQueso/NovaBank](https://github.com/CroquetaConQueso/NovaBank)
 
 ---
 

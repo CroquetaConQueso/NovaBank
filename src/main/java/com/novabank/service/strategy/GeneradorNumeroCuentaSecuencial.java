@@ -1,27 +1,33 @@
 package com.novabank.service.strategy;
 
-import com.novabank.persistence.repository.CuentaRepository;
+import com.novabank.repository.CuentaRepository;
+import org.springframework.stereotype.Component;
 
-/**
- * Estrategia concreta de generación secuencial de números de cuenta.
- *
- * Toma el último id de cuenta persistido y genera el siguiente número
- * respetando el formato definido por la aplicación.
- */
+@Component
 public class GeneradorNumeroCuentaSecuencial implements GeneradorNumeroCuentaStrategy {
 
-    private static final String PREFIJO = "ES91210000";
-    private static final int LONGITUD_SUFJO = 12;
+    private static final String PREFIX = "ES91210000";
 
-    private final CuentaRepository repoCuenta;
+    private final CuentaRepository cuentaRepository;
 
-    public GeneradorNumeroCuentaSecuencial(CuentaRepository repoCuenta) {
-        this.repoCuenta = repoCuenta;
+    public GeneradorNumeroCuentaSecuencial(CuentaRepository cuentaRepository) {
+        this.cuentaRepository = cuentaRepository;
     }
 
     @Override
     public String generarNumeroCuenta() {
-        long siguienteId = repoCuenta.obtenerUltimoIdCuenta() + 1;
-        return PREFIJO + String.format("%0" + LONGITUD_SUFJO + "d", siguienteId);
+        long siguiente = cuentaRepository.count() + 1;
+        String numeroCuenta = formatear(siguiente);
+
+        while (cuentaRepository.existsByNumeroCuenta(numeroCuenta)) {
+            siguiente++;
+            numeroCuenta = formatear(siguiente);
+        }
+
+        return numeroCuenta;
+    }
+
+    private String formatear(long secuencia) {
+        return PREFIX + String.format("%012d", secuencia);
     }
 }

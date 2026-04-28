@@ -1,61 +1,35 @@
 package com.novabank.service.strategy;
 
-import com.novabank.persistence.repository.CuentaRepository;
+import com.novabank.repository.CuentaRepository;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.Mock;
-import org.mockito.Spy;
-import org.mockito.junit.jupiter.MockitoExtension;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.mockito.Mockito.verify;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-/**
- * Tests unitarios para GeneradorNumeroCuentaSecuencial.
- */
-@ExtendWith(MockitoExtension.class)
 class GeneradorNumeroCuentaSecuencialTest {
 
-    @Mock
-    private CuentaRepository repoCuenta;
+    private final CuentaRepository cuentaRepository = mock(CuentaRepository.class);
+    private final GeneradorNumeroCuentaSecuencial generador = new GeneradorNumeroCuentaSecuencial(cuentaRepository);
 
     @Test
-    void generarNumeroCuenta_siNoHayCuentas_debeGenerarPrimeraCuenta() {
-        when(repoCuenta.obtenerUltimoIdCuenta()).thenReturn(0L);
+    void generaNumeroConPrefijoFuncionalYDoceDigitosSecuenciales() {
+        when(cuentaRepository.count()).thenReturn(0L);
+        when(cuentaRepository.existsByNumeroCuenta("ES91210000000000000001")).thenReturn(false);
 
-        GeneradorNumeroCuentaSecuencial strategy =
-                new GeneradorNumeroCuentaSecuencial(repoCuenta);
+        String numeroCuenta = generador.generarNumeroCuenta();
 
-        String resultado = strategy.generarNumeroCuenta();
-
-        assertEquals("ES91210000000000000001", resultado);
-        verify(repoCuenta).obtenerUltimoIdCuenta();
+        assertThat(numeroCuenta).isEqualTo("ES91210000000000000001");
     }
 
     @Test
-    void generarNumeroCuenta_siYaHayCuentas_debeGenerarSiguienteNumero() {
-        when(repoCuenta.obtenerUltimoIdCuenta()).thenReturn(44L);
+    void avanzaSecuenciaSiElNumeroYaExiste() {
+        when(cuentaRepository.count()).thenReturn(0L);
+        when(cuentaRepository.existsByNumeroCuenta("ES91210000000000000001")).thenReturn(true);
+        when(cuentaRepository.existsByNumeroCuenta("ES91210000000000000002")).thenReturn(false);
 
-        GeneradorNumeroCuentaSecuencial strategy =
-                new GeneradorNumeroCuentaSecuencial(repoCuenta);
+        String numeroCuenta = generador.generarNumeroCuenta();
 
-        String resultado = strategy.generarNumeroCuenta();
-
-        assertEquals("ES91210000000000000045", resultado);
-        verify(repoCuenta).obtenerUltimoIdCuenta();
-    }
-
-    @Test
-    void generarNumeroCuenta_debeMantenerFormatoConCerosALaIzquierda() {
-        when(repoCuenta.obtenerUltimoIdCuenta()).thenReturn(7L);
-
-        GeneradorNumeroCuentaSecuencial strategy =
-                new GeneradorNumeroCuentaSecuencial(repoCuenta);
-
-        String resultado = strategy.generarNumeroCuenta();
-
-        assertEquals("ES91210000000000000008", resultado);
-        verify(repoCuenta).obtenerUltimoIdCuenta();
+        assertThat(numeroCuenta).isEqualTo("ES91210000000000000002");
     }
 }

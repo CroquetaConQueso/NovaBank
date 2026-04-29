@@ -1,0 +1,1078 @@
+{
+  "info": {
+    "name": "NovaBank Digital Services - Modulo 3",
+    "description": "Flujo Postman para NovaBank Modulo 3: login, clientes, cuentas, operaciones y movimientos.\n\nRecomendado ejecutar sobre base de datos limpia, ya que los datos de clientes usan DNI, email y teléfono únicos.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080"
+    },
+    {
+      "key": "token",
+      "value": ""
+    },
+    {
+      "key": "clienteOrigenId",
+      "value": ""
+    },
+    {
+      "key": "clienteDestinoId",
+      "value": ""
+    },
+    {
+      "key": "cuentaOrigenId",
+      "value": ""
+    },
+    {
+      "key": "cuentaDestinoId",
+      "value": ""
+    },
+    {
+      "key": "numeroCuentaOrigen",
+      "value": ""
+    },
+    {
+      "key": "numeroCuentaDestino",
+      "value": ""
+    },
+    {
+      "key": "dniClienteOrigen",
+      "value": ""
+    },
+    {
+      "key": "dniClienteDestino",
+      "value": ""
+    },
+    {
+      "key": "fechaInicioMovimientos",
+      "value": "2024-01-01"
+    },
+    {
+      "key": "fechaFinMovimientos",
+      "value": "2030-12-31"
+    }
+  ],
+  "item": [
+    {
+      "name": "Auth - Login",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('login devuelve 200', function () { pm.response.to.have.status(200); });",
+              "const json = pm.response.json();",
+              "pm.collectionVariables.set('token', json.token);",
+              "pm.test('token informado', function () { pm.expect(json.token).to.not.be.empty; });"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"username\": \"admin\",\n  \"password\": \"password\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/auth/login",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "auth",
+            "login"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Clientes - Listar sin token devuelve 401",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('sin token devuelve 401', function () { pm.response.to.have.status(401); });"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/clientes",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "clientes"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Clientes - Listar con token",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('listado devuelve 200', function () { pm.response.to.have.status(200); });"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{token}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/clientes",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "clientes"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Clientes - Crear cliente origen",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('cliente origen creado', function () { pm.response.to.have.status(201); });",
+              "const json = pm.response.json();",
+              "pm.collectionVariables.set('clienteOrigenId', json.id);",
+              "pm.collectionVariables.set('dniClienteOrigen', json.dni);"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{token}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"nombre\": \"Ana\",\n  \"apellidos\": \"Lopez Martin\",\n  \"dni\": \"12345678Z\",\n  \"email\": \"ana.lopez@example.com\",\n  \"telefono\": \"600111222\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/clientes",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "clientes"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Clientes - Crear cliente destino",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('cliente destino creado', function () { pm.response.to.have.status(201); });",
+              "const json = pm.response.json();",
+              "pm.collectionVariables.set('clienteDestinoId', json.id);",
+              "pm.collectionVariables.set('dniClienteDestino', json.dni);"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{token}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"nombre\": \"Luis\",\n  \"apellidos\": \"Garcia Perez\",\n  \"dni\": \"87654321X\",\n  \"email\": \"luis.garcia@example.com\",\n  \"telefono\": \"600333444\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/clientes",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "clientes"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Clientes - Crear con DNI invalido devuelve 400",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('dni invalido devuelve 400', function () { pm.response.to.have.status(400); });",
+              "pm.test('codigo VALIDATION_ERROR', function () { pm.expect(pm.response.json().code).to.eql('VALIDATION_ERROR'); });",
+              "pm.test('fieldErrors contiene dni', function () { pm.expect(pm.response.json().fieldErrors).to.have.property('dni'); });"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{token}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"nombre\": \"Cliente\",\n  \"apellidos\": \"Dni Invalido\",\n  \"dni\": \"12345678A\",\n  \"email\": \"dni.invalido@example.com\",\n  \"telefono\": \"600999888\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/clientes",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "clientes"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Clientes - Crear duplicado devuelve 409",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('cliente duplicado devuelve 409', function () { pm.response.to.have.status(409); });",
+              "pm.test('codigo de conflicto correcto', function () { pm.expect(pm.response.json().code).to.eql('CONFLICT'); });"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{token}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"nombre\": \"Ana\",\n  \"apellidos\": \"Duplicada\",\n  \"dni\": \"12345678Z\",\n  \"email\": \"ana.lopez@example.com\",\n  \"telefono\": \"600111222\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/clientes",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "clientes"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Clientes - Obtener cliente origen por ID",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('cliente origen encontrado por id', function () { pm.response.to.have.status(200); });",
+              "const json = pm.response.json();",
+              "pm.test('id coincide', function () { pm.expect(json.id).to.eql(Number(pm.collectionVariables.get('clienteOrigenId'))); });"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{token}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/clientes/{{clienteOrigenId}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "clientes",
+            "{{clienteOrigenId}}"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Clientes - Obtener cliente origen por DNI",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('cliente encontrado por dni', function () { pm.response.to.have.status(200); });",
+              "pm.test('dni coincide', function () { pm.expect(pm.response.json().dni).to.eql(pm.collectionVariables.get('dniClienteOrigen')); });"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{token}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/clientes?dni={{dniClienteOrigen}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "clientes"
+          ],
+          "query": [
+            {
+              "key": "dni",
+              "value": "{{dniClienteOrigen}}"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Cuentas - Crear cuenta origen",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('cuenta origen creada', function () { pm.response.to.have.status(201); });",
+              "const json = pm.response.json();",
+              "pm.collectionVariables.set('cuentaOrigenId', json.id);",
+              "pm.collectionVariables.set('numeroCuentaOrigen', json.numeroCuenta);"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{token}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"clienteId\": {{clienteOrigenId}}\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/cuentas",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "cuentas"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Cuentas - Crear cuenta destino",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('cuenta destino creada', function () { pm.response.to.have.status(201); });",
+              "const json = pm.response.json();",
+              "pm.collectionVariables.set('cuentaDestinoId', json.id);",
+              "pm.collectionVariables.set('numeroCuentaDestino', json.numeroCuenta);"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{token}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"clienteId\": {{clienteDestinoId}}\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/cuentas",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "cuentas"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Cuentas - Consultar cuenta origen",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('cuenta encontrada', function () { pm.response.to.have.status(200); });"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{token}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/cuentas/{{cuentaOrigenId}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "cuentas",
+            "{{cuentaOrigenId}}"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Cuentas - Consultar cuenta origen por numero",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('cuenta encontrada por numero', function () { pm.response.to.have.status(200); });",
+              "pm.test('numero de cuenta coincide', function () { pm.expect(pm.response.json().numeroCuenta).to.eql(pm.collectionVariables.get('numeroCuentaOrigen')); });"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{token}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/cuentas/numero/{{numeroCuentaOrigen}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "cuentas",
+            "numero",
+            "{{numeroCuentaOrigen}}"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Cuentas - Consultar saldo origen",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('saldo devuelve 200', function () { pm.response.to.have.status(200); });",
+              "pm.test('respuesta contiene saldo', function () { pm.expect(pm.response.json()).to.have.property('saldo'); });"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{token}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/cuentas/{{cuentaOrigenId}}/saldo",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "cuentas",
+            "{{cuentaOrigenId}}",
+            "saldo"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Cuentas - Listar cuentas de cliente origen",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('cuentas del cliente devuelven 200', function () { pm.response.to.have.status(200); });",
+              "pm.test('cliente origen tiene al menos una cuenta', function () { pm.expect(pm.response.json().length).to.be.greaterThan(0); });"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{token}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/clientes/{{clienteOrigenId}}/cuentas",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "clientes",
+            "{{clienteOrigenId}}",
+            "cuentas"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Operaciones - Deposito",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('deposito correcto', function () { pm.response.to.have.status(200); });"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{token}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"numeroCuenta\": \"{{numeroCuentaOrigen}}\",\n  \"cantidad\": 250.00\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/operaciones/deposito",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "operaciones",
+            "deposito"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Operaciones - Retiro",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('retiro correcto', function () { pm.response.to.have.status(200); });"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{token}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"numeroCuenta\": \"{{numeroCuentaOrigen}}\",\n  \"cantidad\": 40.00\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/operaciones/retiro",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "operaciones",
+            "retiro"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Operaciones - Retiro saldo insuficiente",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('saldo insuficiente devuelve 422', function () { pm.response.to.have.status(422); });",
+              "pm.test('codigo de error correcto', function () { pm.expect(pm.response.json().code).to.eql('SALDO_INSUFICIENTE'); });"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{token}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"numeroCuenta\": \"{{numeroCuentaOrigen}}\",\n  \"cantidad\": 1000.00\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/operaciones/retiro",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "operaciones",
+            "retiro"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Operaciones - Transferencia",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('transferencia correcta', function () { pm.response.to.have.status(200); });",
+              "pm.test('genera dos movimientos', function () { pm.expect(pm.response.json()).to.have.length(2); });"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{token}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"numeroCuentaOrigen\": \"{{numeroCuentaOrigen}}\",\n  \"numeroCuentaDestino\": \"{{numeroCuentaDestino}}\",\n  \"cantidad\": 60.00\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/operaciones/transferencia",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "operaciones",
+            "transferencia"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Cuentas - Consultar cuenta origen final",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('cuenta encontrada', function () { pm.response.to.have.status(200); });",
+              "pm.test('saldo final esperado', function () { pm.expect(Number(pm.response.json().saldo)).to.eql(150); });"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{token}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/cuentas/{{cuentaOrigenId}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "cuentas",
+            "{{cuentaOrigenId}}"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Cuentas - Consultar saldo origen final",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('saldo devuelve 200', function () { pm.response.to.have.status(200); });",
+              "pm.test('saldo final esperado', function () { pm.expect(Number(pm.response.json().saldo)).to.eql(150); });"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{token}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/cuentas/{{cuentaOrigenId}}/saldo",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "cuentas",
+            "{{cuentaOrigenId}}",
+            "saldo"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Cuentas - Consultar movimientos origen",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('movimientos encontrados', function () { pm.response.to.have.status(200); });",
+              "pm.test('hay tres movimientos en origen', function () { pm.expect(pm.response.json()).to.have.length(3); });"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{token}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/cuentas/{{cuentaOrigenId}}/movimientos",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "cuentas",
+            "{{cuentaOrigenId}}",
+            "movimientos"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Cuentas - Consultar movimientos origen por rango",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('movimientos por rango encontrados', function () { pm.response.to.have.status(200); });",
+              "pm.test('hay tres movimientos en origen dentro del rango', function () { pm.expect(pm.response.json()).to.have.length(3); });"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{token}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/cuentas/{{cuentaOrigenId}}/movimientos?fechaInicio={{fechaInicioMovimientos}}&fechaFin={{fechaFinMovimientos}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "cuentas",
+            "{{cuentaOrigenId}}",
+            "movimientos"
+          ],
+          "query": [
+            {
+              "key": "fechaInicio",
+              "value": "{{fechaInicioMovimientos}}"
+            },
+            {
+              "key": "fechaFin",
+              "value": "{{fechaFinMovimientos}}"
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

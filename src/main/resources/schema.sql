@@ -1,6 +1,3 @@
-CREATE DATABASE NovaBank;
-\c NovaBank
-
 CREATE TABLE IF NOT EXISTS clientes (
     id BIGSERIAL PRIMARY KEY,
     nombre VARCHAR(100) NOT NULL,
@@ -20,10 +17,10 @@ CREATE TABLE IF NOT EXISTS cuentas (
     cliente_id BIGINT NOT NULL,
     saldo NUMERIC(15,2) NOT NULL DEFAULT 0.00 CHECK (saldo >= 0),
     fecha_creacion TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    version BIGINT NOT NULL DEFAULT 0,
     CONSTRAINT fk_cuentas_cliente
         FOREIGN KEY (cliente_id)
         REFERENCES clientes(id)
-        ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS movimientos (
@@ -42,7 +39,6 @@ CREATE TABLE IF NOT EXISTS movimientos (
     CONSTRAINT fk_movimientos_cuenta
         FOREIGN KEY (cuenta_id)
         REFERENCES cuentas(id)
-        ON DELETE CASCADE
 );
 
 CREATE INDEX IF NOT EXISTS idx_cuentas_cliente_id

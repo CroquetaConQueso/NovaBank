@@ -37,7 +37,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(RemoteServiceException.class)
     public ResponseEntity<ErrorResponseDTO> handleRemoteService(RemoteServiceException ex, HttpServletRequest request) {
         return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
-                .body(ErrorResponseDTO.of("REMOTE_SERVICE_UNAVAILABLE", ex.getMessage(), correlationId(request)));
+                .body(ErrorResponseDTO.of("CLIENTE_SERVICE_UNAVAILABLE", ex.getMessage(), correlationId(request)));
     }
 
     @ExceptionHandler({

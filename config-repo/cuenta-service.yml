@@ -1,0 +1,6 @@
+spring:
+  application:
+    name: cuenta-service
+
+server:
+  port: 8082

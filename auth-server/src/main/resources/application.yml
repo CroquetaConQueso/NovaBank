@@ -1,0 +1,12 @@
+spring:
+  application:
+    name: auth-server
+
+server:
+  port: 9000
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info

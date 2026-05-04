@@ -1,0 +1,12 @@
+package com.novabank.operacion;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+
+@SpringBootApplication
+public class OperacionServiceApplication {
+
+    public static void main(String[] args) {
+        SpringApplication.run(OperacionServiceApplication.class, args);
+    }
+}

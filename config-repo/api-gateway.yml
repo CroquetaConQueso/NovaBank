@@ -1,6 +1,38 @@
 spring:
   application:
     name: api-gateway
+  cloud:
+    gateway:
+      routes:
+        - id: auth-server
+          uri: lb://AUTH-SERVER
+          predicates:
+            - Path=/api/auth/**
+        - id: cliente-service
+          uri: lb://CLIENTE-SERVICE
+          predicates:
+            - Path=/api/clientes/**
+        - id: cuenta-service
+          uri: lb://CUENTA-SERVICE
+          predicates:
+            - Path=/api/cuentas/**
+        - id: operacion-service
+          uri: lb://OPERACION-SERVICE
+          predicates:
+            - Path=/api/operaciones/**
+      discovery:
+        locator:
+          enabled: false
 
 server:
   port: 8080
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+novabank:
+  gateway:
+    auth-validation-url: lb://AUTH-SERVER/api/auth/validate

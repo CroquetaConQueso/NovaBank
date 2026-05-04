@@ -6,6 +6,13 @@ spring:
     username: ${OPERACION_DB_USERNAME:postgres}
     password: ${OPERACION_DB_PASSWORD}
     driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
 
 server:
   port: 8083

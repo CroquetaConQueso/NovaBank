@@ -1,6 +1,11 @@
 spring:
   application:
     name: auth-server
+  datasource:
+    url: ${AUTH_DB_URL:jdbc:postgresql://localhost:5432/novabank_auth}
+    username: ${AUTH_DB_USERNAME:postgres}
+    password: ${AUTH_DB_PASSWORD}
+    driver-class-name: org.postgresql.Driver
 
 server:
   port: 9000

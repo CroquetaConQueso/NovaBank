@@ -5,7 +5,11 @@ import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 
-@FeignClient(name = "cliente-service", configuration = ClienteServiceFeignConfig.class)
+@FeignClient(
+        name = "cliente-service",
+        configuration = ClienteServiceFeignConfig.class,
+        fallbackFactory = ClienteServiceClientFallbackFactory.class
+)
 public interface ClienteServiceClient {
 
     @GetMapping("/api/clientes/{id}")

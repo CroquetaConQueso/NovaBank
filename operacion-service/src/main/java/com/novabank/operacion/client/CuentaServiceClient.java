@@ -10,7 +10,11 @@ import org.springframework.web.bind.annotation.RequestBody;
 
 import java.util.List;
 
-@FeignClient(name = "cuenta-service", configuration = CuentaServiceFeignConfig.class)
+@FeignClient(
+        name = "cuenta-service",
+        configuration = CuentaServiceFeignConfig.class,
+        fallbackFactory = CuentaServiceClientFallbackFactory.class
+)
 public interface CuentaServiceClient {
 
     @PostMapping("/internal/cuentas/{id}/depositos")

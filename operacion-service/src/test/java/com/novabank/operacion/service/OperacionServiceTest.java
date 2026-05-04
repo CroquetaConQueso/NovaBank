@@ -10,6 +10,7 @@ import com.novabank.operacion.dto.OperacionResponseDTO;
 import com.novabank.operacion.dto.TransferenciaInternaRequestDTO;
 import com.novabank.operacion.dto.TransferenciaRequestDTO;
 import com.novabank.operacion.exception.IdempotencyConflictException;
+import com.novabank.operacion.exception.RemoteServiceException;
 import com.novabank.operacion.exception.RemoteValidationException;
 import com.novabank.operacion.exception.ValidationException;
 import com.novabank.operacion.model.EstadoOperacion;
@@ -177,6 +178,60 @@ class OperacionServiceTest {
     }
 
     @Test
+    void cuentaServiceNoDisponibleEnDepositoQuedaPersistidoComoFallido() {
+        when(repository.findByIdempotencyKey("dep-down")).thenReturn(Optional.empty());
+        when(repository.saveAndFlush(any(OperacionIdempotente.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(repository.save(any(OperacionIdempotente.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(cuentaServiceClient.depositar(eq(10L), any(CuentaOperacionRequestDTO.class)))
+                .thenThrow(new RemoteServiceException("cuenta-service no esta disponible"));
+
+        assertThatThrownBy(() -> service.depositar(
+                new OperacionRequestDTO(10L, new BigDecimal("50.00")),
+                "dep-down",
+                "corr-1"
+        ))
+                .isInstanceOf(RemoteServiceException.class);
+
+        assertOperationMarkedAsFailed("cuenta-service no esta disponible");
+    }
+
+    @Test
+    void cuentaServiceNoDisponibleEnRetiroQuedaPersistidoComoFallido() {
+        when(repository.findByIdempotencyKey("ret-down")).thenReturn(Optional.empty());
+        when(repository.saveAndFlush(any(OperacionIdempotente.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(repository.save(any(OperacionIdempotente.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(cuentaServiceClient.retirar(eq(10L), any(CuentaOperacionRequestDTO.class)))
+                .thenThrow(new RemoteServiceException("cuenta-service no esta disponible"));
+
+        assertThatThrownBy(() -> service.retirar(
+                new OperacionRequestDTO(10L, new BigDecimal("50.00")),
+                "ret-down",
+                "corr-1"
+        ))
+                .isInstanceOf(RemoteServiceException.class);
+
+        assertOperationMarkedAsFailed("cuenta-service no esta disponible");
+    }
+
+    @Test
+    void cuentaServiceNoDisponibleEnTransferenciaQuedaPersistidoComoFallido() {
+        when(repository.findByIdempotencyKey("tra-down")).thenReturn(Optional.empty());
+        when(repository.saveAndFlush(any(OperacionIdempotente.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(repository.save(any(OperacionIdempotente.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(cuentaServiceClient.transferir(any(TransferenciaInternaRequestDTO.class)))
+                .thenThrow(new RemoteServiceException("cuenta-service no esta disponible"));
+
+        assertThatThrownBy(() -> service.transferir(
+                new TransferenciaRequestDTO(10L, 11L, new BigDecimal("50.00")),
+                "tra-down",
+                "corr-1"
+        ))
+                .isInstanceOf(RemoteServiceException.class);
+
+        assertOperationMarkedAsFailed("cuenta-service no esta disponible");
+    }
+
+    @Test
     void idempotencyKeyEsObligatoria() {
         assertThatThrownBy(() -> service.depositar(
                 new OperacionRequestDTO(10L, new BigDecimal("50.00")),
@@ -196,5 +251,12 @@ class OperacionServiceTest {
                 new BigDecimal("50.00"),
                 LocalDateTime.now()
         );
+    }
+
+    private void assertOperationMarkedAsFailed(String errorMessage) {
+        ArgumentCaptor<OperacionIdempotente> captor = ArgumentCaptor.forClass(OperacionIdempotente.class);
+        verify(repository, org.mockito.Mockito.atLeastOnce()).save(captor.capture());
+        assertThat(captor.getValue().getEstado()).isEqualTo(EstadoOperacion.FALLIDA);
+        assertThat(captor.getValue().getErrorMessage()).contains(errorMessage);
     }
 }

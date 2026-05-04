@@ -7,6 +7,7 @@ import com.novabank.operacion.dto.OperacionResponseDTO;
 import com.novabank.operacion.dto.TransferenciaRequestDTO;
 import com.novabank.operacion.exception.GlobalExceptionHandler;
 import com.novabank.operacion.exception.IdempotencyConflictException;
+import com.novabank.operacion.exception.RemoteServiceException;
 import com.novabank.operacion.exception.ValidationException;
 import com.novabank.operacion.model.EstadoOperacion;
 import com.novabank.operacion.model.TipoOperacion;
@@ -106,6 +107,23 @@ class OperacionControllerTest {
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("IDEMPOTENCY_CONFLICT"))
                 .andExpect(jsonPath("$.correlationId").value("corr-1"));
+    }
+
+    @Test
+    void cuentaServiceNoDisponibleDevuelve503Controlado() throws Exception {
+        when(operacionService.depositar(any(OperacionRequestDTO.class), eq("dep-down"), eq("corr-503")))
+                .thenThrow(new RemoteServiceException("cuenta-service no esta disponible"));
+
+        mockMvc.perform(post("/api/operaciones/deposito")
+                        .header("Idempotency-Key", "dep-down")
+                        .header("X-Correlation-Id", "corr-503")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(
+                                new OperacionRequestDTO(10L, new BigDecimal("50.00"))
+                        )))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.code").value("CUENTA_SERVICE_UNAVAILABLE"))
+                .andExpect(jsonPath("$.correlationId").value("corr-503"));
     }
 
     private OperacionResponseDTO response(TipoOperacion tipoOperacion, String key) {

@@ -1,0 +1,6 @@
+spring:
+  application:
+    name: operacion-service
+
+server:
+  port: 8083

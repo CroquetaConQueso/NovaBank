@@ -1,6 +1,10 @@
 spring:
   application:
     name: cuenta-service
+  cloud:
+    openfeign:
+      circuitbreaker:
+        enabled: true
   datasource:
     url: ${CUENTA_DB_URL:jdbc:postgresql://localhost:5432/novabank_cuentas}
     username: ${CUENTA_DB_USERNAME:postgres}
@@ -16,3 +20,17 @@ spring:
 
 server:
   port: 8082
+
+resilience4j:
+  circuitbreaker:
+    instances:
+      clienteService:
+        sliding-window-size: 10
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 10s
+        permitted-number-of-calls-in-half-open-state: 3
+  retry:
+    instances:
+      clienteService:
+        max-attempts: 3
+        wait-duration: 1s

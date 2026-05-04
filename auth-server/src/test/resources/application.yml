@@ -1,0 +1,14 @@
+spring:
+  application:
+    name: auth-server
+  cloud:
+    config:
+      enabled: false
+
+eureka:
+  client:
+    enabled: false
+
+jwt:
+  secret: test-auth-server-secret-key-with-at-least-32-chars
+  expiration: 86400000

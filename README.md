@@ -94,8 +94,8 @@ Ejemplo en PowerShell:
 ```powershell
 $env:NOVABANK_DB_URL="jdbc:postgresql://localhost:5432/novabank"
 $env:NOVABANK_DB_USER="postgres"
-$env:NOVABANK_DB_PASSWORD="usuario"
-$env:JWT_SECRET="novabank-secret-key-for-jwt-generation-2026"
+$env:NOVABANK_DB_PASSWORD="change-me"
+$env:JWT_SECRET="change-me-with-at-least-32-characters"
 $env:JWT_EXPIRATION="86400000"
 ```
 
@@ -104,7 +104,7 @@ Valores por defecto principales:
 ```text
 NOVABANK_DB_URL=jdbc:postgresql://localhost:5432/novabank
 NOVABANK_DB_USER=postgres
-NOVABANK_DB_PASSWORD=usuario
+NOVABANK_DB_PASSWORD=change-me
 JWT_EXPIRATION=86400000
 ```
 

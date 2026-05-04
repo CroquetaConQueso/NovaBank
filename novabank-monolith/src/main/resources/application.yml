@@ -5,7 +5,7 @@ spring:
   datasource:
     url: ${NOVABANK_DB_URL:jdbc:postgresql://localhost:5432/novabank}
     username: ${NOVABANK_DB_USER:postgres}
-    password: ${NOVABANK_DB_PASSWORD:usuario}
+    password: ${NOVABANK_DB_PASSWORD}
     driver-class-name: org.postgresql.Driver
 
   jpa:
@@ -25,7 +25,7 @@ server:
   port: ${SERVER_PORT:8080}
 
 jwt:
-  secret: ${JWT_SECRET:novabank-development-secret-key-change-me}
+  secret: ${JWT_SECRET}
   expiration: ${JWT_EXPIRATION:86400000}
 
 springdoc:

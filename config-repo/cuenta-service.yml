@@ -1,6 +1,11 @@
 spring:
   application:
     name: cuenta-service
+  datasource:
+    url: ${CUENTA_DB_URL:jdbc:postgresql://localhost:5432/novabank_cuentas}
+    username: ${CUENTA_DB_USERNAME:postgres}
+    password: ${CUENTA_DB_PASSWORD}
+    driver-class-name: org.postgresql.Driver
 
 server:
   port: 8082

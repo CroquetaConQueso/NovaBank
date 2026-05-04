@@ -9,6 +9,7 @@ import com.novabank.cuenta.dto.SaldoResponseDTO;
 import com.novabank.cuenta.dto.TransferenciaInternaRequestDTO;
 import com.novabank.cuenta.exception.GlobalExceptionHandler;
 import com.novabank.cuenta.exception.InsufficientBalanceException;
+import com.novabank.cuenta.exception.RemoteServiceException;
 import com.novabank.cuenta.exception.ResourceNotFoundException;
 import com.novabank.cuenta.model.TipoMovimiento;
 import com.novabank.cuenta.service.CuentaService;
@@ -147,6 +148,20 @@ class CuentaControllerTest {
         mockMvc.perform(get("/api/cuentas/99"))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("RESOURCE_NOT_FOUND"));
+    }
+
+    @Test
+    void clienteServiceNoDisponibleDevuelve503Controlado() throws Exception {
+        when(cuentaService.crearCuenta(any(CuentaCreateRequestDTO.class)))
+                .thenThrow(new RemoteServiceException("cliente-service no esta disponible"));
+
+        mockMvc.perform(post("/api/cuentas")
+                        .header("X-Correlation-Id", "corr-503")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new CuentaCreateRequestDTO(1L))))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.code").value("CLIENTE_SERVICE_UNAVAILABLE"))
+                .andExpect(jsonPath("$.correlationId").value("corr-503"));
     }
 
     private CuentaResponseDTO cuentaResponse() {

@@ -9,6 +9,7 @@ import com.novabank.cuenta.dto.MovimientoResponseDTO;
 import com.novabank.cuenta.dto.SaldoResponseDTO;
 import com.novabank.cuenta.dto.TransferenciaInternaRequestDTO;
 import com.novabank.cuenta.exception.InsufficientBalanceException;
+import com.novabank.cuenta.exception.RemoteServiceException;
 import com.novabank.cuenta.exception.ResourceNotFoundException;
 import com.novabank.cuenta.exception.ValidationException;
 import com.novabank.cuenta.mapper.CuentaMapper;
@@ -99,6 +100,18 @@ class CuentaServiceTest {
         assertThatThrownBy(() -> cuentaService.crearCuenta(new CuentaCreateRequestDTO(99L)))
                 .isInstanceOf(ResourceNotFoundException.class)
                 .hasMessageContaining("cliente");
+
+        verify(cuentaRepository, never()).save(any(Cuenta.class));
+    }
+
+    @Test
+    void crearCuentaCuandoClienteServiceNoDisponibleNoGuardaCuenta() {
+        when(clienteServiceClient.obtenerCliente(1L))
+                .thenThrow(new RemoteServiceException("cliente-service no esta disponible"));
+
+        assertThatThrownBy(() -> cuentaService.crearCuenta(new CuentaCreateRequestDTO(1L)))
+                .isInstanceOf(RemoteServiceException.class)
+                .hasMessageContaining("cliente-service");
 
         verify(cuentaRepository, never()).save(any(Cuenta.class));
     }

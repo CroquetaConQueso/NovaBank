@@ -1,0 +1,16 @@
+spring:
+  application:
+    name: cuenta-service
+  cloud:
+    config:
+      enabled: false
+
+eureka:
+  client:
+    enabled: false
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info

@@ -25,14 +25,13 @@ public class GatewayErrorWriter {
             ServerWebExchange exchange,
             HttpStatus status,
             String code,
-            String message,
-            String correlationId
+            String message
     ) {
         exchange.getResponse().setStatusCode(status);
         exchange.getResponse().getHeaders().setContentType(MediaType.APPLICATION_JSON);
         exchange.getResponse().getHeaders().set(HttpHeaders.CACHE_CONTROL, "no-store");
 
-        byte[] bytes = serialize(ErrorResponseDTO.of(code, message, correlationId));
+        byte[] bytes = serialize(ErrorResponseDTO.of(code, message));
         DataBuffer buffer = exchange.getResponse().bufferFactory().wrap(bytes);
         return exchange.getResponse().writeWith(Mono.just(buffer));
     }

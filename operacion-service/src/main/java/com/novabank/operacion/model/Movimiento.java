@@ -1,15 +1,12 @@
-package com.novabank.cuenta.model;
+package com.novabank.operacion.model;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
-import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
-import jakarta.persistence.JoinColumn;
-import jakarta.persistence.ManyToOne;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
 
@@ -24,9 +21,11 @@ public class Movimiento {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "cuenta_id", nullable = false)
-    private Cuenta cuenta;
+    @Column(name = "cuenta_id", nullable = false)
+    private Long cuentaId;
+
+    @Column(name = "numero_cuenta", nullable = false, length = 34)
+    private String numeroCuenta;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 50)
@@ -46,12 +45,20 @@ public class Movimiento {
         this.id = id;
     }
 
-    public Cuenta getCuenta() {
-        return cuenta;
+    public Long getCuentaId() {
+        return cuentaId;
     }
 
-    public void setCuenta(Cuenta cuenta) {
-        this.cuenta = cuenta;
+    public void setCuentaId(Long cuentaId) {
+        this.cuentaId = cuentaId;
+    }
+
+    public String getNumeroCuenta() {
+        return numeroCuenta;
+    }
+
+    public void setNumeroCuenta(String numeroCuenta) {
+        this.numeroCuenta = numeroCuenta;
     }
 
     public TipoMovimiento getTipo() {

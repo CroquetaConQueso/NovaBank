@@ -1,7 +1,7 @@
 package com.novabank.operacion.client;
 
 import com.novabank.operacion.dto.CuentaOperacionRequestDTO;
-import com.novabank.operacion.dto.MovimientoResponseDTO;
+import com.novabank.operacion.dto.CuentaResponseDTO;
 import com.novabank.operacion.dto.TransferenciaInternaRequestDTO;
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -18,11 +18,11 @@ import java.util.List;
 public interface CuentaServiceClient {
 
     @PostMapping("/internal/cuentas/{id}/depositos")
-    MovimientoResponseDTO depositar(@PathVariable Long id, @RequestBody CuentaOperacionRequestDTO request);
+    CuentaResponseDTO depositar(@PathVariable Long id, @RequestBody CuentaOperacionRequestDTO request);
 
     @PostMapping("/internal/cuentas/{id}/retiros")
-    MovimientoResponseDTO retirar(@PathVariable Long id, @RequestBody CuentaOperacionRequestDTO request);
+    CuentaResponseDTO retirar(@PathVariable Long id, @RequestBody CuentaOperacionRequestDTO request);
 
     @PostMapping("/internal/cuentas/transferencias")
-    List<MovimientoResponseDTO> transferir(@RequestBody TransferenciaInternaRequestDTO request);
+    List<CuentaResponseDTO> transferir(@RequestBody TransferenciaInternaRequestDTO request);
 }

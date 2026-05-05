@@ -23,6 +23,7 @@ import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -86,6 +87,16 @@ class OperacionControllerTest {
     }
 
     @Test
+    void listarMovimientosUsaRutaDeOperacionService() throws Exception {
+        when(operacionService.listarMovimientos(10L, null, null))
+                .thenReturn(List.of(movimiento("DEPOSITO")));
+
+        mockMvc.perform(get("/api/operaciones/cuentas/10/movimientos"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].tipo").value("DEPOSITO"));
+    }
+
+    @Test
     void cuentaServiceNoDisponibleDevuelve503Controlado() throws Exception {
         when(operacionService.depositar(any(OperacionRequestDTO.class)))
                 .thenThrow(new RemoteServiceException("cuenta-service no esta disponible"));
@@ -105,14 +116,18 @@ class OperacionControllerTest {
         return new OperacionResponseDTO(
                 tipoOperacion,
                 "Operacion realizada correctamente",
-                List.of(new MovimientoResponseDTO(
+                List.of(movimiento(tipoOperacion))
+        );
+    }
+
+    private MovimientoResponseDTO movimiento(String tipoOperacion) {
+        return new MovimientoResponseDTO(
                         1L,
                         10L,
                         "ES91210000000000000001",
                         tipoOperacion,
                         new BigDecimal("50.00"),
                         LocalDateTime.now()
-                ))
         );
     }
 }

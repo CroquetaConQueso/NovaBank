@@ -1,7 +1,7 @@
 package com.novabank.operacion.client;
 
 import com.novabank.operacion.dto.CuentaOperacionRequestDTO;
-import com.novabank.operacion.dto.MovimientoResponseDTO;
+import com.novabank.operacion.dto.CuentaResponseDTO;
 import com.novabank.operacion.dto.TransferenciaInternaRequestDTO;
 import com.novabank.operacion.exception.RemoteConflictException;
 import com.novabank.operacion.exception.RemoteResourceNotFoundException;
@@ -19,7 +19,7 @@ public class CuentaServiceClientFallbackFactory implements FallbackFactory<Cuent
     public CuentaServiceClient create(Throwable cause) {
         return new CuentaServiceClient() {
             @Override
-            public MovimientoResponseDTO depositar(
+            public CuentaResponseDTO depositar(
                     Long id,
                     CuentaOperacionRequestDTO request
             ) {
@@ -27,7 +27,7 @@ public class CuentaServiceClientFallbackFactory implements FallbackFactory<Cuent
             }
 
             @Override
-            public MovimientoResponseDTO retirar(
+            public CuentaResponseDTO retirar(
                     Long id,
                     CuentaOperacionRequestDTO request
             ) {
@@ -35,7 +35,7 @@ public class CuentaServiceClientFallbackFactory implements FallbackFactory<Cuent
             }
 
             @Override
-            public List<MovimientoResponseDTO> transferir(
+            public List<CuentaResponseDTO> transferir(
                     TransferenciaInternaRequestDTO request
             ) {
                 throw translate(cause);

@@ -1,7 +1,7 @@
 package com.novabank.cuenta.controller;
 
 import com.novabank.cuenta.dto.CuentaOperacionRequestDTO;
-import com.novabank.cuenta.dto.MovimientoResponseDTO;
+import com.novabank.cuenta.dto.CuentaResponseDTO;
 import com.novabank.cuenta.dto.TransferenciaInternaRequestDTO;
 import com.novabank.cuenta.service.CuentaService;
 import jakarta.validation.Valid;
@@ -25,7 +25,7 @@ public class InternalCuentaController {
     }
 
     @PostMapping("/{id}/depositos")
-    public ResponseEntity<MovimientoResponseDTO> depositar(
+    public ResponseEntity<CuentaResponseDTO> depositar(
             @PathVariable Long id,
             @Valid @RequestBody CuentaOperacionRequestDTO request
     ) {
@@ -33,7 +33,7 @@ public class InternalCuentaController {
     }
 
     @PostMapping("/{id}/retiros")
-    public ResponseEntity<MovimientoResponseDTO> retirar(
+    public ResponseEntity<CuentaResponseDTO> retirar(
             @PathVariable Long id,
             @Valid @RequestBody CuentaOperacionRequestDTO request
     ) {
@@ -41,7 +41,7 @@ public class InternalCuentaController {
     }
 
     @PostMapping("/transferencias")
-    public ResponseEntity<List<MovimientoResponseDTO>> transferir(
+    public ResponseEntity<List<CuentaResponseDTO>> transferir(
             @Valid @RequestBody TransferenciaInternaRequestDTO request
     ) {
         return ResponseEntity.ok(cuentaService.transferir(request));

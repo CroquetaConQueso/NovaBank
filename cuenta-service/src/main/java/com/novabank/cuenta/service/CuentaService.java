@@ -4,25 +4,19 @@ import com.novabank.cuenta.client.ClienteServiceClient;
 import com.novabank.cuenta.dto.CuentaCreateRequestDTO;
 import com.novabank.cuenta.dto.CuentaOperacionRequestDTO;
 import com.novabank.cuenta.dto.CuentaResponseDTO;
-import com.novabank.cuenta.dto.MovimientoResponseDTO;
 import com.novabank.cuenta.dto.SaldoResponseDTO;
 import com.novabank.cuenta.dto.TransferenciaInternaRequestDTO;
 import com.novabank.cuenta.exception.InsufficientBalanceException;
 import com.novabank.cuenta.exception.ResourceNotFoundException;
 import com.novabank.cuenta.exception.ValidationException;
 import com.novabank.cuenta.mapper.CuentaMapper;
-import com.novabank.cuenta.mapper.MovimientoMapper;
 import com.novabank.cuenta.model.Cuenta;
-import com.novabank.cuenta.model.Movimiento;
 import com.novabank.cuenta.repository.CuentaRepository;
-import com.novabank.cuenta.repository.MovimientoRepository;
 import com.novabank.cuenta.service.strategy.GeneradorNumeroCuentaStrategy;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
-import java.time.LocalDate;
-import java.time.LocalTime;
 import java.util.List;
 import java.util.Locale;
 
@@ -30,29 +24,20 @@ import java.util.Locale;
 public class CuentaService {
 
     private final CuentaRepository cuentaRepository;
-    private final MovimientoRepository movimientoRepository;
     private final ClienteServiceClient clienteServiceClient;
     private final GeneradorNumeroCuentaStrategy generadorNumeroCuentaStrategy;
-    private final MovimientoFactory movimientoFactory;
     private final CuentaMapper cuentaMapper;
-    private final MovimientoMapper movimientoMapper;
 
     public CuentaService(
             CuentaRepository cuentaRepository,
-            MovimientoRepository movimientoRepository,
             ClienteServiceClient clienteServiceClient,
             GeneradorNumeroCuentaStrategy generadorNumeroCuentaStrategy,
-            MovimientoFactory movimientoFactory,
-            CuentaMapper cuentaMapper,
-            MovimientoMapper movimientoMapper
+            CuentaMapper cuentaMapper
     ) {
         this.cuentaRepository = cuentaRepository;
-        this.movimientoRepository = movimientoRepository;
         this.clienteServiceClient = clienteServiceClient;
         this.generadorNumeroCuentaStrategy = generadorNumeroCuentaStrategy;
-        this.movimientoFactory = movimientoFactory;
         this.cuentaMapper = cuentaMapper;
-        this.movimientoMapper = movimientoMapper;
     }
 
     @Transactional
@@ -101,30 +86,26 @@ public class CuentaService {
     }
 
     @Transactional
-    public MovimientoResponseDTO depositar(Long cuentaId, CuentaOperacionRequestDTO request) {
+    public CuentaResponseDTO depositar(Long cuentaId, CuentaOperacionRequestDTO request) {
         BigDecimal cantidad = validarCantidad(request == null ? null : request.cantidad());
         Cuenta cuenta = buscarCuenta(cuentaId);
 
         cuenta.setSaldo(cuenta.getSaldo().add(cantidad));
-        Movimiento movimiento = movimientoRepository.save(movimientoFactory.crearDeposito(cuenta, cantidad));
-
-        return movimientoMapper.toResponse(movimiento);
+        return cuentaMapper.toResponse(cuenta);
     }
 
     @Transactional
-    public MovimientoResponseDTO retirar(Long cuentaId, CuentaOperacionRequestDTO request) {
+    public CuentaResponseDTO retirar(Long cuentaId, CuentaOperacionRequestDTO request) {
         BigDecimal cantidad = validarCantidad(request == null ? null : request.cantidad());
         Cuenta cuenta = buscarCuenta(cuentaId);
         validarSaldoSuficiente(cuenta, cantidad);
 
         cuenta.setSaldo(cuenta.getSaldo().subtract(cantidad));
-        Movimiento movimiento = movimientoRepository.save(movimientoFactory.crearRetiro(cuenta, cantidad));
-
-        return movimientoMapper.toResponse(movimiento);
+        return cuentaMapper.toResponse(cuenta);
     }
 
     @Transactional
-    public List<MovimientoResponseDTO> transferir(TransferenciaInternaRequestDTO request) {
+    public List<CuentaResponseDTO> transferir(TransferenciaInternaRequestDTO request) {
         if (request == null) {
             throw new IllegalArgumentException("Los datos de la transferencia son obligatorios");
         }
@@ -145,49 +126,9 @@ public class CuentaService {
         cuentaOrigen.setSaldo(cuentaOrigen.getSaldo().subtract(cantidad));
         cuentaDestino.setSaldo(cuentaDestino.getSaldo().add(cantidad));
 
-        Movimiento saliente = movimientoRepository.save(
-                movimientoFactory.crearTransferenciaSaliente(cuentaOrigen, cantidad)
-        );
-        Movimiento entrante = movimientoRepository.save(
-                movimientoFactory.crearTransferenciaEntrante(cuentaDestino, cantidad)
-        );
-
-        return List.of(saliente, entrante)
+        return List.of(cuentaOrigen, cuentaDestino)
                 .stream()
-                .map(movimientoMapper::toResponse)
-                .toList();
-    }
-
-    @Transactional(readOnly = true)
-    public List<MovimientoResponseDTO> listarMovimientos(Long cuentaId, LocalDate fechaInicio, LocalDate fechaFin) {
-        validarId(cuentaId, "El id de la cuenta debe ser positivo");
-
-        if (fechaInicio == null && fechaFin == null) {
-            if (!cuentaRepository.existsById(cuentaId)) {
-                throw new ResourceNotFoundException("No existe ninguna cuenta con id " + cuentaId);
-            }
-            return movimientoRepository.findByCuentaIdOrderByFechaDesc(cuentaId)
-                    .stream()
-                    .map(movimientoMapper::toResponse)
-                    .toList();
-        }
-        if (fechaInicio == null || fechaFin == null) {
-            throw new IllegalArgumentException("Debe informar fechaInicio y fechaFin para filtrar por rango");
-        }
-        if (fechaInicio.isAfter(fechaFin)) {
-            throw new IllegalArgumentException("fechaInicio no puede ser posterior a fechaFin");
-        }
-        if (!cuentaRepository.existsById(cuentaId)) {
-            throw new ResourceNotFoundException("No existe ninguna cuenta con id " + cuentaId);
-        }
-
-        return movimientoRepository.findByCuentaIdAndFechaBetweenOrderByFechaDesc(
-                        cuentaId,
-                        fechaInicio.atStartOfDay(),
-                        fechaFin.atTime(LocalTime.MAX)
-                )
-                .stream()
-                .map(movimientoMapper::toResponse)
+                .map(cuentaMapper::toResponse)
                 .toList();
     }
 

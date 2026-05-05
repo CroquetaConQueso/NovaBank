@@ -1,253 +1,154 @@
 package com.novabank.operacion.service;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.novabank.operacion.client.CuentaServiceClient;
 import com.novabank.operacion.dto.CuentaOperacionRequestDTO;
+import com.novabank.operacion.dto.CuentaResponseDTO;
 import com.novabank.operacion.dto.MovimientoResponseDTO;
 import com.novabank.operacion.dto.OperacionRequestDTO;
 import com.novabank.operacion.dto.OperacionResponseDTO;
 import com.novabank.operacion.dto.TransferenciaInternaRequestDTO;
 import com.novabank.operacion.dto.TransferenciaRequestDTO;
-import com.novabank.operacion.exception.IdempotencyConflictException;
-import com.novabank.operacion.exception.NovaBankException;
-import com.novabank.operacion.exception.OperationAlreadyInProgressException;
-import com.novabank.operacion.exception.PreviousOperationFailedException;
+import com.novabank.operacion.exception.RemoteResourceNotFoundException;
 import com.novabank.operacion.exception.ValidationException;
-import com.novabank.operacion.model.EstadoOperacion;
-import com.novabank.operacion.model.OperacionIdempotente;
-import com.novabank.operacion.model.TipoOperacion;
-import com.novabank.operacion.repository.OperacionIdempotenteRepository;
-import org.springframework.dao.DataIntegrityViolationException;
+import com.novabank.operacion.mapper.MovimientoMapper;
+import com.novabank.operacion.model.Movimiento;
+import com.novabank.operacion.model.TipoMovimiento;
+import com.novabank.operacion.repository.MovimientoRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-import java.util.HexFormat;
+import java.time.LocalDate;
+import java.time.LocalTime;
 import java.util.List;
-import java.util.function.Supplier;
 
 @Service
 public class OperacionService {
 
     private final CuentaServiceClient cuentaServiceClient;
-    private final OperacionIdempotenteRepository operacionIdempotenteRepository;
-    private final ObjectMapper objectMapper;
+    private final MovimientoRepository movimientoRepository;
+    private final MovimientoMapper movimientoMapper;
 
     public OperacionService(
             CuentaServiceClient cuentaServiceClient,
-            OperacionIdempotenteRepository operacionIdempotenteRepository,
-            ObjectMapper objectMapper
+            MovimientoRepository movimientoRepository,
+            MovimientoMapper movimientoMapper
     ) {
         this.cuentaServiceClient = cuentaServiceClient;
-        this.operacionIdempotenteRepository = operacionIdempotenteRepository;
-        this.objectMapper = objectMapper;
+        this.movimientoRepository = movimientoRepository;
+        this.movimientoMapper = movimientoMapper;
     }
 
-    @Transactional(noRollbackFor = NovaBankException.class)
-    public OperacionResponseDTO depositar(
-            OperacionRequestDTO request,
-            String idempotencyKey,
-            String correlationId
-    ) {
-        String normalizedKey = normalizeIdempotencyKey(idempotencyKey);
-        String requestHash = requestHash(TipoOperacion.DEPOSITO, request.cuentaId(), null, request.cantidad());
-
-        return ejecutarConIdempotencia(
-                normalizedKey,
-                requestHash,
-                TipoOperacion.DEPOSITO,
+    @Transactional
+    public OperacionResponseDTO depositar(OperacionRequestDTO request) {
+        CuentaResponseDTO cuenta = cuentaServiceClient.depositar(
                 request.cuentaId(),
-                null,
-                request.cantidad(),
-                correlationId,
-                () -> List.of(cuentaServiceClient.depositar(
-                        request.cuentaId(),
-                        new CuentaOperacionRequestDTO(request.cantidad())
-                ))
+                new CuentaOperacionRequestDTO(request.cantidad())
+        );
+        MovimientoResponseDTO movimiento = guardarMovimiento(cuenta, TipoMovimiento.DEPOSITO, request.cantidad());
+
+        return new OperacionResponseDTO(
+                "DEPOSITO",
+                "Deposito realizado correctamente",
+                List.of(movimiento)
         );
     }
 
-    @Transactional(noRollbackFor = NovaBankException.class)
-    public OperacionResponseDTO retirar(
-            OperacionRequestDTO request,
-            String idempotencyKey,
-            String correlationId
-    ) {
-        String normalizedKey = normalizeIdempotencyKey(idempotencyKey);
-        String requestHash = requestHash(TipoOperacion.RETIRO, request.cuentaId(), null, request.cantidad());
-
-        return ejecutarConIdempotencia(
-                normalizedKey,
-                requestHash,
-                TipoOperacion.RETIRO,
+    @Transactional
+    public OperacionResponseDTO retirar(OperacionRequestDTO request) {
+        CuentaResponseDTO cuenta = cuentaServiceClient.retirar(
                 request.cuentaId(),
-                null,
-                request.cantidad(),
-                correlationId,
-                () -> List.of(cuentaServiceClient.retirar(
-                        request.cuentaId(),
-                        new CuentaOperacionRequestDTO(request.cantidad())
-                ))
+                new CuentaOperacionRequestDTO(request.cantidad())
+        );
+        MovimientoResponseDTO movimiento = guardarMovimiento(cuenta, TipoMovimiento.RETIRO, request.cantidad());
+
+        return new OperacionResponseDTO(
+                "RETIRO",
+                "Retiro realizado correctamente",
+                List.of(movimiento)
         );
     }
 
-    @Transactional(noRollbackFor = NovaBankException.class)
-    public OperacionResponseDTO transferir(
-            TransferenciaRequestDTO request,
-            String idempotencyKey,
-            String correlationId
-    ) {
-        String normalizedKey = normalizeIdempotencyKey(idempotencyKey);
-        String requestHash = requestHash(
-                TipoOperacion.TRANSFERENCIA,
+    @Transactional
+    public OperacionResponseDTO transferir(TransferenciaRequestDTO request) {
+        List<CuentaResponseDTO> cuentas = cuentaServiceClient.transferir(new TransferenciaInternaRequestDTO(
                 request.cuentaOrigenId(),
                 request.cuentaDestinoId(),
                 request.cantidad()
+        ));
+        CuentaResponseDTO cuentaOrigen = encontrarCuenta(cuentas, request.cuentaOrigenId());
+        CuentaResponseDTO cuentaDestino = encontrarCuenta(cuentas, request.cuentaDestinoId());
+        List<MovimientoResponseDTO> movimientos = List.of(
+                guardarMovimiento(cuentaOrigen, TipoMovimiento.TRANSFERENCIA_SALIENTE, request.cantidad()),
+                guardarMovimiento(cuentaDestino, TipoMovimiento.TRANSFERENCIA_ENTRANTE, request.cantidad())
         );
 
-        return ejecutarConIdempotencia(
-                normalizedKey,
-                requestHash,
-                TipoOperacion.TRANSFERENCIA,
-                request.cuentaOrigenId(),
-                request.cuentaDestinoId(),
-                request.cantidad(),
-                correlationId,
-                () -> cuentaServiceClient.transferir(new TransferenciaInternaRequestDTO(
-                        request.cuentaOrigenId(),
-                        request.cuentaDestinoId(),
-                        request.cantidad()
-                ))
+        return new OperacionResponseDTO(
+                "TRANSFERENCIA",
+                "Transferencia realizada correctamente",
+                movimientos
         );
     }
 
-    private OperacionResponseDTO ejecutarConIdempotencia(
-            String idempotencyKey,
-            String requestHash,
-            TipoOperacion tipoOperacion,
-            Long cuentaOrigen,
-            Long cuentaDestino,
-            BigDecimal importe,
-            String correlationId,
-            Supplier<List<MovimientoResponseDTO>> remoteCall
+    @Transactional(readOnly = true)
+    public List<MovimientoResponseDTO> listarMovimientos(Long cuentaId, LocalDate fechaInicio, LocalDate fechaFin) {
+        validarId(cuentaId);
+
+        if (fechaInicio == null && fechaFin == null) {
+            return movimientoRepository.findByCuentaIdOrderByFechaDesc(cuentaId)
+                    .stream()
+                    .map(movimientoMapper::toResponse)
+                    .toList();
+        }
+        if (fechaInicio == null || fechaFin == null) {
+            throw new IllegalArgumentException("Debe informar fechaInicio y fechaFin para filtrar por rango");
+        }
+        if (fechaInicio.isAfter(fechaFin)) {
+            throw new IllegalArgumentException("fechaInicio no puede ser posterior a fechaFin");
+        }
+
+        return movimientoRepository.findByCuentaIdAndFechaBetweenOrderByFechaDesc(
+                        cuentaId,
+                        fechaInicio.atStartOfDay(),
+                        fechaFin.atTime(LocalTime.MAX)
+                )
+                .stream()
+                .map(movimientoMapper::toResponse)
+                .toList();
+    }
+
+    private MovimientoResponseDTO guardarMovimiento(
+            CuentaResponseDTO cuenta,
+            TipoMovimiento tipo,
+            BigDecimal cantidad
     ) {
-        return operacionIdempotenteRepository.findByIdempotencyKey(idempotencyKey)
-                .map(existing -> resolveExisting(existing, requestHash))
-                .orElseGet(() -> executeNewOperation(
-                        idempotencyKey,
-                        requestHash,
-                        tipoOperacion,
-                        cuentaOrigen,
-                        cuentaDestino,
-                        importe,
-                        correlationId,
-                        remoteCall
-                ));
+        if (cuenta == null || cuenta.id() == null) {
+            throw new RemoteResourceNotFoundException("cuenta-service no devolvio datos de la cuenta");
+        }
+
+        Movimiento movimiento = new Movimiento();
+        movimiento.setCuentaId(cuenta.id());
+        movimiento.setNumeroCuenta(cuenta.numeroCuenta());
+        movimiento.setTipo(tipo);
+        movimiento.setCantidad(cantidad);
+
+        return movimientoMapper.toResponse(movimientoRepository.save(movimiento));
     }
 
-    private OperacionResponseDTO resolveExisting(OperacionIdempotente existing, String requestHash) {
-        if (!existing.getRequestHash().equals(requestHash)) {
-            throw new IdempotencyConflictException("La Idempotency-Key ya fue usada para otra operacion");
+    private CuentaResponseDTO encontrarCuenta(List<CuentaResponseDTO> cuentas, Long cuentaId) {
+        if (cuentas == null) {
+            throw new RemoteResourceNotFoundException("cuenta-service no devolvio datos de la transferencia");
         }
-        if (existing.getEstado() == EstadoOperacion.COMPLETADA) {
-            return deserializeResponse(existing.getResponseBody());
-        }
-        if (existing.getEstado() == EstadoOperacion.FALLIDA) {
-            throw new PreviousOperationFailedException(
-                    "La operacion asociada a esta Idempotency-Key fallo previamente: " + existing.getErrorMessage()
-            );
-        }
-        throw new OperationAlreadyInProgressException("La operacion asociada a esta Idempotency-Key esta en proceso");
+
+        return cuentas.stream()
+                .filter(cuenta -> cuentaId.equals(cuenta.id()))
+                .findFirst()
+                .orElseThrow(() -> new RemoteResourceNotFoundException("cuenta-service no devolvio la cuenta " + cuentaId));
     }
 
-    private OperacionResponseDTO executeNewOperation(
-            String idempotencyKey,
-            String requestHash,
-            TipoOperacion tipoOperacion,
-            Long cuentaOrigen,
-            Long cuentaDestino,
-            BigDecimal importe,
-            String correlationId,
-            Supplier<List<MovimientoResponseDTO>> remoteCall
-    ) {
-        OperacionIdempotente operation = new OperacionIdempotente();
-        operation.setIdempotencyKey(idempotencyKey);
-        operation.setRequestHash(requestHash);
-        operation.setTipoOperacion(tipoOperacion);
-        operation.setEstado(EstadoOperacion.EN_PROCESO);
-        operation.setCuentaOrigen(cuentaOrigen);
-        operation.setCuentaDestino(cuentaDestino);
-        operation.setImporte(importe);
-        operation.setCorrelationId(correlationId);
-
-        try {
-            operation = operacionIdempotenteRepository.saveAndFlush(operation);
-        } catch (DataIntegrityViolationException ex) {
-            throw new OperationAlreadyInProgressException("La Idempotency-Key ya esta siendo procesada");
-        }
-
-        try {
-            List<MovimientoResponseDTO> movimientos = remoteCall.get();
-            OperacionResponseDTO response = new OperacionResponseDTO(
-                    idempotencyKey,
-                    tipoOperacion,
-                    EstadoOperacion.COMPLETADA,
-                    movimientos
-            );
-            operation.setEstado(EstadoOperacion.COMPLETADA);
-            operation.setResponseBody(serializeResponse(response));
-            operacionIdempotenteRepository.save(operation);
-            return response;
-        } catch (NovaBankException ex) {
-            operation.setEstado(EstadoOperacion.FALLIDA);
-            operation.setErrorMessage(ex.getMessage());
-            operacionIdempotenteRepository.save(operation);
-            throw ex;
-        }
-    }
-
-    private String normalizeIdempotencyKey(String idempotencyKey) {
-        if (idempotencyKey == null || idempotencyKey.isBlank()) {
-            throw new ValidationException("La cabecera Idempotency-Key es obligatoria");
-        }
-        return idempotencyKey.trim();
-    }
-
-    private String requestHash(TipoOperacion tipoOperacion, Long cuentaOrigen, Long cuentaDestino, BigDecimal importe) {
-        String canonicalPayload = tipoOperacion + "|"
-                + cuentaOrigen + "|"
-                + (cuentaDestino == null ? "" : cuentaDestino) + "|"
-                + normalizeAmount(importe);
-
-        try {
-            MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            return HexFormat.of().formatHex(digest.digest(canonicalPayload.getBytes(StandardCharsets.UTF_8)));
-        } catch (NoSuchAlgorithmException ex) {
-            throw new IllegalStateException("SHA-256 no esta disponible", ex);
-        }
-    }
-
-    private String normalizeAmount(BigDecimal amount) {
-        return amount.stripTrailingZeros().toPlainString();
-    }
-
-    private String serializeResponse(OperacionResponseDTO response) {
-        try {
-            return objectMapper.writeValueAsString(response);
-        } catch (JsonProcessingException ex) {
-            throw new IllegalStateException("No se pudo serializar la respuesta de operacion", ex);
-        }
-    }
-
-    private OperacionResponseDTO deserializeResponse(String responseBody) {
-        try {
-            return objectMapper.readValue(responseBody, OperacionResponseDTO.class);
-        } catch (JsonProcessingException ex) {
-            throw new IllegalStateException("No se pudo recuperar la respuesta idempotente", ex);
+    private void validarId(Long cuentaId) {
+        if (cuentaId == null || cuentaId <= 0) {
+            throw new ValidationException("El id de la cuenta debe ser positivo");
         }
     }
 }

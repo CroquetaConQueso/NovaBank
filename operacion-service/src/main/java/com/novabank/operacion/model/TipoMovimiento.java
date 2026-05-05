@@ -1,4 +1,4 @@
-package com.novabank.cuenta.model;
+package com.novabank.operacion.model;
 
 public enum TipoMovimiento {
     DEPOSITO,

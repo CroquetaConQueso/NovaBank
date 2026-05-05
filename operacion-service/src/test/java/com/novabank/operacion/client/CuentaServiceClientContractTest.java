@@ -1,7 +1,7 @@
 package com.novabank.operacion.client;
 
 import com.novabank.operacion.dto.CuentaOperacionRequestDTO;
-import com.novabank.operacion.dto.MovimientoResponseDTO;
+import com.novabank.operacion.dto.CuentaResponseDTO;
 import com.novabank.operacion.dto.TransferenciaInternaRequestDTO;
 import com.novabank.operacion.exception.RemoteValidationException;
 import org.junit.jupiter.api.Test;
@@ -38,41 +38,41 @@ class CuentaServiceClientContractTest {
     private CuentaServiceClient cuentaServiceClient;
 
     @Test
-    void depositarLlamaEndpointInternoYDevuelveMovimiento() {
+    void depositarLlamaEndpointInternoYDevuelveCuentaActualizada() {
         stubFor(post(urlEqualTo("/internal/cuentas/10/depositos"))
                 .withRequestBody(equalToJson("""
                         {
                           "cantidad": 50.00
                         }
                         """, true, true))
-                .willReturn(okJson(movimientoJson("DEPOSITO"))));
+                .willReturn(okJson(cuentaJson(10L, "ES91210000000000000001", "150.00"))));
 
-        MovimientoResponseDTO response = cuentaServiceClient.depositar(
+        CuentaResponseDTO response = cuentaServiceClient.depositar(
                 10L,
                 new CuentaOperacionRequestDTO(new BigDecimal("50.00"))
         );
 
-        assertThat(response.tipo()).isEqualTo("DEPOSITO");
-        assertThat(response.cantidad()).isEqualByComparingTo("50.00");
+        assertThat(response.id()).isEqualTo(10L);
+        assertThat(response.saldo()).isEqualByComparingTo("150.00");
         verify(postRequestedFor(urlEqualTo("/internal/cuentas/10/depositos")));
     }
 
     @Test
-    void retirarLlamaEndpointInternoYDevuelveMovimiento() {
+    void retirarLlamaEndpointInternoYDevuelveCuentaActualizada() {
         stubFor(post(urlEqualTo("/internal/cuentas/10/retiros"))
-                .willReturn(okJson(movimientoJson("RETIRO"))));
+                .willReturn(okJson(cuentaJson(10L, "ES91210000000000000001", "75.00"))));
 
-        MovimientoResponseDTO response = cuentaServiceClient.retirar(
+        CuentaResponseDTO response = cuentaServiceClient.retirar(
                 10L,
                 new CuentaOperacionRequestDTO(new BigDecimal("25.00"))
         );
 
-        assertThat(response.tipo()).isEqualTo("RETIRO");
+        assertThat(response.saldo()).isEqualByComparingTo("75.00");
         verify(postRequestedFor(urlEqualTo("/internal/cuentas/10/retiros")));
     }
 
     @Test
-    void transferirUsaEndpointInternoUnicoYDevuelveDosMovimientos() {
+    void transferirUsaEndpointInternoUnicoYDevuelveDosCuentasActualizadas() {
         stubFor(post(urlEqualTo("/internal/cuentas/transferencias"))
                 .withRequestBody(equalToJson("""
                         {
@@ -84,31 +84,29 @@ class CuentaServiceClientContractTest {
                 .willReturn(okJson("""
                         [
                           {
-                            "id": 1,
-                            "cuentaId": 10,
+                            "id": 10,
                             "numeroCuenta": "ES91210000000000000001",
-                            "tipo": "TRANSFERENCIA_SALIENTE",
-                            "cantidad": 25.00,
-                            "fecha": "2026-01-15T10:30:00"
+                            "clienteId": 1,
+                            "saldo": 75.00,
+                            "fechaCreacion": "2026-01-15T10:30:00"
                           },
                           {
-                            "id": 2,
-                            "cuentaId": 11,
+                            "id": 11,
                             "numeroCuenta": "ES91210000000000000002",
-                            "tipo": "TRANSFERENCIA_ENTRANTE",
-                            "cantidad": 25.00,
-                            "fecha": "2026-01-15T10:30:01"
+                            "clienteId": 2,
+                            "saldo": 125.00,
+                            "fechaCreacion": "2026-01-15T10:30:01"
                           }
                         ]
                         """)));
 
-        List<MovimientoResponseDTO> response = cuentaServiceClient.transferir(
+        List<CuentaResponseDTO> response = cuentaServiceClient.transferir(
                 new TransferenciaInternaRequestDTO(10L, 11L, new BigDecimal("25.00"))
         );
 
         assertThat(response).hasSize(2);
-        assertThat(response.get(0).tipo()).isEqualTo("TRANSFERENCIA_SALIENTE");
-        assertThat(response.get(1).tipo()).isEqualTo("TRANSFERENCIA_ENTRANTE");
+        assertThat(response.get(0).id()).isEqualTo(10L);
+        assertThat(response.get(1).id()).isEqualTo(11L);
         verify(postRequestedFor(urlEqualTo("/internal/cuentas/transferencias")));
     }
 
@@ -136,16 +134,15 @@ class CuentaServiceClientContractTest {
         verify(postRequestedFor(urlEqualTo("/internal/cuentas/10/retiros")));
     }
 
-    private String movimientoJson(String tipo) {
+    private String cuentaJson(Long id, String numeroCuenta, String saldo) {
         return """
                 {
-                  "id": 1,
-                  "cuentaId": 10,
-                  "numeroCuenta": "ES91210000000000000001",
-                  "tipo": "%s",
-                  "cantidad": 50.00,
-                  "fecha": "2026-01-15T10:30:00"
+                  "id": %d,
+                  "numeroCuenta": "%s",
+                  "clienteId": 1,
+                  "saldo": %s,
+                  "fechaCreacion": "2026-01-15T10:30:00"
                 }
-                """.formatted(tipo);
+                """.formatted(id, numeroCuenta, saldo);
     }
 }

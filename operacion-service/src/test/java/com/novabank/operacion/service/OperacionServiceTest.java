@@ -1,30 +1,24 @@
 package com.novabank.operacion.service;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.novabank.operacion.client.CuentaServiceClient;
 import com.novabank.operacion.dto.CuentaOperacionRequestDTO;
-import com.novabank.operacion.dto.MovimientoResponseDTO;
+import com.novabank.operacion.dto.CuentaResponseDTO;
 import com.novabank.operacion.dto.OperacionRequestDTO;
 import com.novabank.operacion.dto.OperacionResponseDTO;
 import com.novabank.operacion.dto.TransferenciaInternaRequestDTO;
 import com.novabank.operacion.dto.TransferenciaRequestDTO;
-import com.novabank.operacion.exception.IdempotencyConflictException;
 import com.novabank.operacion.exception.RemoteServiceException;
 import com.novabank.operacion.exception.RemoteValidationException;
-import com.novabank.operacion.exception.ValidationException;
-import com.novabank.operacion.model.EstadoOperacion;
-import com.novabank.operacion.model.OperacionIdempotente;
-import com.novabank.operacion.model.TipoOperacion;
-import com.novabank.operacion.repository.OperacionIdempotenteRepository;
+import com.novabank.operacion.mapper.MovimientoMapper;
+import com.novabank.operacion.model.Movimiento;
+import com.novabank.operacion.repository.MovimientoRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.mockito.ArgumentCaptor;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Optional;
+import java.util.concurrent.atomic.AtomicLong;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -38,225 +32,134 @@ import static org.mockito.Mockito.when;
 class OperacionServiceTest {
 
     private CuentaServiceClient cuentaServiceClient;
-    private OperacionIdempotenteRepository repository;
+    private MovimientoRepository movimientoRepository;
     private OperacionService service;
 
     @BeforeEach
     void setUp() {
         cuentaServiceClient = mock(CuentaServiceClient.class);
-        repository = mock(OperacionIdempotenteRepository.class);
-        ObjectMapper objectMapper = new ObjectMapper().registerModule(new JavaTimeModule());
-        service = new OperacionService(cuentaServiceClient, repository, objectMapper);
+        movimientoRepository = mock(MovimientoRepository.class);
+        service = new OperacionService(cuentaServiceClient, movimientoRepository, new MovimientoMapper());
     }
 
     @Test
-    void depositoCorrectoRegistraIdempotenciaYDelegaEnCuentaService() {
-        when(repository.findByIdempotencyKey("dep-1")).thenReturn(Optional.empty());
-        when(repository.saveAndFlush(any(OperacionIdempotente.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        when(repository.save(any(OperacionIdempotente.class))).thenAnswer(invocation -> invocation.getArgument(0));
+    void depositoCorrectoActualizaSaldoYGuardaMovimiento() {
         when(cuentaServiceClient.depositar(eq(10L), any(CuentaOperacionRequestDTO.class)))
-                .thenReturn(movimiento("DEPOSITO"));
+                .thenReturn(cuenta(10L, "ES91210000000000000001"));
+        when(movimientoRepository.save(any(Movimiento.class))).thenAnswer(invocation -> {
+            Movimiento movimiento = invocation.getArgument(0);
+            movimiento.setId(1L);
+            movimiento.setFecha(LocalDateTime.now());
+            return movimiento;
+        });
 
         OperacionResponseDTO response = service.depositar(
-                new OperacionRequestDTO(10L, new BigDecimal("50.00")),
-                "dep-1",
-                "corr-1"
+                new OperacionRequestDTO(10L, new BigDecimal("50.00"))
         );
 
-        assertThat(response.estado()).isEqualTo(EstadoOperacion.COMPLETADA);
+        assertThat(response.tipoOperacion()).isEqualTo("DEPOSITO");
+        assertThat(response.mensaje()).isEqualTo("Deposito realizado correctamente");
         assertThat(response.movimientos()).hasSize(1);
+        assertThat(response.movimientos().get(0).tipo()).isEqualTo("DEPOSITO");
         verify(cuentaServiceClient).depositar(eq(10L), any(CuentaOperacionRequestDTO.class));
-        verify(repository).saveAndFlush(any(OperacionIdempotente.class));
+        verify(movimientoRepository).save(any(Movimiento.class));
     }
 
     @Test
-    void retiroCorrectoDelegaEnCuentaService() {
-        when(repository.findByIdempotencyKey("ret-1")).thenReturn(Optional.empty());
-        when(repository.saveAndFlush(any(OperacionIdempotente.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        when(repository.save(any(OperacionIdempotente.class))).thenAnswer(invocation -> invocation.getArgument(0));
+    void retiroCorrectoActualizaSaldoYGuardaMovimiento() {
         when(cuentaServiceClient.retirar(eq(10L), any(CuentaOperacionRequestDTO.class)))
-                .thenReturn(movimiento("RETIRO"));
+                .thenReturn(cuenta(10L, "ES91210000000000000001"));
+        when(movimientoRepository.save(any(Movimiento.class))).thenAnswer(invocation -> {
+            Movimiento movimiento = invocation.getArgument(0);
+            movimiento.setId(2L);
+            movimiento.setFecha(LocalDateTime.now());
+            return movimiento;
+        });
 
         OperacionResponseDTO response = service.retirar(
-                new OperacionRequestDTO(10L, new BigDecimal("25.00")),
-                "ret-1",
-                "corr-1"
+                new OperacionRequestDTO(10L, new BigDecimal("25.00"))
         );
 
-        assertThat(response.tipoOperacion()).isEqualTo(TipoOperacion.RETIRO);
+        assertThat(response.tipoOperacion()).isEqualTo("RETIRO");
+        assertThat(response.movimientos()).hasSize(1);
+        assertThat(response.movimientos().get(0).tipo()).isEqualTo("RETIRO");
         verify(cuentaServiceClient).retirar(eq(10L), any(CuentaOperacionRequestDTO.class));
+        verify(movimientoRepository).save(any(Movimiento.class));
     }
 
     @Test
-    void transferenciaCorrectaUsaEndpointInternoUnico() {
-        when(repository.findByIdempotencyKey("tra-1")).thenReturn(Optional.empty());
-        when(repository.saveAndFlush(any(OperacionIdempotente.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        when(repository.save(any(OperacionIdempotente.class))).thenAnswer(invocation -> invocation.getArgument(0));
+    void transferenciaCorrectaUsaEndpointInternoUnicoYGuardaDosMovimientos() {
         when(cuentaServiceClient.transferir(any(TransferenciaInternaRequestDTO.class)))
-                .thenReturn(List.of(movimiento("TRANSFERENCIA_SALIENTE"), movimiento("TRANSFERENCIA_ENTRANTE")));
+                .thenReturn(List.of(
+                        cuenta(10L, "ES91210000000000000001"),
+                        cuenta(11L, "ES91210000000000000002")
+                ));
+        AtomicLong ids = new AtomicLong(10L);
+        when(movimientoRepository.save(any(Movimiento.class))).thenAnswer(invocation -> {
+            Movimiento movimiento = invocation.getArgument(0);
+            movimiento.setId(ids.getAndIncrement());
+            movimiento.setFecha(LocalDateTime.now());
+            return movimiento;
+        });
 
         OperacionResponseDTO response = service.transferir(
-                new TransferenciaRequestDTO(10L, 11L, new BigDecimal("25.00")),
-                "tra-1",
-                "corr-1"
+                new TransferenciaRequestDTO(10L, 11L, new BigDecimal("25.00"))
         );
 
+        assertThat(response.tipoOperacion()).isEqualTo("TRANSFERENCIA");
         assertThat(response.movimientos()).hasSize(2);
+        assertThat(response.movimientos().get(0).tipo()).isEqualTo("TRANSFERENCIA_SALIENTE");
+        assertThat(response.movimientos().get(1).tipo()).isEqualTo("TRANSFERENCIA_ENTRANTE");
         verify(cuentaServiceClient).transferir(any(TransferenciaInternaRequestDTO.class));
         verify(cuentaServiceClient, never()).retirar(any(), any());
         verify(cuentaServiceClient, never()).depositar(any(), any());
     }
 
     @Test
-    void mismaKeyYMayorRequestDevuelveRespuestaGuardadaSinRepetirOperacion() {
-        when(repository.findByIdempotencyKey("dep-2")).thenReturn(Optional.empty());
-        when(repository.saveAndFlush(any(OperacionIdempotente.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        when(repository.save(any(OperacionIdempotente.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        when(cuentaServiceClient.depositar(eq(10L), any(CuentaOperacionRequestDTO.class)))
-                .thenReturn(movimiento("DEPOSITO"));
-
-        service.depositar(new OperacionRequestDTO(10L, new BigDecimal("50.00")), "dep-2", "corr-1");
-
-        ArgumentCaptor<OperacionIdempotente> captor = ArgumentCaptor.forClass(OperacionIdempotente.class);
-        verify(repository, org.mockito.Mockito.atLeastOnce()).save(captor.capture());
-        OperacionIdempotente completed = captor.getValue();
-
-        when(repository.findByIdempotencyKey("dep-2")).thenReturn(Optional.of(completed));
-
-        OperacionResponseDTO replay = service.depositar(
-                new OperacionRequestDTO(10L, new BigDecimal("50.0")),
-                "dep-2",
-                "corr-2"
-        );
-
-        assertThat(replay.estado()).isEqualTo(EstadoOperacion.COMPLETADA);
-        verify(cuentaServiceClient, org.mockito.Mockito.times(1))
-                .depositar(eq(10L), any(CuentaOperacionRequestDTO.class));
-    }
-
-    @Test
-    void mismaKeyConRequestDistintoDevuelveConflicto() {
-        OperacionIdempotente existing = new OperacionIdempotente();
-        existing.setIdempotencyKey("key-conflict");
-        existing.setRequestHash("hash-distinto");
-        existing.setTipoOperacion(TipoOperacion.DEPOSITO);
-        existing.setEstado(EstadoOperacion.COMPLETADA);
-        existing.setImporte(new BigDecimal("10.00"));
-        existing.setCuentaOrigen(10L);
-
-        when(repository.findByIdempotencyKey("key-conflict")).thenReturn(Optional.of(existing));
-
-        assertThatThrownBy(() -> service.depositar(
-                new OperacionRequestDTO(10L, new BigDecimal("50.00")),
-                "key-conflict",
-                "corr-1"
-        ))
-                .isInstanceOf(IdempotencyConflictException.class);
-
-        verify(cuentaServiceClient, never()).depositar(any(), any());
-    }
-
-    @Test
-    void errorRemotoQuedaPersistidoComoFallido() {
-        when(repository.findByIdempotencyKey("ret-2")).thenReturn(Optional.empty());
-        when(repository.saveAndFlush(any(OperacionIdempotente.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        when(repository.save(any(OperacionIdempotente.class))).thenAnswer(invocation -> invocation.getArgument(0));
+    void saldoInsuficientePropagaErrorControladoYNoGuardaMovimiento() {
         when(cuentaServiceClient.retirar(eq(10L), any(CuentaOperacionRequestDTO.class)))
                 .thenThrow(new RemoteValidationException("Saldo insuficiente"));
 
         assertThatThrownBy(() -> service.retirar(
-                new OperacionRequestDTO(10L, new BigDecimal("999.00")),
-                "ret-2",
-                "corr-1"
+                new OperacionRequestDTO(10L, new BigDecimal("999.00"))
         ))
-                .isInstanceOf(RemoteValidationException.class);
+                .isInstanceOf(RemoteValidationException.class)
+                .hasMessageContaining("Saldo insuficiente");
 
-        ArgumentCaptor<OperacionIdempotente> captor = ArgumentCaptor.forClass(OperacionIdempotente.class);
-        verify(repository, org.mockito.Mockito.atLeastOnce()).save(captor.capture());
-        assertThat(captor.getValue().getEstado()).isEqualTo(EstadoOperacion.FALLIDA);
-        assertThat(captor.getValue().getErrorMessage()).contains("Saldo insuficiente");
+        verify(movimientoRepository, never()).save(any(Movimiento.class));
     }
 
     @Test
-    void cuentaServiceNoDisponibleEnDepositoQuedaPersistidoComoFallido() {
-        when(repository.findByIdempotencyKey("dep-down")).thenReturn(Optional.empty());
-        when(repository.saveAndFlush(any(OperacionIdempotente.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        when(repository.save(any(OperacionIdempotente.class))).thenAnswer(invocation -> invocation.getArgument(0));
+    void cuentaServiceNoDisponibleEnDepositoPropagaServicioNoDisponible() {
         when(cuentaServiceClient.depositar(eq(10L), any(CuentaOperacionRequestDTO.class)))
                 .thenThrow(new RemoteServiceException("cuenta-service no esta disponible"));
 
         assertThatThrownBy(() -> service.depositar(
-                new OperacionRequestDTO(10L, new BigDecimal("50.00")),
-                "dep-down",
-                "corr-1"
+                new OperacionRequestDTO(10L, new BigDecimal("50.00"))
         ))
-                .isInstanceOf(RemoteServiceException.class);
-
-        assertOperationMarkedAsFailed("cuenta-service no esta disponible");
+                .isInstanceOf(RemoteServiceException.class)
+                .hasMessageContaining("cuenta-service no esta disponible");
     }
 
     @Test
-    void cuentaServiceNoDisponibleEnRetiroQuedaPersistidoComoFallido() {
-        when(repository.findByIdempotencyKey("ret-down")).thenReturn(Optional.empty());
-        when(repository.saveAndFlush(any(OperacionIdempotente.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        when(repository.save(any(OperacionIdempotente.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        when(cuentaServiceClient.retirar(eq(10L), any(CuentaOperacionRequestDTO.class)))
-                .thenThrow(new RemoteServiceException("cuenta-service no esta disponible"));
-
-        assertThatThrownBy(() -> service.retirar(
-                new OperacionRequestDTO(10L, new BigDecimal("50.00")),
-                "ret-down",
-                "corr-1"
-        ))
-                .isInstanceOf(RemoteServiceException.class);
-
-        assertOperationMarkedAsFailed("cuenta-service no esta disponible");
-    }
-
-    @Test
-    void cuentaServiceNoDisponibleEnTransferenciaQuedaPersistidoComoFallido() {
-        when(repository.findByIdempotencyKey("tra-down")).thenReturn(Optional.empty());
-        when(repository.saveAndFlush(any(OperacionIdempotente.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        when(repository.save(any(OperacionIdempotente.class))).thenAnswer(invocation -> invocation.getArgument(0));
+    void cuentaServiceNoDisponibleEnTransferenciaPropagaServicioNoDisponible() {
         when(cuentaServiceClient.transferir(any(TransferenciaInternaRequestDTO.class)))
                 .thenThrow(new RemoteServiceException("cuenta-service no esta disponible"));
 
         assertThatThrownBy(() -> service.transferir(
-                new TransferenciaRequestDTO(10L, 11L, new BigDecimal("50.00")),
-                "tra-down",
-                "corr-1"
+                new TransferenciaRequestDTO(10L, 11L, new BigDecimal("50.00"))
         ))
-                .isInstanceOf(RemoteServiceException.class);
-
-        assertOperationMarkedAsFailed("cuenta-service no esta disponible");
+                .isInstanceOf(RemoteServiceException.class)
+                .hasMessageContaining("cuenta-service no esta disponible");
     }
 
-    @Test
-    void idempotencyKeyEsObligatoria() {
-        assertThatThrownBy(() -> service.depositar(
-                new OperacionRequestDTO(10L, new BigDecimal("50.00")),
-                " ",
-                "corr-1"
-        ))
-                .isInstanceOf(ValidationException.class)
-                .hasMessage("La cabecera Idempotency-Key es obligatoria");
-    }
-
-    private MovimientoResponseDTO movimiento(String tipo) {
-        return new MovimientoResponseDTO(
+    private CuentaResponseDTO cuenta(Long id, String numeroCuenta) {
+        return new CuentaResponseDTO(
+                id,
+                numeroCuenta,
                 1L,
-                10L,
-                "ES91210000000000000001",
-                tipo,
-                new BigDecimal("50.00"),
+                new BigDecimal("100.00"),
                 LocalDateTime.now()
         );
-    }
-
-    private void assertOperationMarkedAsFailed(String errorMessage) {
-        ArgumentCaptor<OperacionIdempotente> captor = ArgumentCaptor.forClass(OperacionIdempotente.class);
-        verify(repository, org.mockito.Mockito.atLeastOnce()).save(captor.capture());
-        assertThat(captor.getValue().getEstado()).isEqualTo(EstadoOperacion.FALLIDA);
-        assertThat(captor.getValue().getErrorMessage()).contains(errorMessage);
     }
 }

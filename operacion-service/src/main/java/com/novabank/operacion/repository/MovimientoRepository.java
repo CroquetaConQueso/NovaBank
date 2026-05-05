@@ -1,6 +1,6 @@
-package com.novabank.cuenta.repository;
+package com.novabank.operacion.repository;
 
-import com.novabank.cuenta.model.Movimiento;
+import com.novabank.operacion.model.Movimiento;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.time.LocalDateTime;
@@ -12,7 +12,7 @@ public interface MovimientoRepository extends JpaRepository<Movimiento, Long> {
 
     List<Movimiento> findByCuentaIdAndFechaBetweenOrderByFechaDesc(
             Long cuentaId,
-            LocalDateTime inicio,
-            LocalDateTime fin
+            LocalDateTime fechaInicio,
+            LocalDateTime fechaFin
     );
 }

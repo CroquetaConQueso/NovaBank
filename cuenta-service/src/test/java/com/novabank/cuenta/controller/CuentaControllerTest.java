@@ -4,14 +4,12 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.novabank.cuenta.dto.CuentaCreateRequestDTO;
 import com.novabank.cuenta.dto.CuentaOperacionRequestDTO;
 import com.novabank.cuenta.dto.CuentaResponseDTO;
-import com.novabank.cuenta.dto.MovimientoResponseDTO;
 import com.novabank.cuenta.dto.SaldoResponseDTO;
 import com.novabank.cuenta.dto.TransferenciaInternaRequestDTO;
 import com.novabank.cuenta.exception.GlobalExceptionHandler;
 import com.novabank.cuenta.exception.InsufficientBalanceException;
 import com.novabank.cuenta.exception.RemoteServiceException;
 import com.novabank.cuenta.exception.ResourceNotFoundException;
-import com.novabank.cuenta.model.TipoMovimiento;
 import com.novabank.cuenta.service.CuentaService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -88,24 +86,15 @@ class CuentaControllerTest {
     }
 
     @Test
-    void listarMovimientosDevuelveArray() throws Exception {
-        when(cuentaService.listarMovimientos(10L, null, null)).thenReturn(List.of(movimientoResponse()));
-
-        mockMvc.perform(get("/api/cuentas/10/movimientos"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].tipo").value("DEPOSITO"));
-    }
-
-    @Test
-    void depositarInternoDevuelveMovimiento() throws Exception {
+    void depositarInternoDevuelveCuentaActualizada() throws Exception {
         when(cuentaService.depositar(any(Long.class), any(CuentaOperacionRequestDTO.class)))
-                .thenReturn(movimientoResponse());
+                .thenReturn(cuentaResponse("100.00"));
 
         mockMvc.perform(post("/internal/cuentas/10/depositos")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new CuentaOperacionRequestDTO(new BigDecimal("50.00")))))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.tipo").value("DEPOSITO"));
+                .andExpect(jsonPath("$.saldo").value(100.00));
     }
 
     @Test
@@ -123,11 +112,11 @@ class CuentaControllerTest {
     }
 
     @Test
-    void transferirInternoDevuelveDosMovimientos() throws Exception {
+    void transferirInternoDevuelveDosCuentasActualizadas() throws Exception {
         when(cuentaService.transferir(any(TransferenciaInternaRequestDTO.class)))
                 .thenReturn(List.of(
-                        movimiento(1L, TipoMovimiento.TRANSFERENCIA_SALIENTE),
-                        movimiento(2L, TipoMovimiento.TRANSFERENCIA_ENTRANTE)
+                        cuentaResponse(1L, "ES91210000000000000001", "25.00"),
+                        cuentaResponse(2L, "ES91210000000000000002", "75.00")
                 ));
 
         mockMvc.perform(post("/internal/cuentas/transferencias")
@@ -136,8 +125,8 @@ class CuentaControllerTest {
                                 new TransferenciaInternaRequestDTO(1L, 2L, new BigDecimal("25.00"))
                         )))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].tipo").value("TRANSFERENCIA_SALIENTE"))
-                .andExpect(jsonPath("$[1].tipo").value("TRANSFERENCIA_ENTRANTE"));
+                .andExpect(jsonPath("$[0].id").value(1))
+                .andExpect(jsonPath("$[1].id").value(2));
     }
 
     @Test
@@ -165,26 +154,19 @@ class CuentaControllerTest {
     }
 
     private CuentaResponseDTO cuentaResponse() {
+        return cuentaResponse("50.00");
+    }
+
+    private CuentaResponseDTO cuentaResponse(String saldo) {
+        return cuentaResponse(10L, "ES91210000000000000001", saldo);
+    }
+
+    private CuentaResponseDTO cuentaResponse(Long id, String numeroCuenta, String saldo) {
         return new CuentaResponseDTO(
-                10L,
-                "ES91210000000000000001",
-                1L,
-                new BigDecimal("50.00"),
-                LocalDateTime.now()
-        );
-    }
-
-    private MovimientoResponseDTO movimientoResponse() {
-        return movimiento(20L, TipoMovimiento.DEPOSITO);
-    }
-
-    private MovimientoResponseDTO movimiento(Long id, TipoMovimiento tipo) {
-        return new MovimientoResponseDTO(
                 id,
-                10L,
-                "ES91210000000000000001",
-                tipo,
-                new BigDecimal("50.00"),
+                numeroCuenta,
+                1L,
+                new BigDecimal(saldo),
                 LocalDateTime.now()
         );
     }

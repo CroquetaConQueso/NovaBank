@@ -2,7 +2,6 @@ package com.novabank.cuenta.exception;
 
 import com.novabank.cuenta.dto.ErrorResponseDTO;
 import jakarta.persistence.OptimisticLockException;
-import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
@@ -17,39 +16,33 @@ import java.util.Map;
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
-    private static final String CORRELATION_ID_HEADER = "X-Correlation-Id";
-
     @ExceptionHandler(ResourceNotFoundException.class)
-    public ResponseEntity<ErrorResponseDTO> handleNotFound(ResourceNotFoundException ex, HttpServletRequest request) {
+    public ResponseEntity<ErrorResponseDTO> handleNotFound(ResourceNotFoundException ex) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                .body(ErrorResponseDTO.of("RESOURCE_NOT_FOUND", ex.getMessage(), correlationId(request)));
+                .body(ErrorResponseDTO.of("RESOURCE_NOT_FOUND", ex.getMessage()));
     }
 
     @ExceptionHandler(InsufficientBalanceException.class)
-    public ResponseEntity<ErrorResponseDTO> handleInsufficientBalance(
-            InsufficientBalanceException ex,
-            HttpServletRequest request
-    ) {
+    public ResponseEntity<ErrorResponseDTO> handleInsufficientBalance(InsufficientBalanceException ex) {
         return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY)
-                .body(ErrorResponseDTO.of("INSUFFICIENT_BALANCE", ex.getMessage(), correlationId(request)));
+                .body(ErrorResponseDTO.of("INSUFFICIENT_BALANCE", ex.getMessage()));
     }
 
     @ExceptionHandler(RemoteServiceException.class)
-    public ResponseEntity<ErrorResponseDTO> handleRemoteService(RemoteServiceException ex, HttpServletRequest request) {
+    public ResponseEntity<ErrorResponseDTO> handleRemoteService(RemoteServiceException ex) {
         return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
-                .body(ErrorResponseDTO.of("CLIENTE_SERVICE_UNAVAILABLE", ex.getMessage(), correlationId(request)));
+                .body(ErrorResponseDTO.of("CLIENTE_SERVICE_UNAVAILABLE", ex.getMessage()));
     }
 
     @ExceptionHandler({
             ObjectOptimisticLockingFailureException.class,
             OptimisticLockException.class
     })
-    public ResponseEntity<ErrorResponseDTO> handleOptimisticLocking(Exception ex, HttpServletRequest request) {
+    public ResponseEntity<ErrorResponseDTO> handleOptimisticLocking(Exception ex) {
         return ResponseEntity.status(HttpStatus.CONFLICT)
                 .body(ErrorResponseDTO.of(
                         "CONCURRENT_MODIFICATION",
-                        "La cuenta fue modificada por otra operacion. Vuelve a intentarlo.",
-                        correlationId(request)
+                        "La cuenta fue modificada por otra operacion. Vuelve a intentarlo."
                 ));
     }
 
@@ -57,16 +50,13 @@ public class GlobalExceptionHandler {
             IllegalArgumentException.class,
             ValidationException.class
     })
-    public ResponseEntity<ErrorResponseDTO> handleBadRequest(RuntimeException ex, HttpServletRequest request) {
+    public ResponseEntity<ErrorResponseDTO> handleBadRequest(RuntimeException ex) {
         return ResponseEntity.badRequest()
-                .body(ErrorResponseDTO.of("BAD_REQUEST", ex.getMessage(), correlationId(request)));
+                .body(ErrorResponseDTO.of("BAD_REQUEST", ex.getMessage()));
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
-    public ResponseEntity<ErrorResponseDTO> handleValidation(
-            MethodArgumentNotValidException ex,
-            HttpServletRequest request
-    ) {
+    public ResponseEntity<ErrorResponseDTO> handleValidation(MethodArgumentNotValidException ex) {
         Map<String, String> fieldErrors = new LinkedHashMap<>();
 
         for (FieldError error : ex.getBindingResult().getFieldErrors()) {
@@ -77,22 +67,16 @@ public class GlobalExceptionHandler {
                 .body(ErrorResponseDTO.withFieldErrors(
                         "VALIDATION_ERROR",
                         "La peticion contiene campos invalidos",
-                        correlationId(request),
                         fieldErrors
                 ));
     }
 
     @ExceptionHandler(Exception.class)
-    public ResponseEntity<ErrorResponseDTO> handleGeneric(Exception ex, HttpServletRequest request) {
+    public ResponseEntity<ErrorResponseDTO> handleGeneric(Exception ex) {
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(ErrorResponseDTO.of(
                         "INTERNAL_SERVER_ERROR",
-                        "Se ha producido un error inesperado",
-                        correlationId(request)
+                        "Se ha producido un error inesperado"
                 ));
-    }
-
-    private String correlationId(HttpServletRequest request) {
-        return request.getHeader(CORRELATION_ID_HEADER);
     }
 }

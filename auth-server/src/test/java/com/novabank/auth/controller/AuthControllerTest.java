@@ -63,12 +63,11 @@ class AuthControllerTest {
                 .thenThrow(new DuplicateUserException("Ya existe un usuario con ese username"));
 
         mockMvc.perform(post("/api/auth/register")
-                        .header("X-Correlation-Id", "corr-auth")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new RegisterRequestDTO("ana", "password123"))))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("CONFLICT"))
-                .andExpect(jsonPath("$.correlationId").value("corr-auth"));
+                .andExpect(jsonPath("$.service").value("auth-server"));
     }
 
     @Test

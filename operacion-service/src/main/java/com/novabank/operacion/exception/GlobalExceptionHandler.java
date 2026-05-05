@@ -51,24 +51,6 @@ public class GlobalExceptionHandler {
     }
 
     @ExceptionHandler({
-            IdempotencyConflictException.class,
-            OperationAlreadyInProgressException.class
-    })
-    public ResponseEntity<ErrorResponseDTO> handleIdempotencyConflict(NovaBankException ex, HttpServletRequest request) {
-        return ResponseEntity.status(HttpStatus.CONFLICT)
-                .body(ErrorResponseDTO.of("IDEMPOTENCY_CONFLICT", ex.getMessage(), correlationId(request)));
-    }
-
-    @ExceptionHandler(PreviousOperationFailedException.class)
-    public ResponseEntity<ErrorResponseDTO> handlePreviousFailure(
-            PreviousOperationFailedException ex,
-            HttpServletRequest request
-    ) {
-        return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY)
-                .body(ErrorResponseDTO.of("PREVIOUS_OPERATION_FAILED", ex.getMessage(), correlationId(request)));
-    }
-
-    @ExceptionHandler({
             IllegalArgumentException.class,
             ValidationException.class
     })

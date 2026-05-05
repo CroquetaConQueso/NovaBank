@@ -48,7 +48,8 @@ class JwtAuthenticationGatewayFilterTest {
 
         assertThat(chainCalled).isFalse();
         assertThat(exchange.getResponse().getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
-        assertThat(exchange.getResponse().getBodyAsString().block()).contains("UNAUTHORIZED", "corr-1");
+        assertThat(exchange.getResponse().getBodyAsString().block())
+                .contains("UNAUTHORIZED", "api-gateway");
     }
 
     @Test
@@ -62,7 +63,8 @@ class JwtAuthenticationGatewayFilterTest {
 
         assertThat(chainCalled).isFalse();
         assertThat(exchange.getResponse().getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
-        assertThat(exchange.getResponse().getBodyAsString().block()).contains("INVALID_TOKEN", "corr-1");
+        assertThat(exchange.getResponse().getBodyAsString().block())
+                .contains("INVALID_TOKEN", "api-gateway");
     }
 
     @Test
@@ -89,18 +91,16 @@ class JwtAuthenticationGatewayFilterTest {
 
         assertThat(chainCalled).isFalse();
         assertThat(exchange.getResponse().getStatusCode()).isEqualTo(HttpStatus.SERVICE_UNAVAILABLE);
-        assertThat(exchange.getResponse().getBodyAsString().block()).contains("AUTH_SERVICE_UNAVAILABLE", "corr-1");
+        assertThat(exchange.getResponse().getBodyAsString().block())
+                .contains("AUTH_SERVICE_UNAVAILABLE", "api-gateway");
     }
 
     private MockServerWebExchange exchange(String path, String authorization) {
-        MockServerHttpRequest.BaseBuilder<?> builder = MockServerHttpRequest.get(path)
-                .header(CorrelationIdFilter.CORRELATION_ID_HEADER, "corr-1");
+        MockServerHttpRequest.BaseBuilder<?> builder = MockServerHttpRequest.get(path);
         if (authorization != null) {
             builder.header(HttpHeaders.AUTHORIZATION, authorization);
         }
-        MockServerWebExchange exchange = MockServerWebExchange.from(builder);
-        exchange.getAttributes().put(CorrelationIdFilter.CORRELATION_ID_ATTRIBUTE, "corr-1");
-        return exchange;
+        return MockServerWebExchange.from(builder);
     }
 
     private GatewayFilterChain chain(AtomicBoolean called) {

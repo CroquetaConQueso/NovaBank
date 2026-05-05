@@ -34,15 +34,13 @@ public class JwtAuthenticationGatewayFilter implements GlobalFilter, Ordered {
             return chain.filter(exchange);
         }
 
-        String correlationId = correlationId(exchange);
         String authorization = exchange.getRequest().getHeaders().getFirst(HttpHeaders.AUTHORIZATION);
         if (authorization == null || !authorization.startsWith(BEARER_PREFIX) || authorization.length() <= BEARER_PREFIX.length()) {
             return errorWriter.write(
                     exchange,
                     HttpStatus.UNAUTHORIZED,
                     "UNAUTHORIZED",
-                    "Authorization Bearer token obligatorio",
-                    correlationId
+                    "Authorization Bearer token obligatorio"
             );
         }
 
@@ -52,27 +50,24 @@ public class JwtAuthenticationGatewayFilter implements GlobalFilter, Ordered {
                     exchange,
                     HttpStatus.UNAUTHORIZED,
                     "UNAUTHORIZED",
-                    "Authorization Bearer token obligatorio",
-                    correlationId
+                    "Authorization Bearer token obligatorio"
             );
         }
 
         return authValidationClient.validate(token)
-                .flatMap(response -> handleValidationResponse(exchange, chain, response, correlationId))
+                .flatMap(response -> handleValidationResponse(exchange, chain, response))
                 .onErrorResume(ex -> errorWriter.write(
                         exchange,
                         HttpStatus.SERVICE_UNAVAILABLE,
                         "AUTH_SERVICE_UNAVAILABLE",
-                        "auth-server no esta disponible para validar el token",
-                        correlationId
+                        "auth-server no esta disponible para validar el token"
                 ));
     }
 
     private Mono<Void> handleValidationResponse(
             ServerWebExchange exchange,
             GatewayFilterChain chain,
-            ValidateTokenResponseDTO response,
-            String correlationId
+            ValidateTokenResponseDTO response
     ) {
         if (response != null && response.valido()) {
             return chain.filter(exchange);
@@ -82,8 +77,7 @@ public class JwtAuthenticationGatewayFilter implements GlobalFilter, Ordered {
                 exchange,
                 HttpStatus.UNAUTHORIZED,
                 "INVALID_TOKEN",
-                "Token invalido o expirado",
-                correlationId
+                "Token invalido o expirado"
         );
     }
 
@@ -102,14 +96,6 @@ public class JwtAuthenticationGatewayFilter implements GlobalFilter, Ordered {
                 || path.equals("/api/cuentas")
                 || path.startsWith("/api/operaciones/")
                 || path.equals("/api/operaciones");
-    }
-
-    private String correlationId(ServerWebExchange exchange) {
-        Object attribute = exchange.getAttribute(CorrelationIdFilter.CORRELATION_ID_ATTRIBUTE);
-        if (attribute instanceof String value && !value.isBlank()) {
-            return value;
-        }
-        return exchange.getRequest().getHeaders().getFirst(CorrelationIdFilter.CORRELATION_ID_HEADER);
     }
 
     @Override

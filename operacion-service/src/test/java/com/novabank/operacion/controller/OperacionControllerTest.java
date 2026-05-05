@@ -48,7 +48,6 @@ class OperacionControllerTest {
                 .thenReturn(response("DEPOSITO"));
 
         mockMvc.perform(post("/api/operaciones/deposito")
-                        .header("X-Correlation-Id", "corr-1")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(
                                 new OperacionRequestDTO(10L, new BigDecimal("50.00"))
@@ -102,14 +101,13 @@ class OperacionControllerTest {
                 .thenThrow(new RemoteServiceException("cuenta-service no esta disponible"));
 
         mockMvc.perform(post("/api/operaciones/deposito")
-                        .header("X-Correlation-Id", "corr-503")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(
                                 new OperacionRequestDTO(10L, new BigDecimal("50.00"))
                         )))
                 .andExpect(status().isServiceUnavailable())
                 .andExpect(jsonPath("$.code").value("CUENTA_SERVICE_UNAVAILABLE"))
-                .andExpect(jsonPath("$.correlationId").value("corr-503"));
+                .andExpect(jsonPath("$.service").value("operacion-service"));
     }
 
     private OperacionResponseDTO response(String tipoOperacion) {

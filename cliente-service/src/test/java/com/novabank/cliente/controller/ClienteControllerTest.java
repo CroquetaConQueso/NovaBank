@@ -90,14 +90,14 @@ class ClienteControllerTest {
     }
 
     @Test
-    void errorIncluyeCorrelationIdSiLlegaEnCabecera() throws Exception {
+    void errorDevuelveJsonSimple() throws Exception {
         when(clienteService.obtenerCliente(99L))
                 .thenThrow(new ResourceNotFoundException("No existe ningun cliente con id 99"));
 
-        mockMvc.perform(get("/api/clientes/99").header("X-Correlation-Id", "corr-123"))
+        mockMvc.perform(get("/api/clientes/99"))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("RESOURCE_NOT_FOUND"))
-                .andExpect(jsonPath("$.correlationId").value("corr-123"));
+                .andExpect(jsonPath("$.service").value("cliente-service"));
     }
 
     @Test

@@ -7,23 +7,21 @@ public record ErrorResponseDTO(
         String code,
         String message,
         String service,
-        String correlationId,
         LocalDateTime timestamp,
         Map<String, String> fieldErrors
 ) {
 
     private static final String SERVICE_NAME = "operacion-service";
 
-    public static ErrorResponseDTO of(String code, String message, String correlationId) {
-        return new ErrorResponseDTO(code, message, SERVICE_NAME, correlationId, LocalDateTime.now(), null);
+    public static ErrorResponseDTO of(String code, String message) {
+        return new ErrorResponseDTO(code, message, SERVICE_NAME, LocalDateTime.now(), null);
     }
 
     public static ErrorResponseDTO withFieldErrors(
             String code,
             String message,
-            String correlationId,
             Map<String, String> fieldErrors
     ) {
-        return new ErrorResponseDTO(code, message, SERVICE_NAME, correlationId, LocalDateTime.now(), fieldErrors);
+        return new ErrorResponseDTO(code, message, SERVICE_NAME, LocalDateTime.now(), fieldErrors);
     }
 }

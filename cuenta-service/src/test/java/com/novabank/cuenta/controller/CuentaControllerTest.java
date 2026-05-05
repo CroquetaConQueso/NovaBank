@@ -103,12 +103,11 @@ class CuentaControllerTest {
                 .thenThrow(new InsufficientBalanceException("Saldo insuficiente"));
 
         mockMvc.perform(post("/internal/cuentas/10/retiros")
-                        .header("X-Correlation-Id", "corr-1")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new CuentaOperacionRequestDTO(new BigDecimal("50.00")))))
                 .andExpect(status().isUnprocessableEntity())
                 .andExpect(jsonPath("$.code").value("INSUFFICIENT_BALANCE"))
-                .andExpect(jsonPath("$.correlationId").value("corr-1"));
+                .andExpect(jsonPath("$.service").value("cuenta-service"));
     }
 
     @Test
@@ -145,12 +144,11 @@ class CuentaControllerTest {
                 .thenThrow(new RemoteServiceException("cliente-service no esta disponible"));
 
         mockMvc.perform(post("/api/cuentas")
-                        .header("X-Correlation-Id", "corr-503")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new CuentaCreateRequestDTO(1L))))
                 .andExpect(status().isServiceUnavailable())
                 .andExpect(jsonPath("$.code").value("CLIENTE_SERVICE_UNAVAILABLE"))
-                .andExpect(jsonPath("$.correlationId").value("corr-503"));
+                .andExpect(jsonPath("$.service").value("cuenta-service"));
     }
 
     private CuentaResponseDTO cuentaResponse() {

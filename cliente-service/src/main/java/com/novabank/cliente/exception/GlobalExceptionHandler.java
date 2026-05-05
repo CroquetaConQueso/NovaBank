@@ -1,7 +1,6 @@
 package com.novabank.cliente.exception;
 
 import com.novabank.cliente.dto.ErrorResponseDTO;
-import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -16,33 +15,24 @@ import java.util.Map;
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
-    private static final String CORRELATION_ID_HEADER = "X-Correlation-Id";
-
     @ExceptionHandler(ResourceNotFoundException.class)
-    public ResponseEntity<ErrorResponseDTO> handleNotFound(ResourceNotFoundException ex, HttpServletRequest request) {
+    public ResponseEntity<ErrorResponseDTO> handleNotFound(ResourceNotFoundException ex) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                .body(ErrorResponseDTO.of("RESOURCE_NOT_FOUND", ex.getMessage(), correlationId(request)));
+                .body(ErrorResponseDTO.of("RESOURCE_NOT_FOUND", ex.getMessage()));
     }
 
     @ExceptionHandler(DuplicateResourceException.class)
-    public ResponseEntity<ErrorResponseDTO> handleDuplicateResource(
-            DuplicateResourceException ex,
-            HttpServletRequest request
-    ) {
+    public ResponseEntity<ErrorResponseDTO> handleDuplicateResource(DuplicateResourceException ex) {
         return ResponseEntity.status(HttpStatus.CONFLICT)
-                .body(ErrorResponseDTO.of("CONFLICT", ex.getMessage(), correlationId(request)));
+                .body(ErrorResponseDTO.of("CONFLICT", ex.getMessage()));
     }
 
     @ExceptionHandler(DataIntegrityViolationException.class)
-    public ResponseEntity<ErrorResponseDTO> handleDataIntegrity(
-            DataIntegrityViolationException ex,
-            HttpServletRequest request
-    ) {
+    public ResponseEntity<ErrorResponseDTO> handleDataIntegrity(DataIntegrityViolationException ex) {
         return ResponseEntity.status(HttpStatus.CONFLICT)
                 .body(ErrorResponseDTO.of(
                         "CONFLICT",
-                        "Ya existe un cliente con alguno de los datos unicos indicados",
-                        correlationId(request)
+                        "Ya existe un cliente con alguno de los datos unicos indicados"
                 ));
     }
 
@@ -50,16 +40,13 @@ public class GlobalExceptionHandler {
             IllegalArgumentException.class,
             ValidationException.class
     })
-    public ResponseEntity<ErrorResponseDTO> handleBadRequest(RuntimeException ex, HttpServletRequest request) {
+    public ResponseEntity<ErrorResponseDTO> handleBadRequest(RuntimeException ex) {
         return ResponseEntity.badRequest()
-                .body(ErrorResponseDTO.of("BAD_REQUEST", ex.getMessage(), correlationId(request)));
+                .body(ErrorResponseDTO.of("BAD_REQUEST", ex.getMessage()));
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
-    public ResponseEntity<ErrorResponseDTO> handleValidation(
-            MethodArgumentNotValidException ex,
-            HttpServletRequest request
-    ) {
+    public ResponseEntity<ErrorResponseDTO> handleValidation(MethodArgumentNotValidException ex) {
         Map<String, String> fieldErrors = new LinkedHashMap<>();
 
         for (FieldError error : ex.getBindingResult().getFieldErrors()) {
@@ -70,22 +57,16 @@ public class GlobalExceptionHandler {
                 .body(ErrorResponseDTO.withFieldErrors(
                         "VALIDATION_ERROR",
                         "La peticion contiene campos invalidos",
-                        correlationId(request),
                         fieldErrors
                 ));
     }
 
     @ExceptionHandler(Exception.class)
-    public ResponseEntity<ErrorResponseDTO> handleGeneric(Exception ex, HttpServletRequest request) {
+    public ResponseEntity<ErrorResponseDTO> handleGeneric(Exception ex) {
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(ErrorResponseDTO.of(
                         "INTERNAL_SERVER_ERROR",
-                        "Se ha producido un error inesperado",
-                        correlationId(request)
+                        "Se ha producido un error inesperado"
                 ));
-    }
-
-    private String correlationId(HttpServletRequest request) {
-        return request.getHeader(CORRELATION_ID_HEADER);
     }
 }

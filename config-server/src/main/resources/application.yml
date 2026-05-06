@@ -1,13 +1,12 @@
 spring:
   application:
     name: config-server
-  profiles:
-    active: native
   cloud:
     config:
       server:
-        native:
-          search-locations: ${CONFIG_REPO_PATH:file:../config-repo}
+        git:
+          uri: ${CONFIG_REPO_URI:file://${user.home}/novabank-config-repo}
+          default-label: main
 
 server:
   port: 8888

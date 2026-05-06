@@ -116,4 +116,62 @@ class AuthControllerTest {
                 .andExpect(jsonPath("$.fieldErrors.username").exists())
                 .andExpect(jsonPath("$.fieldErrors.password").exists());
     }
+
+    @Test
+    void registerRequestInvalidoDevuelveFieldErrors() throws Exception {
+        mockMvc.perform(post("/api/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new RegisterRequestDTO("", ""))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"))
+                .andExpect(jsonPath("$.fieldErrors.username").exists())
+                .andExpect(jsonPath("$.fieldErrors.password").exists());
+    }
+
+    @Test
+    void registerConJsonMalformadoDevuelve400() throws Exception {
+        mockMvc.perform(post("/api/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("BAD_REQUEST"));
+    }
+
+    @Test
+    void loginConJsonMalformadoDevuelve400() throws Exception {
+        mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("BAD_REQUEST"));
+    }
+
+    @Test
+    void loginUsuarioInexistenteDevuelve401() throws Exception {
+        when(authService.login(any(LoginRequestDTO.class)))
+                .thenThrow(new InvalidCredentialsException("Credenciales invalidas"));
+
+        mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new LoginRequestDTO("nadie", "password123"))))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
+    }
+
+    @Test
+    void validateSinTokenDevuelve400() throws Exception {
+        mockMvc.perform(get("/api/auth/validate"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void validateTokenMalformadoDevuelveValidoFalse() throws Exception {
+        when(authService.validarToken(eq("token-malformado")))
+                .thenReturn(new ValidateTokenResponseDTO(false, null));
+
+        mockMvc.perform(get("/api/auth/validate").param("token", "token-malformado"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.valido").value(false))
+                .andExpect(jsonPath("$.username").doesNotExist());
+    }
 }

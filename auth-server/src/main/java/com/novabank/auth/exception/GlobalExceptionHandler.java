@@ -5,8 +5,10 @@ import jakarta.validation.ConstraintViolation;
 import jakarta.validation.ConstraintViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
@@ -67,6 +69,15 @@ public class GlobalExceptionHandler {
                         "La peticion contiene campos invalidos",
                         fieldErrors
                 ));
+    }
+
+    @ExceptionHandler({
+            HttpMessageNotReadableException.class,
+            MissingServletRequestParameterException.class
+    })
+    public ResponseEntity<ErrorResponseDTO> handleBadRequest(Exception ex) {
+        return ResponseEntity.badRequest()
+                .body(ErrorResponseDTO.of("BAD_REQUEST", "La peticion no contiene los datos requeridos"));
     }
 
     @ExceptionHandler(Exception.class)

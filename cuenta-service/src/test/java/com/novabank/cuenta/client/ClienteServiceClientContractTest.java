@@ -1,6 +1,7 @@
 package com.novabank.cuenta.client;
 
 import com.novabank.cuenta.dto.ClienteResponseDTO;
+import com.novabank.cuenta.exception.RemoteServiceException;
 import com.novabank.cuenta.exception.ResourceNotFoundException;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -73,5 +74,26 @@ class ClienteServiceClientContractTest {
                 .hasMessageContaining("cliente");
 
         verify(getRequestedFor(urlEqualTo("/api/clientes/99")));
+    }
+
+    @Test
+    void obtenerCliente500SeTraduceAServicioNoDisponible() {
+        stubFor(get(urlEqualTo("/api/clientes/7"))
+                .willReturn(aResponse()
+                        .withStatus(500)
+                        .withHeader("Content-Type", "application/json")
+                        .withBody("""
+                                {
+                                  "code": "INTERNAL_ERROR",
+                                  "message": "Error inesperado",
+                                  "service": "cliente-service"
+                                }
+                                """)));
+
+        assertThatThrownBy(() -> clienteServiceClient.obtenerCliente(7L))
+                .isInstanceOf(RemoteServiceException.class)
+                .hasMessageContaining("cliente-service");
+
+        verify(getRequestedFor(urlEqualTo("/api/clientes/7")));
     }
 }

@@ -3,6 +3,8 @@ package com.novabank.operacion.client;
 import com.novabank.operacion.dto.CuentaOperacionRequestDTO;
 import com.novabank.operacion.dto.CuentaResponseDTO;
 import com.novabank.operacion.dto.TransferenciaInternaRequestDTO;
+import com.novabank.operacion.exception.RemoteResourceNotFoundException;
+import com.novabank.operacion.exception.RemoteServiceException;
 import com.novabank.operacion.exception.RemoteValidationException;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -132,6 +134,76 @@ class CuentaServiceClientContractTest {
                 .hasMessageContaining("cuenta-service");
 
         verify(postRequestedFor(urlEqualTo("/internal/cuentas/10/retiros")));
+    }
+
+    @Test
+    void error404RemotoSeTraduceAResourceNotFound() {
+        stubFor(post(urlEqualTo("/internal/cuentas/99/depositos"))
+                .willReturn(aResponse()
+                        .withStatus(404)
+                        .withHeader("Content-Type", "application/json")
+                        .withBody("""
+                                {
+                                  "code": "RESOURCE_NOT_FOUND",
+                                  "message": "No existe ninguna cuenta con id 99",
+                                  "service": "cuenta-service"
+                                }
+                                """)));
+
+        assertThatThrownBy(() -> cuentaServiceClient.depositar(
+                99L,
+                new CuentaOperacionRequestDTO(new BigDecimal("10.00"))
+        ))
+                .isInstanceOf(RemoteResourceNotFoundException.class)
+                .hasMessageContaining("cuenta");
+
+        verify(postRequestedFor(urlEqualTo("/internal/cuentas/99/depositos")));
+    }
+
+    @Test
+    void error400RemotoSeTraduceAValidationException() {
+        stubFor(post(urlEqualTo("/internal/cuentas/transferencias"))
+                .willReturn(aResponse()
+                        .withStatus(400)
+                        .withHeader("Content-Type", "application/json")
+                        .withBody("""
+                                {
+                                  "code": "VALIDATION_ERROR",
+                                  "message": "La cuenta origen y destino deben ser diferentes",
+                                  "service": "cuenta-service"
+                                }
+                                """)));
+
+        assertThatThrownBy(() -> cuentaServiceClient.transferir(
+                new TransferenciaInternaRequestDTO(10L, 10L, new BigDecimal("10.00"))
+        ))
+                .isInstanceOf(RemoteValidationException.class)
+                .hasMessageContaining("cuenta-service");
+
+        verify(postRequestedFor(urlEqualTo("/internal/cuentas/transferencias")));
+    }
+
+    @Test
+    void error500RemotoSeTraduceAServicioNoDisponible() {
+        stubFor(post(urlEqualTo("/internal/cuentas/transferencias"))
+                .willReturn(aResponse()
+                        .withStatus(500)
+                        .withHeader("Content-Type", "application/json")
+                        .withBody("""
+                                {
+                                  "code": "INTERNAL_ERROR",
+                                  "message": "Error inesperado",
+                                  "service": "cuenta-service"
+                                }
+                                """)));
+
+        assertThatThrownBy(() -> cuentaServiceClient.transferir(
+                new TransferenciaInternaRequestDTO(10L, 11L, new BigDecimal("10.00"))
+        ))
+                .isInstanceOf(RemoteServiceException.class)
+                .hasMessageContaining("cuenta-service");
+
+        verify(postRequestedFor(urlEqualTo("/internal/cuentas/transferencias")));
     }
 
     private String cuentaJson(Long id, String numeroCuenta, String saldo) {

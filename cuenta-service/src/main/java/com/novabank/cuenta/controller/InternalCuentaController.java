@@ -4,6 +4,10 @@ import com.novabank.cuenta.dto.CuentaOperacionRequestDTO;
 import com.novabank.cuenta.dto.CuentaResponseDTO;
 import com.novabank.cuenta.dto.TransferenciaInternaRequestDTO;
 import com.novabank.cuenta.service.CuentaService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -16,6 +20,7 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/internal/cuentas")
+@Tag(name = "Cuentas internas", description = "Operaciones internas consumidas por operacion-service")
 public class InternalCuentaController {
 
     private final CuentaService cuentaService;
@@ -25,6 +30,15 @@ public class InternalCuentaController {
     }
 
     @PostMapping("/{id}/depositos")
+    @Operation(
+            summary = "Aplicar deposito interno",
+            description = "Actualiza el saldo de una cuenta. Endpoint interno usado por operacion-service."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Deposito interno aplicado correctamente"),
+            @ApiResponse(responseCode = "400", description = "Datos invalidos o peticion mal formada"),
+            @ApiResponse(responseCode = "404", description = "Cuenta no encontrada")
+    })
     public ResponseEntity<CuentaResponseDTO> depositar(
             @PathVariable Long id,
             @Valid @RequestBody CuentaOperacionRequestDTO request
@@ -33,6 +47,16 @@ public class InternalCuentaController {
     }
 
     @PostMapping("/{id}/retiros")
+    @Operation(
+            summary = "Aplicar retiro interno",
+            description = "Valida saldo suficiente y actualiza la cuenta. Endpoint interno usado por operacion-service."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Retiro interno aplicado correctamente"),
+            @ApiResponse(responseCode = "400", description = "Datos invalidos o peticion mal formada"),
+            @ApiResponse(responseCode = "404", description = "Cuenta no encontrada"),
+            @ApiResponse(responseCode = "422", description = "Saldo insuficiente")
+    })
     public ResponseEntity<CuentaResponseDTO> retirar(
             @PathVariable Long id,
             @Valid @RequestBody CuentaOperacionRequestDTO request
@@ -41,6 +65,16 @@ public class InternalCuentaController {
     }
 
     @PostMapping("/transferencias")
+    @Operation(
+            summary = "Aplicar transferencia interna",
+            description = "Actualiza las cuentas origen y destino en una transaccion local. Endpoint interno usado por operacion-service."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Transferencia interna aplicada correctamente"),
+            @ApiResponse(responseCode = "400", description = "Datos invalidos o peticion mal formada"),
+            @ApiResponse(responseCode = "404", description = "Cuenta origen o destino no encontrada"),
+            @ApiResponse(responseCode = "422", description = "Saldo insuficiente")
+    })
     public ResponseEntity<List<CuentaResponseDTO>> transferir(
             @Valid @RequestBody TransferenciaInternaRequestDTO request
     ) {

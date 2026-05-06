@@ -7,6 +7,10 @@ public class DniValidator implements ConstraintValidator<ValidDni, String> {
 
     private static final String DNI_LETTERS = "TRWAGMYFPDXBNJZSQVHLCKE";
 
+    /**
+     * Deja que @NotBlank gestione la obligatoriedad y limita esta validacion
+     * a comprobar formato y letra de control.
+     */
     @Override
     public boolean isValid(String value, ConstraintValidatorContext context) {
         if (value == null || value.isBlank()) {

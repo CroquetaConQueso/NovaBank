@@ -15,6 +15,10 @@ public class ClienteServiceClientFallbackFactory implements FallbackFactory<Clie
         };
     }
 
+    /**
+     * Preserva excepciones ya traducidas por Feign y convierte fallos tecnicos
+     * en una respuesta controlada de servicio no disponible.
+     */
     private RuntimeException translate(Throwable cause) {
         if (cause instanceof ResourceNotFoundException exception) {
             return exception;

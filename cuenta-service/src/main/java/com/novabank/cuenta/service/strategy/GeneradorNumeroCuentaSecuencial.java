@@ -24,6 +24,10 @@ public class GeneradorNumeroCuentaSecuencial implements GeneradorNumeroCuentaStr
         this.cuentaRepository = cuentaRepository;
     }
 
+    /**
+     * Usa una fila de secuencia protegida en base de datos para evitar numeros
+     * duplicados cuando se crean cuentas concurrentemente.
+     */
     @Override
     @Transactional
     public String generarNumeroCuenta() {

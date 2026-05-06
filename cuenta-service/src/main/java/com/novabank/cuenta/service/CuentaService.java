@@ -40,6 +40,10 @@ public class CuentaService {
         this.cuentaMapper = cuentaMapper;
     }
 
+    /**
+     * Valida el cliente mediante cliente-service y persiste solo clienteId para
+     * evitar relaciones JPA entre bases de datos de servicios distintos.
+     */
     @Transactional
     public CuentaResponseDTO crearCuenta(CuentaCreateRequestDTO request) {
         Long clienteId = validarId(request == null ? null : request.clienteId(), "El id del cliente debe ser positivo");
@@ -74,6 +78,10 @@ public class CuentaService {
         return new SaldoResponseDTO(cuenta.getId(), cuenta.getNumeroCuenta(), cuenta.getSaldo());
     }
 
+    /**
+     * Comprueba la existencia del cliente antes de devolver cuentas para que la
+     * respuesta distinga entre cliente inexistente y cliente sin cuentas.
+     */
     @Transactional(readOnly = true)
     public List<CuentaResponseDTO> listarCuentasPorCliente(Long clienteId) {
         clienteId = validarId(clienteId, "El id del cliente debe ser positivo");
@@ -85,6 +93,10 @@ public class CuentaService {
                 .toList();
     }
 
+    /**
+     * Actualiza saldo dentro de cuenta-service; el historial financiero lo
+     * registra operacion-service en su propia base.
+     */
     @Transactional
     public CuentaResponseDTO depositar(Long cuentaId, CuentaOperacionRequestDTO request) {
         BigDecimal cantidad = validarCantidad(request == null ? null : request.cantidad());
@@ -94,6 +106,10 @@ public class CuentaService {
         return cuentaMapper.toResponse(cuenta);
     }
 
+    /**
+     * Aplica la regla de saldo suficiente antes de modificar la cuenta; el
+     * movimiento asociado se crea fuera de este servicio.
+     */
     @Transactional
     public CuentaResponseDTO retirar(Long cuentaId, CuentaOperacionRequestDTO request) {
         BigDecimal cantidad = validarCantidad(request == null ? null : request.cantidad());
@@ -104,6 +120,10 @@ public class CuentaService {
         return cuentaMapper.toResponse(cuenta);
     }
 
+    /**
+     * Mantiene la transferencia de saldos en una unica transaccion local de
+     * cuenta-service, sin asumir responsabilidad sobre el historial.
+     */
     @Transactional
     public List<CuentaResponseDTO> transferir(TransferenciaInternaRequestDTO request) {
         if (request == null) {

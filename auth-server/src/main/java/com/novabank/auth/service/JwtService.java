@@ -26,6 +26,10 @@ public class JwtService {
         this.expiration = expiration;
     }
 
+    /**
+     * Firma el token con la clave configurada externamente para no guardar
+     * secretos en el codigo del servicio.
+     */
     public String generarToken(String username) {
         Date now = new Date();
         Date expiresAt = new Date(now.getTime() + expiration);
@@ -42,6 +46,10 @@ public class JwtService {
         return extraerClaim(token, Claims::getSubject);
     }
 
+    /**
+     * Devuelve false ante tokens mal formados o expirados para que la API
+     * responda de forma controlada.
+     */
     public boolean esTokenValido(String token) {
         try {
             String username = extraerUsername(token);

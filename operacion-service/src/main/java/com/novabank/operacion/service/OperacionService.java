@@ -39,6 +39,10 @@ public class OperacionService {
         this.movimientoMapper = movimientoMapper;
     }
 
+    /**
+     * Delega el cambio de saldo en cuenta-service y registra el movimiento en
+     * la base propia de operacion-service.
+     */
     @Transactional
     public OperacionResponseDTO depositar(OperacionRequestDTO request) {
         CuentaResponseDTO cuenta = cuentaServiceClient.depositar(
@@ -54,6 +58,10 @@ public class OperacionService {
         );
     }
 
+    /**
+     * Mantiene en cuenta-service la validacion de saldo suficiente y conserva
+     * aqui el historial financiero resultante.
+     */
     @Transactional
     public OperacionResponseDTO retirar(OperacionRequestDTO request) {
         CuentaResponseDTO cuenta = cuentaServiceClient.retirar(
@@ -69,6 +77,10 @@ public class OperacionService {
         );
     }
 
+    /**
+     * Solicita a cuenta-service una transferencia atomica de saldos y persiste
+     * los dos movimientos que forman el historial de la operacion.
+     */
     @Transactional
     public OperacionResponseDTO transferir(TransferenciaRequestDTO request) {
         List<CuentaResponseDTO> cuentas = cuentaServiceClient.transferir(new TransferenciaInternaRequestDTO(
@@ -90,6 +102,10 @@ public class OperacionService {
         );
     }
 
+    /**
+     * El historial pertenece a operacion-service y se consulta mediante la
+     * referencia logica de cuenta, sin foreign key entre bases de servicios.
+     */
     @Transactional(readOnly = true)
     public List<MovimientoResponseDTO> listarMovimientos(Long cuentaId, LocalDate fechaInicio, LocalDate fechaFin) {
         validarId(cuentaId);

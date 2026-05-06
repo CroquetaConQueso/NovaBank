@@ -8,6 +8,10 @@ import org.springframework.stereotype.Component;
 @Component
 public class CuentaMapper implements ResponseMapper<Cuenta, CuentaResponseDTO> {
 
+    /**
+     * Expone clienteId como referencia logica, sin filtrar detalles de la
+     * entidad ni crear dependencia con cliente-service.
+     */
     @Override
     public CuentaResponseDTO toResponse(Cuenta cuenta) {
         return new CuentaResponseDTO(

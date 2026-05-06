@@ -7,6 +7,10 @@ import org.springframework.stereotype.Component;
 @Component
 public class MovimientoMapper {
 
+    /**
+     * Publica una vista de historial sin exponer la entidad persistida por
+     * operacion-service.
+     */
     public MovimientoResponseDTO toResponse(Movimiento movimiento) {
         if (movimiento == null) {
             return null;

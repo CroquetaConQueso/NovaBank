@@ -43,6 +43,10 @@ public class CuentaServiceClientFallbackFactory implements FallbackFactory<Cuent
         };
     }
 
+    /**
+     * Mantiene los errores remotos ya clasificados y convierte una caida de
+     * cuenta-service en un fallo controlado para la API publica.
+     */
     private RuntimeException translate(Throwable cause) {
         if (cause instanceof RemoteResourceNotFoundException exception) {
             return exception;

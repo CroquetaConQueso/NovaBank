@@ -26,6 +26,10 @@ public class ClienteService {
         this.clienteMapper = clienteMapper;
     }
 
+    /**
+     * Normaliza los datos antes de comprobar unicidad para que DNI, email y
+     * telefono se comparen con el mismo criterio que se persiste.
+     */
     @Transactional
     public ClienteResponseDTO crearCliente(ClienteRequestDTO request) {
         if (request == null) {
@@ -39,6 +43,10 @@ public class ClienteService {
         return clienteMapper.toResponse(clienteRepository.save(cliente));
     }
 
+    /**
+     * Excluye el propio cliente al comprobar duplicados para permitir guardar
+     * una actualizacion que conserva DNI, email o telefono.
+     */
     @Transactional
     public ClienteResponseDTO actualizarCliente(Long id, ClienteRequestDTO request) {
         if (request == null) {
@@ -71,6 +79,10 @@ public class ClienteService {
         return clienteMapper.toResponse(buscarCliente(id));
     }
 
+    /**
+     * Aplica la misma normalizacion que el alta para evitar busquedas fallidas
+     * por espacios o diferencias de mayusculas.
+     */
     @Transactional(readOnly = true)
     public ClienteResponseDTO obtenerClientePorDni(String dni) {
         if (dni == null || dni.isBlank()) {

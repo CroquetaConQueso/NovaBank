@@ -10,6 +10,10 @@ import org.springframework.stereotype.Component;
 @Component
 public class ClienteMapper implements ResponseMapper<Cliente, ClienteResponseDTO>, RequestMapper<ClienteRequestDTO, Cliente> {
 
+    /**
+     * Construye la entidad solo desde el contrato de entrada para evitar que la
+     * API exponga detalles internos de persistencia.
+     */
     @Override
     public Cliente toEntity(ClienteRequestDTO dto) {
         Cliente cliente = new Cliente();
@@ -21,6 +25,10 @@ public class ClienteMapper implements ResponseMapper<Cliente, ClienteResponseDTO
         return cliente;
     }
 
+    /**
+     * Devuelve un contrato de salida estable sin exponer la entidad JPA al
+     * controlador.
+     */
     @Override
     public ClienteResponseDTO toResponse(Cliente cliente) {
         return new ClienteResponseDTO(

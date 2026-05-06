@@ -32,6 +32,10 @@ public class Cuenta {
     @Column(name = "fecha_creacion", nullable = false)
     private LocalDateTime fechaCreacion;
 
+    /**
+     * Permite detectar actualizaciones concurrentes sobre el saldo y responder
+     * con un conflicto controlado.
+     */
     @Version
     private Long version;
 

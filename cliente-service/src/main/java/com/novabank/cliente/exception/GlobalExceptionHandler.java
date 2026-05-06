@@ -45,6 +45,10 @@ public class GlobalExceptionHandler {
                 .body(ErrorResponseDTO.of("BAD_REQUEST", ex.getMessage()));
     }
 
+    /**
+     * Conserva el primer error por campo para devolver una respuesta estable y
+     * facil de comprobar desde clientes HTTP.
+     */
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ErrorResponseDTO> handleValidation(MethodArgumentNotValidException ex) {
         Map<String, String> fieldErrors = new LinkedHashMap<>();

@@ -33,6 +33,10 @@ public class AuthService {
         this.jwtService = jwtService;
     }
 
+    /**
+     * Guarda credenciales con BCrypt y normaliza el username para evitar altas
+     * duplicadas por diferencias de mayusculas o espacios.
+     */
     @Transactional
     public RegisterResponseDTO registrar(RegisterRequestDTO request) {
         String username = normalizeUsername(request.username());
@@ -50,6 +54,10 @@ public class AuthService {
         return toRegisterResponse(saved);
     }
 
+    /**
+     * Emite un JWT formativo despues de validar la password almacenada como
+     * hash, sin implementar un servidor OAuth completo.
+     */
     @Transactional(readOnly = true)
     public LoginResponseDTO login(LoginRequestDTO request) {
         String username = normalizeUsername(request.username());
@@ -64,6 +72,10 @@ public class AuthService {
         return new LoginResponseDTO(jwtService.generarToken(username), "Bearer", jwtService.getExpiration());
     }
 
+    /**
+     * Permite que el Gateway consulte a auth-server como autoridad central de
+     * autenticacion antes de enrutar a los servicios de negocio.
+     */
     public ValidateTokenResponseDTO validarToken(String token) {
         if (token == null || token.isBlank()) {
             throw new InvalidTokenException("El token es obligatorio");

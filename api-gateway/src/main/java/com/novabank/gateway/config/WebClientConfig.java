@@ -8,6 +8,10 @@ import org.springframework.web.reactive.function.client.WebClient;
 @Configuration
 public class WebClientConfig {
 
+    /**
+     * Habilita la resolucion de nombres lb:// para que WebClient pueda llamar a
+     * servicios registrados en Eureka.
+     */
     @Bean
     @LoadBalanced
     public WebClient.Builder loadBalancedWebClientBuilder() {

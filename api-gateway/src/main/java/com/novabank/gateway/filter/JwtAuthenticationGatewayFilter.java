@@ -27,6 +27,10 @@ public class JwtAuthenticationGatewayFilter implements GlobalFilter, Ordered {
         this.errorWriter = errorWriter;
     }
 
+    /**
+     * El Gateway delega la validez del JWT en auth-server; no interpreta la
+     * firma ni las claims para mantener una unica autoridad de autenticacion.
+     */
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
         String path = exchange.getRequest().getURI().getPath();
@@ -81,6 +85,10 @@ public class JwtAuthenticationGatewayFilter implements GlobalFilter, Ordered {
         );
     }
 
+    /**
+     * Los endpoints de auth quedan disponibles para emitir y validar tokens
+     * antes de aplicar el filtro a las rutas de negocio.
+     */
     private boolean isPublic(String path) {
         return path.equals("/api/auth/login")
                 || path.equals("/api/auth/register")
@@ -89,6 +97,10 @@ public class JwtAuthenticationGatewayFilter implements GlobalFilter, Ordered {
                 || path.equals("/actuator/info");
     }
 
+    /**
+     * Mantiene el control de acceso perimetral en el Gateway sin modificar los
+     * contratos de los microservicios internos.
+     */
     private boolean isProtected(String path) {
         return path.startsWith("/api/clientes/")
                 || path.equals("/api/clientes")

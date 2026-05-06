@@ -15,6 +15,10 @@ import org.springframework.security.web.SecurityFilterChain;
 @EnableWebSecurity
 public class SecurityConfig {
 
+    /**
+     * Deja publicos los endpoints necesarios para emitir y validar tokens; el
+     * resto del servicio conserva una configuracion stateless.
+     */
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         return http

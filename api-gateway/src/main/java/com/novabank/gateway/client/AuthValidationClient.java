@@ -20,6 +20,10 @@ public class AuthValidationClient {
         this.validationUrl = validationUrl;
     }
 
+    /**
+     * Usa la URL lb:// configurada para resolver auth-server mediante Eureka
+     * sin fijar host ni puerto en el filtro.
+     */
     public Mono<ValidateTokenResponseDTO> validate(String token) {
         return webClient.get()
                 .uri(validationUrl + "?token={token}", token)

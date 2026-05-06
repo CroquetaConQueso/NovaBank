@@ -1,3 +1,14 @@
+\connect postgres
+
+-- Crea la base de datos de operaciones si todavia no existe.
+SELECT 'CREATE DATABASE novabank_operaciones'
+WHERE NOT EXISTS (
+    SELECT FROM pg_database WHERE datname = 'novabank_operaciones'
+)\gexec
+
+\connect novabank_operaciones
+
+-- operacion-service registra el historial financiero sin FK real hacia cuentas.
 CREATE TABLE IF NOT EXISTS movimientos (
     id BIGSERIAL PRIMARY KEY,
     cuenta_id BIGINT NOT NULL,

@@ -149,20 +149,30 @@ Contenido esperado:
 
 ```text
 docs/sql/
-|-- create-databases.sql
-|-- novabank_auth_schema.sql
-|-- novabank_clientes_schema.sql
-|-- novabank_cuentas_schema.sql
-|-- novabank_operaciones_schema.sql
+|-- README.md
+|-- 01-novabank-auth.sql
+|-- 02-novabank-clientes.sql
+|-- 03-novabank-cuentas.sql
+|-- 04-novabank-operaciones.sql
 ```
 
 | Script | Uso |
 | --- | --- |
-| `create-databases.sql` | Crea las bases de datos principales. |
-| `novabank_auth_schema.sql` | Crea la tabla `usuarios`. |
-| `novabank_clientes_schema.sql` | Crea la tabla `clientes`. |
-| `novabank_cuentas_schema.sql` | Crea las tablas `cuentas` y `account_number_sequence`. |
-| `novabank_operaciones_schema.sql` | Crea la tabla `movimientos`. |
+| `01-novabank-auth.sql` | Crea `novabank_auth` y la tabla `usuarios`. |
+| `02-novabank-clientes.sql` | Crea `novabank_clientes` y la tabla `clientes`. |
+| `03-novabank-cuentas.sql` | Crea `novabank_cuentas`, `cuentas` y `account_number_sequence`. |
+| `04-novabank-operaciones.sql` | Crea `novabank_operaciones` y la tabla `movimientos`. |
+
+Ejecución recomendada:
+
+```powershell
+psql -U postgres -f docs/sql/01-novabank-auth.sql
+psql -U postgres -f docs/sql/02-novabank-clientes.sql
+psql -U postgres -f docs/sql/03-novabank-cuentas.sql
+psql -U postgres -f docs/sql/04-novabank-operaciones.sql
+```
+
+La guía completa está en [docs/sql/README.md](docs/sql/README.md).
 
 Los servicios usan:
 

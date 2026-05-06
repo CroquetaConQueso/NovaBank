@@ -1,3 +1,14 @@
+\connect postgres
+
+-- Crea la base de datos de clientes si todavia no existe.
+SELECT 'CREATE DATABASE novabank_clientes'
+WHERE NOT EXISTS (
+    SELECT FROM pg_database WHERE datname = 'novabank_clientes'
+)\gexec
+
+\connect novabank_clientes
+
+-- cliente-service es duenio exclusivo de los datos de clientes.
 CREATE TABLE IF NOT EXISTS clientes (
     id BIGSERIAL PRIMARY KEY,
     nombre VARCHAR(100) NOT NULL,

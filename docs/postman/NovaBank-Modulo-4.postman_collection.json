@@ -1,7 +1,7 @@
-{
+﻿{
   "info": {
-    "name": "NovaBank Digital Services - Modulo 3",
-    "description": "Flujo Postman para NovaBank Modulo 3: login, clientes, cuentas, operaciones y movimientos.\n\nRecomendado ejecutar sobre base de datos limpia, ya que los datos de clientes usan DNI, email y teléfono únicos.",
+    "name": "NovaBank Digital Services - Modulo 4",
+    "description": "Flujo Postman para NovaBank Modulo 4 a traves del API Gateway: login, clientes, cuentas, operaciones y movimientos.\n\nRecomendado ejecutar sobre bases de datos limpias, ya que los datos de clientes usan DNI, email y telefono unicos.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -12,6 +12,14 @@
     {
       "key": "token",
       "value": ""
+    },
+    {
+      "key": "authUsername",
+      "value": "admin"
+    },
+    {
+      "key": "authPassword",
+      "value": "change-me"
     },
     {
       "key": "clienteOrigenId",
@@ -56,6 +64,46 @@
   ],
   "item": [
     {
+      "name": "Auth - Register",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('registro correcto o usuario ya existente', function () {",
+              "  pm.expect([200, 201, 409]).to.include(pm.response.code);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"username\": \"{{authUsername}}\",\n  \"password\": \"{{authPassword}}\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/auth/register",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "auth",
+            "register"
+          ]
+        }
+      }
+    },
+    {
       "name": "Auth - Login",
       "event": [
         {
@@ -81,7 +129,7 @@
         ],
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"username\": \"admin\",\n  \"password\": \"password\"\n}"
+          "raw": "{\n  \"username\": \"{{authUsername}}\",\n  \"password\": \"{{authPassword}}\"\n}"
         },
         "url": {
           "raw": "{{baseUrl}}/api/auth/login",
@@ -428,19 +476,15 @@
         "method": "GET",
         "header": [],
         "url": {
-          "raw": "{{baseUrl}}/api/clientes?dni={{dniClienteOrigen}}",
+          "raw": "{{baseUrl}}/api/clientes/dni/{{dniClienteOrigen}}",
           "host": [
             "{{baseUrl}}"
           ],
           "path": [
             "api",
-            "clientes"
-          ],
-          "query": [
-            {
-              "key": "dni",
-              "value": "{{dniClienteOrigen}}"
-            }
+            "clientes",
+            "dni",
+            "{{dniClienteOrigen}}"
           ]
         }
       }
@@ -694,15 +738,15 @@
         "method": "GET",
         "header": [],
         "url": {
-          "raw": "{{baseUrl}}/api/clientes/{{clienteOrigenId}}/cuentas",
+          "raw": "{{baseUrl}}/api/cuentas/cliente/{{clienteOrigenId}}",
           "host": [
             "{{baseUrl}}"
           ],
           "path": [
             "api",
-            "clientes",
-            "{{clienteOrigenId}}",
-            "cuentas"
+            "cuentas",
+            "cliente",
+            "{{clienteOrigenId}}"
           ]
         }
       }
@@ -1010,12 +1054,13 @@
         "method": "GET",
         "header": [],
         "url": {
-          "raw": "{{baseUrl}}/api/cuentas/{{cuentaOrigenId}}/movimientos",
+          "raw": "{{baseUrl}}/api/operaciones/cuentas/{{cuentaOrigenId}}/movimientos",
           "host": [
             "{{baseUrl}}"
           ],
           "path": [
             "api",
+            "operaciones",
             "cuentas",
             "{{cuentaOrigenId}}",
             "movimientos"
@@ -1051,12 +1096,13 @@
         "method": "GET",
         "header": [],
         "url": {
-          "raw": "{{baseUrl}}/api/cuentas/{{cuentaOrigenId}}/movimientos?fechaInicio={{fechaInicioMovimientos}}&fechaFin={{fechaFinMovimientos}}",
+          "raw": "{{baseUrl}}/api/operaciones/cuentas/{{cuentaOrigenId}}/movimientos?fechaInicio={{fechaInicioMovimientos}}&fechaFin={{fechaFinMovimientos}}",
           "host": [
             "{{baseUrl}}"
           ],
           "path": [
             "api",
+            "operaciones",
             "cuentas",
             "{{cuentaOrigenId}}",
             "movimientos"
@@ -1076,3 +1122,5 @@
     }
   ]
 }
+
+

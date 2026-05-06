@@ -4,6 +4,7 @@ import com.novabank.cuenta.dto.ErrorResponseDTO;
 import jakarta.persistence.OptimisticLockException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -53,6 +54,12 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorResponseDTO> handleBadRequest(RuntimeException ex) {
         return ResponseEntity.badRequest()
                 .body(ErrorResponseDTO.of("BAD_REQUEST", ex.getMessage()));
+    }
+
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ErrorResponseDTO> handleUnreadableMessage(HttpMessageNotReadableException ex) {
+        return ResponseEntity.badRequest()
+                .body(ErrorResponseDTO.of("BAD_REQUEST", "La peticion contiene un JSON invalido"));
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)

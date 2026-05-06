@@ -102,6 +102,27 @@ class CuentaServiceTest {
     }
 
     @Test
+    void crearCuentaConClienteIdNuloLanzaValidationExceptionSinLlamadaRemota() {
+        assertThatThrownBy(() -> cuentaService.crearCuenta(new CuentaCreateRequestDTO(null)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("El id del cliente debe ser positivo");
+
+        verify(clienteServiceClient, never()).obtenerCliente(any());
+        verify(cuentaRepository, never()).save(any(Cuenta.class));
+    }
+
+    @Test
+    void listarCuentasPorClientePropagaClienteNoEncontrado() {
+        when(clienteServiceClient.obtenerCliente(99L))
+                .thenThrow(new ResourceNotFoundException("No existe ningun cliente con el id indicado"));
+
+        assertThatThrownBy(() -> cuentaService.listarCuentasPorCliente(99L))
+                .isInstanceOf(ResourceNotFoundException.class);
+
+        verify(cuentaRepository, never()).findByClienteId(any());
+    }
+
+    @Test
     void obtenerCuentaPorNumeroNormalizaAntesDeBuscar() {
         when(cuentaRepository.findByNumeroCuenta("ES91210000000000000001")).thenReturn(Optional.empty());
 
@@ -131,6 +152,15 @@ class CuentaServiceTest {
     }
 
     @Test
+    void consultarSaldoCuentaInexistenteLanza404() {
+        when(cuentaRepository.findById(99L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> cuentaService.consultarSaldo(99L))
+                .isInstanceOf(ResourceNotFoundException.class)
+                .hasMessageContaining("99");
+    }
+
+    @Test
     void depositarAumentaSaldoYDevuelveCuentaActualizada() {
         Cuenta cuenta = cuenta(1L, "ES00000000000000000001", "100.00");
         when(cuentaRepository.findById(1L)).thenReturn(Optional.of(cuenta));
@@ -142,6 +172,30 @@ class CuentaServiceTest {
 
         assertThat(cuenta.getSaldo()).isEqualByComparingTo("150.00");
         assertThat(response.saldo()).isEqualByComparingTo("150.00");
+    }
+
+    @Test
+    void depositarCantidadCeroLanzaValidationException() {
+        assertThatThrownBy(() -> cuentaService.depositar(
+                1L,
+                new CuentaOperacionRequestDTO(BigDecimal.ZERO)
+        ))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("La cantidad debe ser mayor que cero");
+
+        verify(cuentaRepository, never()).findById(any());
+    }
+
+    @Test
+    void retirarCantidadNegativaLanzaValidationException() {
+        assertThatThrownBy(() -> cuentaService.retirar(
+                1L,
+                new CuentaOperacionRequestDTO(new BigDecimal("-1.00"))
+        ))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("La cantidad debe ser mayor que cero");
+
+        verify(cuentaRepository, never()).findById(any());
     }
 
     @Test
@@ -175,6 +229,46 @@ class CuentaServiceTest {
         assertThat(cuentas).hasSize(2);
         assertThat(cuentas.get(0).id()).isEqualTo(1L);
         assertThat(cuentas.get(1).id()).isEqualTo(2L);
+    }
+
+    @Test
+    void transferirMismaCuentaLanzaValidationExceptionSinBuscarCuentas() {
+        assertThatThrownBy(() -> cuentaService.transferir(
+                new TransferenciaInternaRequestDTO(1L, 1L, new BigDecimal("10.00"))
+        ))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("La cuenta origen y destino deben ser diferentes");
+
+        verify(cuentaRepository, never()).findAllById(any());
+    }
+
+    @Test
+    void transferirConCuentaDestinoInexistenteLanza404YNoDejaSaldoNegativo() {
+        Cuenta origen = cuenta(1L, "ES91210000000000000001", "200.00");
+        when(cuentaRepository.findAllById(List.of(1L, 99L))).thenReturn(List.of(origen));
+
+        assertThatThrownBy(() -> cuentaService.transferir(
+                new TransferenciaInternaRequestDTO(1L, 99L, new BigDecimal("75.00"))
+        ))
+                .isInstanceOf(ResourceNotFoundException.class)
+                .hasMessageContaining("99");
+
+        assertThat(origen.getSaldo()).isEqualByComparingTo("200.00");
+    }
+
+    @Test
+    void transferirConSaldoInsuficienteNoModificaSaldos() {
+        Cuenta origen = cuenta(1L, "ES91210000000000000001", "10.00");
+        Cuenta destino = cuenta(2L, "ES91210000000000000002", "20.00");
+        when(cuentaRepository.findAllById(List.of(1L, 2L))).thenReturn(List.of(origen, destino));
+
+        assertThatThrownBy(() -> cuentaService.transferir(
+                new TransferenciaInternaRequestDTO(1L, 2L, new BigDecimal("75.00"))
+        ))
+                .isInstanceOf(InsufficientBalanceException.class);
+
+        assertThat(origen.getSaldo()).isEqualByComparingTo("10.00");
+        assertThat(destino.getSaldo()).isEqualByComparingTo("20.00");
     }
 
     private ClienteResponseDTO cliente(Long id) {

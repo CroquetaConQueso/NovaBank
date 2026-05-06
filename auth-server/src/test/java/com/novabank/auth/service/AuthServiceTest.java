@@ -19,6 +19,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentCaptor.forClass;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -46,7 +47,11 @@ class AuthServiceTest {
         RegisterResponseDTO response = authService.registrar(new RegisterRequestDTO(" Ana ", "password123"));
 
         assertThat(response.username()).isEqualTo("ana");
-        verify(usuarioRepository).save(any(Usuario.class));
+        var captor = forClass(Usuario.class);
+        verify(usuarioRepository).save(captor.capture());
+        Usuario guardado = captor.getValue();
+        assertThat(guardado.getPasswordHash()).isNotEqualTo("password123");
+        assertThat(passwordEncoder.matches("password123", guardado.getPasswordHash())).isTrue();
     }
 
     @Test
@@ -79,6 +84,23 @@ class AuthServiceTest {
     }
 
     @Test
+    void loginConUsuarioInexistenteDevuelve401() {
+        when(usuarioRepository.findByUsername("nadie")).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> authService.login(new LoginRequestDTO("nadie", "password123")))
+                .isInstanceOf(InvalidCredentialsException.class);
+    }
+
+    @Test
+    void loginConUsuarioDeshabilitadoDevuelve401() {
+        Usuario usuario = usuario("ana", passwordEncoder.encode("password123"), false);
+        when(usuarioRepository.findByUsername("ana")).thenReturn(Optional.of(usuario));
+
+        assertThatThrownBy(() -> authService.login(new LoginRequestDTO("ana", "password123")))
+                .isInstanceOf(InvalidCredentialsException.class);
+    }
+
+    @Test
     void tokenValidoDevuelveUsername() {
         String token = jwtService.generarToken("ana");
 
@@ -91,6 +113,38 @@ class AuthServiceTest {
     @Test
     void tokenInvalidoDevuelveValidoFalse() {
         ValidateTokenResponseDTO response = authService.validarToken("token-invalido");
+
+        assertThat(response.valido()).isFalse();
+        assertThat(response.username()).isNull();
+    }
+
+    @Test
+    void tokenConPrefijoBearerDevuelveUsername() {
+        String token = jwtService.generarToken("ana");
+
+        ValidateTokenResponseDTO response = authService.validarToken("Bearer " + token);
+
+        assertThat(response.valido()).isTrue();
+        assertThat(response.username()).isEqualTo("ana");
+    }
+
+    @Test
+    void tokenFirmadoConOtroSecretoDevuelveValidoFalse() {
+        JwtService otroJwtService = new JwtService("other-auth-server-secret-key-with-at-least-32-chars", 86400000L);
+        String token = otroJwtService.generarToken("ana");
+
+        ValidateTokenResponseDTO response = authService.validarToken(token);
+
+        assertThat(response.valido()).isFalse();
+        assertThat(response.username()).isNull();
+    }
+
+    @Test
+    void tokenExpiradoDevuelveValidoFalse() {
+        JwtService jwtExpirado = new JwtService("test-auth-server-secret-key-with-at-least-32-chars", -1000L);
+        String token = jwtExpirado.generarToken("ana");
+
+        ValidateTokenResponseDTO response = authService.validarToken(token);
 
         assertThat(response.valido()).isFalse();
         assertThat(response.username()).isNull();

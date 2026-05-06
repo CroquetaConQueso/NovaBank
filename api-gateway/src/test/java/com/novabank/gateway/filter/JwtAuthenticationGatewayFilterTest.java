@@ -3,6 +3,8 @@ package com.novabank.gateway.filter;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.novabank.gateway.client.AuthValidationClient;
 import com.novabank.gateway.dto.ValidateTokenResponseDTO;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.junit.jupiter.api.Test;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
 import org.springframework.http.HttpHeaders;
@@ -39,6 +41,24 @@ class JwtAuthenticationGatewayFilterTest {
         verify(authValidationClient, never()).validate(org.mockito.Mockito.anyString());
     }
 
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "/api/auth/login",
+            "/api/auth/register",
+            "/api/auth/validate",
+            "/actuator/health",
+            "/actuator/info"
+    })
+    void rutasPublicasNoExigenToken(String path) {
+        AtomicBoolean chainCalled = new AtomicBoolean(false);
+        MockServerWebExchange exchange = exchange(path, null);
+
+        StepVerifier.create(filter.filter(exchange, chain(chainCalled))).verifyComplete();
+
+        assertThat(chainCalled).isTrue();
+        verify(authValidationClient, never()).validate(org.mockito.Mockito.anyString());
+    }
+
     @Test
     void rutaProtegidaSinTokenDevuelve401Json() {
         AtomicBoolean chainCalled = new AtomicBoolean(false);
@@ -49,7 +69,47 @@ class JwtAuthenticationGatewayFilterTest {
         assertThat(chainCalled).isFalse();
         assertThat(exchange.getResponse().getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
         assertThat(exchange.getResponse().getBodyAsString().block())
-                .contains("UNAUTHORIZED", "api-gateway");
+                .contains("UNAUTHORIZED", "Authorization Bearer token obligatorio", "api-gateway", "timestamp");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "/api/clientes",
+            "/api/cuentas",
+            "/api/operaciones"
+    })
+    void rutasProtegidasSinTokenDevuelven401(String path) {
+        AtomicBoolean chainCalled = new AtomicBoolean(false);
+        MockServerWebExchange exchange = exchange(path, null);
+
+        StepVerifier.create(filter.filter(exchange, chain(chainCalled))).verifyComplete();
+
+        assertThat(chainCalled).isFalse();
+        assertThat(exchange.getResponse().getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+    }
+
+    @Test
+    void authorizationSinBearerDevuelve401() {
+        AtomicBoolean chainCalled = new AtomicBoolean(false);
+        MockServerWebExchange exchange = exchange("/api/clientes", "Basic token");
+
+        StepVerifier.create(filter.filter(exchange, chain(chainCalled))).verifyComplete();
+
+        assertThat(chainCalled).isFalse();
+        assertThat(exchange.getResponse().getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+        verify(authValidationClient, never()).validate(org.mockito.Mockito.anyString());
+    }
+
+    @Test
+    void bearerVacioDevuelve401() {
+        AtomicBoolean chainCalled = new AtomicBoolean(false);
+        MockServerWebExchange exchange = exchange("/api/clientes", "Bearer ");
+
+        StepVerifier.create(filter.filter(exchange, chain(chainCalled))).verifyComplete();
+
+        assertThat(chainCalled).isFalse();
+        assertThat(exchange.getResponse().getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+        verify(authValidationClient, never()).validate(org.mockito.Mockito.anyString());
     }
 
     @Test

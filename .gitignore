@@ -5,6 +5,7 @@ NovaBank-Modulo3.zip
 *.env
 .env.*
 !.env.example
+config-repo/
 !.mvn/wrapper/maven-wrapper.jar
 !**/src/main/**/target/
 !**/src/test/**/target/

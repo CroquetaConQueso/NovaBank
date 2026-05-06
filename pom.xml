@@ -19,7 +19,6 @@
     <packaging>pom</packaging>
 
     <modules>
-        <module>novabank-monolith</module>
         <module>eureka-server</module>
         <module>config-server</module>
         <module>api-gateway</module>

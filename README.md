@@ -1,620 +1,290 @@
-# NovaBank Digital Services - Módulo 3
+# NovaBank Digital Services - Modulo 4
 
-NovaBank Digital Services es un backend bancario desarrollado como API REST con Spring Boot.
+NovaBank Digital Services es una evolucion del monolito Spring Boot del Modulo 3 hacia una arquitectura de microservicios sincronicos con Spring Cloud.
 
-En este módulo, el proyecto evoluciona desde la aplicación de consola con JDBC manual del Módulo 2 hacia un servicio HTTP profesional basado en Spring Boot, Spring Data JPA, Spring Security, JWT, OpenAPI/Swagger, DTOs y testing por capas.
+La version final del Modulo 4 separa las responsabilidades principales en servicios independientes, mantiene comunicacion HTTP mediante Feign, usa Eureka para descubrimiento, Config Server para configuracion centralizada y API Gateway como punto unico de entrada.
 
-La lógica de negocio principal se mantiene respecto a los módulos anteriores: gestión de clientes, cuentas, operaciones financieras y movimientos. Lo que cambia es el canal de acceso y la infraestructura técnica: desaparece la consola y el sistema pasa a exponerse mediante endpoints REST protegidos con autenticación JWT.
+## Arquitectura general
 
-## 1. Descripción del proyecto
+- `eureka-server`: registro y descubrimiento de servicios. Puerto `8761`.
+- `config-server`: servidor de configuracion centralizada desde un repositorio Git local externo. Puerto `8888`.
+- `api-gateway`: punto de entrada HTTP del sistema. Puerto `8080`.
+- `auth-server`: registro, login y validacion JWT formativa. Puerto `9000`.
+- `cliente-service`: gestion de clientes. Puerto `8081`.
+- `cuenta-service`: gestion de cuentas, saldos, generacion de numero de cuenta, `@Version` y `account_number_sequence`. Puerto `8082`.
+- `operacion-service`: depositos, retiradas, transferencias e historial de movimientos. Puerto `8083`.
 
-NovaBank Digital Services simula una entidad bancaria básica con las siguientes capacidades:
+El monolito antiguo ya no forma parte del reactor Maven final.
 
-- Gestión de clientes.
-- Gestión de cuentas bancarias.
-- Operaciones financieras:
-  - depósito;
-  - retirada;
-  - transferencia entre cuentas.
-- Consulta de saldo.
-- Consulta de movimientos.
-- Filtrado de movimientos por rango de fechas.
-- Autenticación mediante JWT.
-- Documentación interactiva mediante Swagger UI.
-- Pruebas automatizadas por capas.
-
-El proyecto sigue una arquitectura por capas:
-
-```text
-Controller -> Service -> Repository -> JPA/PostgreSQL
-```
-
-Los controladores exponen la API HTTP, los servicios contienen la lógica de negocio, los repositorios gestionan la persistencia mediante Spring Data JPA y las entidades se mapean a tablas relacionales mediante JPA/Hibernate.
-
-## 2. Tecnologías utilizadas
+## Tecnologias utilizadas
 
 - Java 17
-- Maven
-- Spring Boot 3.x
-- Spring Web
+- Spring Boot 3.3.6
+- Spring Cloud 2023.0.4
+- Maven multi-modulo
+- Spring Cloud Netflix Eureka
+- Spring Cloud Config Server
+- Spring Cloud Gateway
+- OpenFeign
+- Resilience4j
 - Spring Data JPA
-- Spring Security
-- JWT con JJWT
 - PostgreSQL
-- H2 para tests y ejecución con perfil de prueba
-- Bean Validation
-- springdoc-openapi
+- H2 para tests
+- WireMock para contratos HTTP
 - JUnit 5
 - Mockito
-- Spring Boot Test
 - MockMvc
-- Lombok
+- Swagger/OpenAPI con `springdoc-openapi`
 
-## 3. Requisitos del sistema
+## Estructura del proyecto
 
-Para ejecutar el proyecto en local se necesita:
+```text
+.
+|-- pom.xml
+|-- eureka-server/
+|-- config-server/
+|-- api-gateway/
+|-- auth-server/
+|-- cliente-service/
+|-- cuenta-service/
+|-- operacion-service/
+|-- docs/
+|   |-- sql/
+```
 
-- Java 17 o superior.
-- Maven 3.6 o superior.
-- PostgreSQL 14 o superior.
-- Postman, opcional, para probar el flujo completo de la API.
-- Git, opcional, para clonar el repositorio.
+El repositorio `config-repo` no debe estar versionado dentro de este monorepo. La configuracion centralizada se sirve desde un repositorio Git local externo.
 
-Comprobación recomendada:
+## Requisitos previos
 
-```bash
+- Java 17.
+- Maven.
+- PostgreSQL.
+- Git.
+- Puertos disponibles: `8761`, `8888`, `8080`, `9000`, `8081`, `8082`, `8083`.
+
+Comprobacion recomendada:
+
+```powershell
 java -version
 mvn -version
 ```
 
-El proyecto está configurado para Java 17. Aunque una versión superior del JDK pueda compilar parte del código, se recomienda ejecutar Maven con JDK 17 para evitar problemas con procesadores de anotaciones como Lombok.
+## Base de datos
 
-## 4. Configuración de la base de datos
+PostgreSQL debe tener las siguientes bases:
 
-La aplicación usa PostgreSQL por defecto.
+- `novabank_auth`
+- `novabank_clientes`
+- `novabank_cuentas`
+- `novabank_operaciones`
 
-La base de datos del módulo se llama:
+Los scripts SQL de referencia estan en `docs/sql`:
+
+- `create-databases.sql`
+- `novabank_auth_schema.sql`
+- `novabank_clientes_schema.sql`
+- `novabank_cuentas_schema.sql`
+- `novabank_operaciones_schema.sql`
+
+Los servicios usan `ddl-auto: validate`. Las bases y tablas deben existir antes de arrancar los servicios. Las credenciales se configuran en el repositorio Git local externo de configuracion y deben ajustarse a cada entorno local.
+
+## Config Server
+
+`config-server` esta configurado para leer desde:
 
 ```text
-novabank
+file:///C:/Users/Usuario/Desktop/config-repo
 ```
 
-La configuración principal se encuentra en:
+Ese directorio debe ser un repositorio Git local externo, inicializado en la rama `main` y con al menos un commit.
+
+Contenido esperado:
 
 ```text
-src/main/resources/application.yml
+config-repo/
+|-- application.yml
+|-- api-gateway.yml
+|-- auth-server.yml
+|-- cliente-service.yml
+|-- cuenta-service.yml
+|-- operacion-service.yml
 ```
 
-La aplicación permite configurar la conexión mediante variables de entorno.
-
-### Variables de entorno
-
-Ejemplo en PowerShell:
+Ejemplo de inicializacion del repositorio externo:
 
 ```powershell
-$env:NOVABANK_DB_URL="jdbc:postgresql://localhost:5432/novabank"
-$env:NOVABANK_DB_USER="postgres"
-$env:NOVABANK_DB_PASSWORD="change-me"
-$env:JWT_SECRET="change-me-with-at-least-32-characters"
-$env:JWT_EXPIRATION="86400000"
+cd C:\Users\Usuario\Desktop\config-repo
+git init
+git add .
+git commit -m "Configuracion inicial de microservicios NovaBank"
 ```
 
-Valores por defecto principales:
+No se debe copiar ni versionar `config-repo` dentro del proyecto principal.
 
-```text
-NOVABANK_DB_URL=jdbc:postgresql://localhost:5432/novabank
-NOVABANK_DB_USER=postgres
-NOVABANK_DB_PASSWORD=change-me
-JWT_EXPIRATION=86400000
+## Orden de arranque
+
+Ejecutar cada servicio desde la raiz del proyecto en terminales separadas:
+
+```powershell
+mvn -pl eureka-server spring-boot:run
+mvn -pl config-server spring-boot:run
+mvn -pl auth-server spring-boot:run
+mvn -pl cliente-service spring-boot:run
+mvn -pl cuenta-service spring-boot:run
+mvn -pl operacion-service spring-boot:run
+mvn -pl api-gateway spring-boot:run
 ```
-
-### Preparar PostgreSQL
-
-La configuración productiva usa:
-
-```yaml
-spring.jpa.hibernate.ddl-auto: validate
-spring.sql.init.mode: never
-```
-
-Esto significa que Spring Boot no crea automáticamente la base de datos ni las tablas. Hibernate solo valida que el esquema existente coincide con las entidades JPA.
 
 Orden recomendado:
 
-1. Crear la base de datos con:
+1. `eureka-server`
+2. `config-server`
+3. `auth-server`
+4. `cliente-service`
+5. `cuenta-service`
+6. `operacion-service`
+7. `api-gateway`
+
+## Pruebas de funcionamiento
+
+- Eureka: [http://localhost:8761](http://localhost:8761)
+- Config Server: [http://localhost:8888/cliente-service/default](http://localhost:8888/cliente-service/default)
+- Gateway: [http://localhost:8080](http://localhost:8080)
+
+El flujo funcional principal debe probarse mediante el Gateway:
 
 ```text
-docs/sql/create-database.sql
+baseUrl = http://localhost:8080
 ```
 
-2. Ejecutar el script de tablas sobre la base `novabank`:
+Flujo recomendado:
 
-```text
-src/main/resources/schema.sql
-```
+1. Registrar usuario en `POST /api/auth/register`.
+2. Obtener token en `POST /api/auth/login`.
+3. Enviar `Authorization: Bearer <token>` en las rutas de negocio.
 
-3. Configurar las variables de entorno de conexión.
+## Swagger/OpenAPI
 
-4. Arrancar la aplicación.
+Cada servicio REST expone su propia documentacion:
 
-El archivo `schema.sql` contiene la estructura de tablas, constraints e índices. No incluye `CREATE DATABASE` ni comandos propios de `psql`.
+- Auth Server: [http://localhost:9000/swagger-ui/index.html](http://localhost:9000/swagger-ui/index.html)
+- Auth API Docs: [http://localhost:9000/v3/api-docs](http://localhost:9000/v3/api-docs)
+- Cliente Service: [http://localhost:8081/swagger-ui/index.html](http://localhost:8081/swagger-ui/index.html)
+- Cliente API Docs: [http://localhost:8081/v3/api-docs](http://localhost:8081/v3/api-docs)
+- Cuenta Service: [http://localhost:8082/swagger-ui/index.html](http://localhost:8082/swagger-ui/index.html)
+- Cuenta API Docs: [http://localhost:8082/v3/api-docs](http://localhost:8082/v3/api-docs)
+- Operacion Service: [http://localhost:8083/swagger-ui/index.html](http://localhost:8083/swagger-ui/index.html)
+- Operacion API Docs: [http://localhost:8083/v3/api-docs](http://localhost:8083/v3/api-docs)
 
-## 5. Cómo ejecutar la aplicación
+El Gateway no agrega Swagger. Swagger se consulta directamente por servicio y Postman se usa para probar el flujo funcional a traves del Gateway.
 
-Ejecutar la aplicación con PostgreSQL:
+## Endpoints principales
 
-```bash
-mvn spring-boot:run
-```
+### Autenticacion
 
-La aplicación arranca por defecto en:
-
-```text
-http://localhost:8080
-```
-
-### Ejecución con H2 usando el perfil de test
-
-También se puede arrancar usando H2 con el perfil `test`:
-
-```bash
-mvn spring-boot:run -Dspring-boot.run.profiles=test -Dspring-boot.run.useTestClasspath=true
-```
-
-Esta opción es útil para probar el backend sin depender de una instancia local de PostgreSQL.
-
-## 6. Autenticación JWT
-
-La API protege sus endpoints mediante JWT.
-
-El endpoint de autenticación es público:
-
-```http
-POST /api/auth/login
-```
-
-Usuario de prueba del módulo:
-
-```text
-username: admin
-password: password
-```
-
-Ejemplo de petición:
-
-```http
-POST /api/auth/login
-Content-Type: application/json
-
-{
-  "username": "admin",
-  "password": "password"
-}
-```
-
-Ejemplo de respuesta:
-
-```json
-{
-  "token": "eyJhbGciOiJIUzI1NiJ9...",
-  "tipo": "Bearer",
-  "expiracion": 86400000
-}
-```
-
-Para consumir endpoints protegidos se debe enviar el token en el header:
-
-```http
-Authorization: Bearer <token>
-```
-
-Ejemplo:
-
-```http
-GET /api/clientes
-Authorization: Bearer eyJhbGciOiJIUzI1NiJ9...
-```
-
-## 7. Documentación de la API con Swagger
-
-La documentación interactiva está disponible con la aplicación arrancada:
-
-```text
-http://localhost:8080/swagger-ui.html
-```
-
-La especificación OpenAPI en formato JSON está disponible en:
-
-```text
-http://localhost:8080/v3/api-docs
-```
-
-Los endpoints de autenticación y Swagger son públicos. El resto de endpoints requiere token JWT.
-
-Para probar endpoints protegidos desde Swagger UI:
-
-1. Obtener un token desde `POST /api/auth/login`.
-2. Pulsar el botón `Authorize`.
-3. Introducir:
-
-```text
-Bearer <token>
-```
-
-4. Ejecutar las peticiones protegidas desde Swagger.
-
-## 8. Cómo ejecutar los tests
-
-Ejecutar todos los tests:
-
-```bash
-mvn test
-```
-
-Ejecución limpia completa:
-
-```bash
-mvn clean test
-```
-
-La suite de pruebas cubre varios niveles:
-
-- Tests unitarios de servicios con JUnit 5 y Mockito.
-- Tests de repositorio con Spring Data JPA.
-- Tests de controlador con `@WebMvcTest` y MockMvc.
-- Tests de seguridad.
-- Tests de integración end-to-end con Spring Boot Test.
-
-Los tests usan H2 en perfil `test`, lo que permite probar repositorios e integración sin depender de PostgreSQL real.
-
-## 9. Arquitectura del sistema
-
-El proyecto usa arquitectura por capas.
-
-```text
-com.novabank
-|-- NovaBankApplication
-|-- config
-|-- controller
-|-- dto
-|-- exception
-|-- mapper
-|   |-- contract
-|-- model
-|-- repository
-|-- security
-|-- service
-|   |-- strategy
-|-- validation
-```
-
-### Responsabilidades por paquete
-
-- `config`: configuración general de Spring, seguridad y OpenAPI.
-- `controller`: endpoints REST. Reciben peticiones HTTP, delegan en servicios y devuelven DTOs.
-- `dto`: contratos públicos de entrada y salida. No contienen anotaciones JPA.
-- `exception`: excepciones de dominio y `GlobalExceptionHandler`.
-- `mapper`: conversión manual entre entidades JPA y DTOs.
-- `mapper.contract`: interfaces pequeñas para mappers:
-  - `RequestMapper`;
-  - `ResponseMapper`.
-- `model`: entidades JPA:
-  - `Cliente`;
-  - `Cuenta`;
-  - `Movimiento`.
-- `repository`: interfaces Spring Data JPA.
-- `security`: JWT, filtro de autenticación y respuesta JSON para errores 401.
-- `service`: lógica de negocio y transacciones declarativas con `@Transactional`.
-- `service.strategy`: estrategia de generación del número de cuenta.
-- `validation`: anotaciones y validadores personalizados, como `@ValidDni`.
-
-## 10. Endpoints principales
-
-| Método | Endpoint | Acceso | Descripción |
-| --- | --- | --- | --- |
-| POST | `/api/auth/login` | Público | Genera token JWT |
-| GET | `/api/clientes` | Protegido | Lista clientes |
-| POST | `/api/clientes` | Protegido | Crea cliente |
-| GET | `/api/clientes/{id}` | Protegido | Obtiene cliente por ID |
-| GET | `/api/clientes?dni=...` | Protegido | Obtiene cliente por DNI |
-| POST | `/api/cuentas` | Protegido | Crea cuenta |
-| GET | `/api/cuentas/{id}` | Protegido | Obtiene cuenta por ID |
-| GET | `/api/cuentas/numero/{numeroCuenta}` | Protegido | Obtiene cuenta por número |
-| GET | `/api/cuentas/{id}/saldo` | Protegido | Consulta saldo de cuenta |
-| GET | `/api/clientes/{clienteId}/cuentas` | Protegido | Lista cuentas de cliente |
-| POST | `/api/operaciones/deposito` | Protegido | Registra depósito |
-| POST | `/api/operaciones/retiro` | Protegido | Registra retirada |
-| POST | `/api/operaciones/transferencia` | Protegido | Registra transferencia |
-| GET | `/api/cuentas/{id}/movimientos` | Protegido | Lista movimientos de una cuenta |
-| GET | `/api/cuentas/{id}/movimientos?fechaInicio=YYYY-MM-DD&fechaFin=YYYY-MM-DD` | Protegido | Lista movimientos por rango de fechas |
-
-## 11. Postman
-
-La colección Postman se encuentra en:
-
-```text
-docs/postman/NovaBank-Modulo-3.postman_collection.json
-```
-
-La colección cubre el flujo principal de uso de la API:
-
-1. Login.
-2. Acceso sin token.
-3. Acceso con token.
-4. Creación de clientes.
-5. Consulta de clientes.
-6. Creación de cuentas.
-7. Consulta de cuentas.
-8. Consulta de saldo.
-9. Operaciones financieras.
-10. Consulta de movimientos.
-11. Movimientos por rango de fechas.
-
-También incluye casos negativos:
-
-- Cliente sin token: `401`.
-- DNI inválido: `400`.
-- Cliente duplicado: `409`.
-- Retiro con saldo insuficiente: `422`.
-
-Nota: se recomienda ejecutar la colección sobre una base de datos limpia, ya que DNI, email y teléfono tienen restricciones de unicidad.
-
-## 12. Manejo de errores API
-
-La clase `GlobalExceptionHandler` centraliza las respuestas de error.
-
-Ejemplo de respuesta estándar:
-
-```json
-{
-  "code": "RESOURCE_NOT_FOUND",
-  "message": "Cuenta no encontrada",
-  "timestamp": "2026-04-26T12:00:00"
-}
-```
-
-Para errores de validación se incluye además `fieldErrors`.
-
-Ejemplo:
-
-```json
-{
-  "code": "VALIDATION_ERROR",
-  "message": "Error de validación",
-  "timestamp": "2026-04-26T12:00:00",
-  "fieldErrors": {
-    "dni": "El DNI no es valido"
-  }
-}
-```
-
-Códigos principales:
-
-| Estado HTTP | Código | Descripción |
-| --- | --- | --- |
-| 400 | `VALIDATION_ERROR` | Error de validación Bean Validation |
-| 400 | `BAD_REQUEST` | Datos inválidos |
-| 401 | `UNAUTHORIZED` | Token ausente, inválido o credenciales incorrectas |
-| 404 | `RESOURCE_NOT_FOUND` | Recurso no encontrado |
-| 409 | `CONFLICT` | DNI, email, teléfono u otro dato único duplicado |
-| 409 | `CONCURRENT_MODIFICATION` | Conflicto de concurrencia optimista |
-| 422 | `SALDO_INSUFICIENTE` | Saldo insuficiente para una operación |
-| 500 | `INTERNAL_ERROR` | Error inesperado |
-
-## 13. Decisiones técnicas relevantes
-
-### Migración desde JDBC a Spring Data JPA
-
-El Módulo 2 usaba JDBC manual, `Connection`, `PreparedStatement`, `ResultSet`, `commit` y `rollback`.
-
-En el Módulo 3, ese código se sustituye por:
-
-- entidades JPA;
-- repositorios Spring Data JPA;
-- transacciones declarativas con `@Transactional`;
-- configuración centralizada mediante Spring Boot.
-
-En el flujo principal ya no se usa:
-
-- `DatabaseConnectionManager`;
-- `RepositoryFactory`;
-- `Connection`;
-- `PreparedStatement`;
-- `ResultSet`;
-- `commit`;
-- `rollback`.
-
-Spring y Hibernate gestionan la persistencia y las transacciones.
-
-### DTOs separados para entrada y salida
-
-La API no expone entidades JPA directamente.
-
-Se utilizan DTOs para separar:
-
-- datos recibidos en requests;
-- datos devueltos en responses;
-- modelo interno persistido mediante JPA.
-
-Esto evita exponer relaciones internas, reduce riesgo de ciclos de serialización y permite evolucionar la API sin acoplarla directamente a las entidades.
-
-### Mappers manuales
-
-Los mappers transforman entidades en DTOs y DTOs en entidades.
-
-Se usan interfaces pequeñas para definir contratos de conversión:
-
-- `ResponseMapper<E, R>`;
-- `RequestMapper<D, E>`.
-
-No se usa una interfaz genérica única que obligue a todos los mappers a implementar métodos que no necesitan.
-
-### Validación personalizada de DNI
-
-El proyecto incluye la anotación personalizada:
-
-```java
-@ValidDni
-```
-
-Esta validación comprueba:
-
-- formato de 8 dígitos y una letra;
-- letra correcta del DNI español;
-- aceptación de minúsculas normalizando internamente.
-
-`@NotBlank` sigue siendo responsable de validar que el campo no esté vacío.
-
-### Optimización de duplicados con `@Query`
-
-La validación de duplicados de cliente se centraliza mediante una query en `ClienteRepository`.
-
-Se buscan coincidencias por:
-
-- DNI;
-- email;
-- teléfono.
-
-Después, `ClienteService` mantiene el orden funcional de validación:
-
-1. DNI.
-2. Email.
-3. Teléfono.
-
-### Control de concurrencia optimista con `@Version`
-
-La entidad `Cuenta` incluye un campo de versión:
-
-```java
-@Version
-private Long version;
-```
-
-Esta decisión se aplica solo a `Cuenta` porque es la entidad que contiene el saldo y puede verse afectada por operaciones concurrentes.
-
-Si Hibernate detecta que una cuenta fue modificada por otra transacción, se devuelve:
-
-```text
-409 CONCURRENT_MODIFICATION
-```
-
-### Generación de número de cuenta
-
-La generación del número de cuenta se encapsula mediante una estrategia.
-
-El formato funcional usado es:
-
-```text
-ES91210000 + 12 dígitos secuenciales
-```
-
-La estrategia actual es simple y suficiente para el módulo. Como mejora futura, podría sustituirse por una secuencia de base de datos si se quisiera soportar concurrencia alta.
-
-### Fechas de creación
-
-Las fechas de creación se asignan desde JPA/aplicación mediante callbacks como `@PrePersist`.
-
-Los `DEFAULT CURRENT_TIMESTAMP` del esquema quedan como respaldo de base de datos.
-
-### Relaciones JPA
-
-Las relaciones JPA no usan `CascadeType.ALL` ni `orphanRemoval` en el flujo financiero para evitar borrados accidentales de histórico.
-
-El histórico de movimientos debe conservarse como registro financiero.
-
-### Usuario en memoria
-
-Para este módulo se usa un usuario en memoria:
-
-```text
-admin/password
-```
-
-No se incluye todavía:
-
-- entidad `Usuario`;
-- `UsuarioRepository`;
-- sistema de roles persistido.
-
-Esto mantiene el alcance del módulo centrado en Spring Security, JWT y protección de endpoints.
-
-## 14. Funcionalidades implementadas
+- `POST /api/auth/register`
+- `POST /api/auth/login`
+- `GET /api/auth/validate`
 
 ### Clientes
 
-- Crear cliente.
-- Listar clientes.
-- Obtener cliente por ID.
-- Obtener cliente por DNI.
-- Validar DNI, email y teléfono.
-- Detectar duplicados.
+- `GET /api/clientes`
+- `POST /api/clientes`
+- `GET /api/clientes/{id}`
+- `GET /api/clientes/dni/{dni}`
+- `PUT /api/clientes/{id}`
 
 ### Cuentas
 
-- Crear cuenta asociada a cliente.
-- Obtener cuenta por ID.
-- Obtener cuenta por número.
-- Consultar saldo.
-- Listar cuentas de un cliente.
+- `POST /api/cuentas`
+- `GET /api/cuentas/{id}`
+- `GET /api/cuentas/numero/{numeroCuenta}`
+- `GET /api/cuentas/{id}/saldo`
+- `GET /api/cuentas/cliente/{clienteId}`
 
-### Operaciones financieras
+### Operaciones
 
-- Depósito.
-- Retirada.
-- Transferencia entre cuentas.
-- Control de saldo insuficiente.
-- Registro automático de movimientos.
+- `POST /api/operaciones/deposito`
+- `POST /api/operaciones/retiro`
+- `POST /api/operaciones/transferencia`
+- `GET /api/operaciones/cuentas/{cuentaId}/movimientos`
+- `GET /api/operaciones/cuentas/{cuentaId}/movimientos?fechaInicio=YYYY-MM-DD&fechaFin=YYYY-MM-DD`
 
-### Movimientos
+### Endpoints internos
 
-- Listar movimientos de una cuenta.
-- Filtrar movimientos por rango de fechas.
-- Soportar tipos:
-  - `DEPOSITO`;
-  - `RETIRO`;
-  - `TRANSFERENCIA_SALIENTE`;
-  - `TRANSFERENCIA_ENTRANTE`.
+Los siguientes endpoints pertenecen a `cuenta-service` y son consumidos por `operacion-service`. No forman parte del flujo principal de usuario:
 
-### Seguridad
+- `POST /internal/cuentas/{id}/depositos`
+- `POST /internal/cuentas/{id}/retiros`
+- `POST /internal/cuentas/transferencias`
 
-- Login con JWT.
-- Protección de endpoints.
-- Respuesta JSON para errores 401.
-- Sesiones stateless.
+## Seguridad
 
-### Documentación y pruebas
+El Gateway actua como frontera de entrada:
 
-- Swagger UI.
-- OpenAPI JSON.
-- Colección Postman.
-- Tests unitarios, de repositorio, controlador, seguridad e integración.
+- `/api/auth/login`, `/api/auth/register` y `/api/auth/validate` son rutas publicas.
+- `/api/clientes/**`, `/api/cuentas/**` y `/api/operaciones/**` requieren `Authorization: Bearer <token>`.
+- El Gateway valida el token consultando a `auth-server`.
+- `auth-server` implementa JWT formativo.
+- OAuth 2.1 real no esta implementado en esta entrega.
 
-## 15. Entrega limpia
+Los servicios de negocio no validan JWT individualmente. En un despliegue real, sus puertos internos no deberian exponerse publicamente.
 
-Antes de generar un ZIP de entrega:
+## Comunicacion entre servicios
 
-```bash
-mvn clean
-git archive --format=zip --output NovaBank-Modulo3.zip HEAD
+- `cuenta-service` llama a `cliente-service` para validar que un cliente existe antes de crear cuentas.
+- `operacion-service` llama a `cuenta-service` para aplicar depositos, retiradas y transferencias sobre saldos.
+- Las llamadas sincronicas usan OpenFeign, Eureka y Resilience4j.
+- Los fallbacks evitan exponer excepciones remotas crudas al cliente.
+
+## Testing
+
+Comando general:
+
+```powershell
+mvn clean test
 ```
 
-`git archive` genera una entrega de código fuente sin incluir:
+Tests por modulo:
 
-- `.git/`;
-- `target/`;
-- ficheros compilados;
-- reportes antiguos de tests.
-
-Esto evita entregar artefactos generados o restos de ejecuciones anteriores.
-
-## 16. Repositorio
-
-Repositorio público del proyecto:
-
-```text
-https://github.com/CroquetaConQueso/NovaBank
+```powershell
+mvn -pl api-gateway test
+mvn -pl auth-server test
+mvn -pl cliente-service test
+mvn -pl cuenta-service test
+mvn -pl operacion-service test
 ```
 
-## 17. Autor
+La ultima validacion local conocida fue `BUILD SUCCESS` con `164` tests:
 
-Carlos Torres León
+- `api-gateway`: 17
+- `auth-server`: 27
+- `cliente-service`: 29
+- `cuenta-service`: 47
+- `operacion-service`: 44
+
+La suite usa H2 para persistencia de test, MockMvc para controladores MVC, WebTestClient en Gateway, WireMock para contratos HTTP, Mockito y JUnit 5.
+
+## Decisiones de diseno
+
+- `cuenta-service` es duenio de cuentas, saldos y generacion de numero de cuenta.
+- `operacion-service` es duenio de movimientos e historial de operaciones.
+- `cuenta-service` no guarda movimientos.
+- `operacion-service` no accede directamente a la base de datos de cuentas.
+- Las referencias entre servicios son logicas; no hay foreign keys reales entre bases de datos de servicios distintos.
+- No hay idempotencia persistida.
+- No hay `X-Correlation-Id`.
+- Config Server usa un repositorio Git local externo.
+- `develop-posibles-features` queda como rama de exploracion de mejoras no integradas.
+
+## Limitaciones conocidas
+
+- No existe transaccion distribuida entre `cuenta-service` y `operacion-service`.
+- No se implementa OAuth 2.1 real.
+- No se usa Kafka, SAGA, Docker ni Docker Compose.
+- Los servicios internos deberian quedar detras del Gateway en un entorno real.
+- La seguridad por servicio queda fuera del alcance formativo de esta entrega.
+
+## Repositorio
+
+[https://github.com/CroquetaConQueso/NovaBank](https://github.com/CroquetaConQueso/NovaBank)

@@ -614,9 +614,6 @@ No se incluye:
 
 La rama `develop-posibles-features` queda como exploración técnica de mejoras no integradas.
 
-### Sin Docker
-
-No se incluye Docker ni Docker Compose porque no forma parte del caso práctico final.
 
 ## 20. Limitaciones Conocidas
 

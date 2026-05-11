@@ -1,6 +1,8 @@
 package com.novabank.cuenta.service.strategy;
 
+import reactor.core.publisher.Mono;
+
 public interface GeneradorNumeroCuentaStrategy {
 
-    String generarNumeroCuenta();
+    Mono<String> generarNumeroCuenta();
 }

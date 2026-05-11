@@ -1,7 +1,6 @@
 package com.novabank.cliente.service;
 
 import com.novabank.cliente.dto.ClienteRequestDTO;
-import com.novabank.cliente.dto.ClienteResponseDTO;
 import com.novabank.cliente.exception.DuplicateResourceException;
 import com.novabank.cliente.exception.ResourceNotFoundException;
 import com.novabank.cliente.exception.ValidationException;
@@ -15,13 +14,13 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
+import reactor.test.StepVerifier;
 
 import java.time.LocalDateTime;
-import java.util.List;
-import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -49,16 +48,21 @@ class ClienteServiceTest {
         );
 
         when(clienteRepository.buscarDuplicados("12345678Z", "ana@example.com", "600111222"))
-                .thenReturn(List.of());
+                .thenReturn(Flux.empty());
 
         when(clienteRepository.save(any(Cliente.class))).thenAnswer(invocation -> {
             Cliente cliente = invocation.getArgument(0);
             cliente.setId(1L);
             cliente.setFechaCreacion(LocalDateTime.now());
-            return cliente;
+            return Mono.just(cliente);
         });
 
-        ClienteResponseDTO response = clienteService.crearCliente(request);
+        StepVerifier.create(clienteService.crearCliente(request))
+                .assertNext(response -> {
+                    assertThat(response.id()).isEqualTo(1L);
+                    assertThat(response.email()).isEqualTo("ana@example.com");
+                })
+                .verifyComplete();
 
         ArgumentCaptor<Cliente> captor = ArgumentCaptor.forClass(Cliente.class);
         verify(clienteRepository).save(captor.capture());
@@ -68,7 +72,6 @@ class ClienteServiceTest {
         assertThat(guardado.getApellidos()).isEqualTo("Garcia");
         assertThat(guardado.getDni()).isEqualTo("12345678Z");
         assertThat(guardado.getEmail()).isEqualTo("ana@example.com");
-        assertThat(response.id()).isEqualTo(1L);
     }
 
     @Test
@@ -85,15 +88,18 @@ class ClienteServiceTest {
                 "600111333"
         );
 
-        when(clienteRepository.findById(1L)).thenReturn(Optional.of(existente));
+        when(clienteRepository.findById(1L)).thenReturn(Mono.just(existente));
         when(clienteRepository.buscarDuplicadosExcluyendoId(1L, "12345678Z", "ana.maria@example.com", "600111333"))
-                .thenReturn(List.of());
-        when(clienteRepository.save(existente)).thenReturn(existente);
+                .thenReturn(Flux.empty());
+        when(clienteRepository.save(existente)).thenReturn(Mono.just(existente));
 
-        ClienteResponseDTO response = clienteService.actualizarCliente(1L, request);
+        StepVerifier.create(clienteService.actualizarCliente(1L, request))
+                .assertNext(response -> {
+                    assertThat(response.nombre()).isEqualTo("Ana Maria");
+                    assertThat(response.email()).isEqualTo("ana.maria@example.com");
+                })
+                .verifyComplete();
 
-        assertThat(response.nombre()).isEqualTo("Ana Maria");
-        assertThat(response.email()).isEqualTo("ana.maria@example.com");
         verify(clienteRepository).buscarDuplicadosExcluyendoId(1L, "12345678Z", "ana.maria@example.com", "600111333");
     }
 
@@ -110,11 +116,14 @@ class ClienteServiceTest {
         Cliente duplicado = cliente("12345678Z", "otro@example.com", "699999999");
 
         when(clienteRepository.buscarDuplicados("12345678Z", "ana@example.com", "600111222"))
-                .thenReturn(List.of(duplicado));
+                .thenReturn(Flux.just(duplicado));
 
-        assertThatThrownBy(() -> clienteService.crearCliente(request))
-                .isInstanceOf(DuplicateResourceException.class)
-                .hasMessageContaining("DNI");
+        StepVerifier.create(clienteService.crearCliente(request))
+                .expectErrorSatisfies(error -> {
+                    assertThat(error).isInstanceOf(DuplicateResourceException.class);
+                    assertThat(error).hasMessageContaining("DNI");
+                })
+                .verify();
     }
 
     @Test
@@ -123,28 +132,36 @@ class ClienteServiceTest {
         cliente.setId(1L);
         cliente.setFechaCreacion(LocalDateTime.now());
 
-        when(clienteRepository.findByDni("12345678Z")).thenReturn(Optional.of(cliente));
+        when(clienteRepository.findByDni("12345678Z")).thenReturn(Mono.just(cliente));
 
-        ClienteResponseDTO response = clienteService.obtenerClientePorDni("12345678z");
-
-        assertThat(response.id()).isEqualTo(1L);
-        assertThat(response.dni()).isEqualTo("12345678Z");
+        StepVerifier.create(clienteService.obtenerClientePorDni("12345678z"))
+                .assertNext(response -> {
+                    assertThat(response.id()).isEqualTo(1L);
+                    assertThat(response.dni()).isEqualTo("12345678Z");
+                })
+                .verifyComplete();
     }
 
     @Test
     void obtenerClientePorDniCuandoNoExisteLanzaResourceNotFound() {
-        when(clienteRepository.findByDni("12345678Z")).thenReturn(Optional.empty());
+        when(clienteRepository.findByDni("12345678Z")).thenReturn(Mono.empty());
 
-        assertThatThrownBy(() -> clienteService.obtenerClientePorDni("12345678Z"))
-                .isInstanceOf(ResourceNotFoundException.class)
-                .hasMessageContaining("DNI");
+        StepVerifier.create(clienteService.obtenerClientePorDni("12345678Z"))
+                .expectErrorSatisfies(error -> {
+                    assertThat(error).isInstanceOf(ResourceNotFoundException.class);
+                    assertThat(error).hasMessageContaining("DNI");
+                })
+                .verify();
     }
 
     @Test
     void obtenerClientePorDniCuandoBlankLanzaValidationException() {
-        assertThatThrownBy(() -> clienteService.obtenerClientePorDni("   "))
-                .isInstanceOf(ValidationException.class)
-                .hasMessage("El DNI es obligatorio");
+        StepVerifier.create(clienteService.obtenerClientePorDni("   "))
+                .expectErrorSatisfies(error -> {
+                    assertThat(error).isInstanceOf(ValidationException.class);
+                    assertThat(error).hasMessage("El DNI es obligatorio");
+                })
+                .verify();
     }
 
     private Cliente cliente(String dni, String email, String telefono) {

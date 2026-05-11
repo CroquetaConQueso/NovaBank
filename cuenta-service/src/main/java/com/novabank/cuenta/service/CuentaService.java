@@ -17,7 +17,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
-import reactor.core.scheduler.Schedulers;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -44,16 +43,12 @@ public class CuentaService {
         this.cuentaMapper = cuentaMapper;
     }
 
-    /**
-     * Valida el cliente mediante Feign como transicion. El Issue #113 sustituira
-     * esta llamada bloqueante por WebClient reactivo.
-     */
     @Transactional
     public Mono<CuentaResponseDTO> crearCuenta(CuentaCreateRequestDTO request) {
         return Mono.defer(() -> {
             Long clienteId = validarId(request == null ? null : request.clienteId(), "El id del cliente debe ser positivo");
 
-            return validarClienteTransicional(clienteId)
+            return clienteServiceClient.obtenerCliente(clienteId)
                     .then(Mono.defer(generadorNumeroCuentaStrategy::generarNumeroCuenta))
                     .map(numeroCuenta -> {
                         Cuenta cuenta = Cuenta.builder()
@@ -91,14 +86,10 @@ public class CuentaService {
                 .map(cuenta -> new SaldoResponseDTO(cuenta.getId(), cuenta.getNumeroCuenta(), cuenta.getSaldo()));
     }
 
-    /**
-     * La validacion remota del cliente sigue siendo temporalmente Feign hasta
-     * la migracion dedicada a WebClient del Issue #113.
-     */
     public Flux<CuentaResponseDTO> listarCuentasPorCliente(Long clienteId) {
         return Mono.defer(() -> {
                     Long id = validarId(clienteId, "El id del cliente debe ser positivo");
-                    return validarClienteTransicional(id).thenReturn(id);
+                    return clienteServiceClient.obtenerCliente(id).thenReturn(id);
                 })
                 .flatMapMany(cuentaRepository::findByClienteId)
                 .map(cuentaMapper::toResponse);
@@ -242,9 +233,4 @@ public class CuentaService {
         return id;
     }
 
-    private Mono<Void> validarClienteTransicional(Long clienteId) {
-        return Mono.fromCallable(() -> clienteServiceClient.obtenerCliente(clienteId))
-                .subscribeOn(Schedulers.boundedElastic())
-                .then();
-    }
 }

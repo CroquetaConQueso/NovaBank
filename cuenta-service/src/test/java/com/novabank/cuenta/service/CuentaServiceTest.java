@@ -55,7 +55,7 @@ class CuentaServiceTest {
 
     @Test
     void crearCuentaValidaClienteYSaldoInicialCero() {
-        when(clienteServiceClient.obtenerCliente(1L)).thenReturn(cliente(1L));
+        when(clienteServiceClient.obtenerCliente(1L)).thenReturn(Mono.just(cliente(1L)));
         when(generadorNumeroCuentaStrategy.generarNumeroCuenta()).thenReturn(Mono.just("ES91210000000000000001"));
         when(cuentaRepository.save(any(Cuenta.class))).thenAnswer(invocation -> {
             Cuenta cuenta = invocation.getArgument(0);
@@ -81,9 +81,9 @@ class CuentaServiceTest {
     }
 
     @Test
-    void crearCuentaPropagaClienteNoEncontradoDeFeignDecoder() {
+    void crearCuentaPropagaClienteNoEncontradoDelClienteReactivo() {
         when(clienteServiceClient.obtenerCliente(99L))
-                .thenThrow(new ResourceNotFoundException("No existe ningun cliente con el id indicado"));
+                .thenReturn(Mono.error(new ResourceNotFoundException("No existe ningun cliente con el id indicado")));
 
         StepVerifier.create(cuentaService.crearCuenta(new CuentaCreateRequestDTO(99L)))
                 .expectError(ResourceNotFoundException.class)
@@ -95,7 +95,7 @@ class CuentaServiceTest {
     @Test
     void crearCuentaCuandoClienteServiceNoDisponibleNoGuardaCuenta() {
         when(clienteServiceClient.obtenerCliente(1L))
-                .thenThrow(new RemoteServiceException("cliente-service no esta disponible"));
+                .thenReturn(Mono.error(new RemoteServiceException("cliente-service no esta disponible")));
 
         StepVerifier.create(cuentaService.crearCuenta(new CuentaCreateRequestDTO(1L)))
                 .expectError(RemoteServiceException.class)
@@ -120,7 +120,7 @@ class CuentaServiceTest {
     @Test
     void listarCuentasPorClientePropagaClienteNoEncontrado() {
         when(clienteServiceClient.obtenerCliente(99L))
-                .thenThrow(new ResourceNotFoundException("No existe ningun cliente con el id indicado"));
+                .thenReturn(Mono.error(new ResourceNotFoundException("No existe ningun cliente con el id indicado")));
 
         StepVerifier.create(cuentaService.listarCuentasPorCliente(99L))
                 .expectError(ResourceNotFoundException.class)

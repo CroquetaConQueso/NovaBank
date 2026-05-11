@@ -6,9 +6,16 @@ import com.novabank.operacion.exception.RemoteServiceException;
 import com.novabank.operacion.exception.RemoteValidationException;
 import feign.Response;
 import feign.codec.ErrorDecoder;
+import org.springframework.boot.autoconfigure.http.HttpMessageConverters;
 import org.springframework.context.annotation.Bean;
+import org.springframework.http.converter.json.MappingJackson2HttpMessageConverter;
 
 public class CuentaServiceFeignConfig {
+
+    @Bean
+    HttpMessageConverters feignHttpMessageConverters() {
+        return new HttpMessageConverters(new MappingJackson2HttpMessageConverter());
+    }
 
     @Bean
     ErrorDecoder cuentaServiceErrorDecoder() {

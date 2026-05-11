@@ -1,92 +1,44 @@
 package com.novabank.operacion.model;
 
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.Enumerated;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
-import jakarta.persistence.PrePersist;
-import jakarta.persistence.Table;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+import org.springframework.data.annotation.Id;
+import org.springframework.data.relational.core.mapping.Column;
+import org.springframework.data.relational.core.mapping.Table;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
-@Entity
-@Table(name = "movimientos")
+@Getter
+@Setter
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
+@Table("movimientos")
 public class Movimiento {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "cuenta_id", nullable = false)
+    @Column("cuenta_id")
     private Long cuentaId;
 
-    @Column(name = "numero_cuenta", nullable = false, length = 34)
+    @Column("numero_cuenta")
     private String numeroCuenta;
 
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 50)
+    @Column("tipo")
     private TipoMovimiento tipo;
 
-    @Column(nullable = false, precision = 15, scale = 2)
+    @Column("cantidad")
     private BigDecimal cantidad;
 
-    @Column(nullable = false)
+    @Column("fecha")
     private LocalDateTime fecha;
 
-    public Long getId() {
-        return id;
-    }
-
-    public void setId(Long id) {
-        this.id = id;
-    }
-
-    public Long getCuentaId() {
-        return cuentaId;
-    }
-
-    public void setCuentaId(Long cuentaId) {
-        this.cuentaId = cuentaId;
-    }
-
-    public String getNumeroCuenta() {
-        return numeroCuenta;
-    }
-
-    public void setNumeroCuenta(String numeroCuenta) {
-        this.numeroCuenta = numeroCuenta;
-    }
-
-    public TipoMovimiento getTipo() {
-        return tipo;
-    }
-
-    public void setTipo(TipoMovimiento tipo) {
-        this.tipo = tipo;
-    }
-
-    public BigDecimal getCantidad() {
-        return cantidad;
-    }
-
-    public void setCantidad(BigDecimal cantidad) {
-        this.cantidad = cantidad;
-    }
-
-    public LocalDateTime getFecha() {
-        return fecha;
-    }
-
-    public void setFecha(LocalDateTime fecha) {
-        this.fecha = fecha;
-    }
-
-    @PrePersist
-    void prePersist() {
+    public void prepararParaCreacion() {
         if (fecha == null) {
             fecha = LocalDateTime.now();
         }

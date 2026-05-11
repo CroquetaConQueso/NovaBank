@@ -11,7 +11,6 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.format.annotation.DateTimeFormat;
-import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -19,9 +18,10 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RestController;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 
 import java.time.LocalDate;
-import java.util.List;
 
 @RestController
 @RequestMapping("/api/operaciones")
@@ -46,10 +46,10 @@ public class OperacionController {
             @ApiResponse(responseCode = "404", description = "Cuenta no encontrada"),
             @ApiResponse(responseCode = "503", description = "cuenta-service no disponible")
     })
-    public ResponseEntity<OperacionResponseDTO> depositar(
+    public Mono<OperacionResponseDTO> depositar(
             @Valid @RequestBody OperacionRequestDTO request
     ) {
-        return ResponseEntity.ok(operacionService.depositar(request));
+        return operacionService.depositar(request);
     }
 
     @PostMapping("/retiro")
@@ -65,10 +65,10 @@ public class OperacionController {
             @ApiResponse(responseCode = "422", description = "Saldo insuficiente"),
             @ApiResponse(responseCode = "503", description = "cuenta-service no disponible")
     })
-    public ResponseEntity<OperacionResponseDTO> retirar(
+    public Mono<OperacionResponseDTO> retirar(
             @Valid @RequestBody OperacionRequestDTO request
     ) {
-        return ResponseEntity.ok(operacionService.retirar(request));
+        return operacionService.retirar(request);
     }
 
     @PostMapping("/transferencia")
@@ -84,10 +84,10 @@ public class OperacionController {
             @ApiResponse(responseCode = "422", description = "Saldo insuficiente"),
             @ApiResponse(responseCode = "503", description = "cuenta-service no disponible")
     })
-    public ResponseEntity<OperacionResponseDTO> transferir(
+    public Mono<OperacionResponseDTO> transferir(
             @Valid @RequestBody TransferenciaRequestDTO request
     ) {
-        return ResponseEntity.ok(operacionService.transferir(request));
+        return operacionService.transferir(request);
     }
 
     @GetMapping("/cuentas/{cuentaId}/movimientos")
@@ -100,11 +100,11 @@ public class OperacionController {
             @ApiResponse(responseCode = "400", description = "Identificador o rango de fechas invalido"),
             @ApiResponse(responseCode = "401", description = "Token ausente o invalido al acceder mediante Gateway")
     })
-    public ResponseEntity<List<MovimientoResponseDTO>> listarMovimientos(
+    public Flux<MovimientoResponseDTO> listarMovimientos(
             @PathVariable Long cuentaId,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fechaInicio,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fechaFin
     ) {
-        return ResponseEntity.ok(operacionService.listarMovimientos(cuentaId, fechaInicio, fechaFin));
+        return operacionService.listarMovimientos(cuentaId, fechaInicio, fechaFin);
     }
 }

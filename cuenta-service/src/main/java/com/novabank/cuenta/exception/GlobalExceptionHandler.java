@@ -29,6 +29,12 @@ public class GlobalExceptionHandler {
                 .body(ErrorResponseDTO.of("INSUFFICIENT_BALANCE", ex.getMessage())));
     }
 
+    @ExceptionHandler(IdempotencyConflictException.class)
+    public Mono<ResponseEntity<ErrorResponseDTO>> handleIdempotencyConflict(IdempotencyConflictException ex) {
+        return Mono.just(ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(ErrorResponseDTO.of("IDEMPOTENCY_CONFLICT", ex.getMessage())));
+    }
+
     @ExceptionHandler(RemoteServiceException.class)
     public Mono<ResponseEntity<ErrorResponseDTO>> handleRemoteService(RemoteServiceException ex) {
         return Mono.just(ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)

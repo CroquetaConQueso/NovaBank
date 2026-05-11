@@ -6,7 +6,6 @@ import com.novabank.operacion.dto.AplicarMovimientoResponseDTO;
 import com.novabank.operacion.dto.CuentaOperacionRequestDTO;
 import com.novabank.operacion.dto.CuentaResponseDTO;
 import com.novabank.operacion.dto.OperacionRequestDTO;
-import com.novabank.operacion.dto.TransferenciaDivisaRequestDTO;
 import com.novabank.operacion.dto.TransferenciaRequestDTO;
 import com.novabank.operacion.exception.ExchangeRateUnavailableException;
 import com.novabank.operacion.exception.RemoteResourceNotFoundException;
@@ -26,7 +25,6 @@ import reactor.test.StepVerifier;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.util.List;
 import java.util.concurrent.atomic.AtomicLong;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -103,13 +101,7 @@ class OperacionServiceTest {
     @Test
     void transferenciaCorrectaUsaEndpointInternoUnicoYGuardaDosMovimientos() {
         when(cuentaServiceClient.aplicarMovimiento(any(AplicarMovimientoRequestDTO.class)))
-                .thenReturn(Mono.just(new AplicarMovimientoResponseDTO(
-                        "op-1",
-                        "COMPLETED",
-                        "Operacion aplicada",
-                        cuenta(10L, "ES91210000000000000001"),
-                        cuenta(11L, "ES91210000000000000002")
-                )));
+                .thenReturn(Mono.just(aplicarMovimientoResponse()));
         AtomicLong ids = new AtomicLong(10L);
         when(movimientoRepository.save(any(Movimiento.class))).thenAnswer(invocation -> {
             Movimiento movimiento = invocation.getArgument(0);
@@ -192,7 +184,7 @@ class OperacionServiceTest {
     void transferenciaSinCuentaDestinoEnRespuestaRemotaNoGuardaMovimientos() {
         when(cuentaServiceClient.aplicarMovimiento(any(AplicarMovimientoRequestDTO.class)))
                 .thenReturn(Mono.just(new AplicarMovimientoResponseDTO(
-                        "op-1",
+                        "op-test",
                         "COMPLETED",
                         "Operacion aplicada",
                         cuenta(10L, "ES91210000000000000001"),
@@ -336,6 +328,16 @@ class OperacionServiceTest {
                 1L,
                 new BigDecimal("100.00"),
                 LocalDateTime.now()
+        );
+    }
+
+    private AplicarMovimientoResponseDTO aplicarMovimientoResponse() {
+        return new AplicarMovimientoResponseDTO(
+                "op-test",
+                "COMPLETED",
+                "Operacion aplicada",
+                cuenta(10L, "ES91210000000000000001"),
+                cuenta(11L, "ES91210000000000000002")
         );
     }
 

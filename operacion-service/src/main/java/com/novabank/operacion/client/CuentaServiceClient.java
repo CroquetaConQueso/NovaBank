@@ -9,17 +9,14 @@ import com.novabank.operacion.exception.RemoteResourceNotFoundException;
 import com.novabank.operacion.exception.RemoteServiceException;
 import com.novabank.operacion.exception.RemoteValidationException;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.stereotype.Component;
-import org.springframework.web.reactive.function.client.ClientResponse;
 import org.springframework.web.reactive.function.client.WebClient;
-import org.springframework.web.reactive.function.client.WebClientRequestException;
 import reactor.core.publisher.Mono;
 
 @Component
 public class CuentaServiceClient {
-
-    private static final String SERVICE_NAME = "cuenta-service";
 
     private final WebClient webClient;
 
@@ -35,10 +32,18 @@ public class CuentaServiceClient {
                 .uri("/internal/cuentas/{id}/depositos", id)
                 .bodyValue(request)
                 .retrieve()
-                .onStatus(HttpStatusCode::isError, this::mapearError)
+                .onStatus(status -> status == HttpStatus.NOT_FOUND,
+                        response -> Mono.error(new RemoteResourceNotFoundException("La cuenta indicada no existe")))
+                .onStatus(status -> status == HttpStatus.UNPROCESSABLE_ENTITY || status == HttpStatus.BAD_REQUEST,
+                        response -> Mono.error(new RemoteValidationException("cuenta-service rechazo la peticion interna")))
+                .onStatus(status -> status == HttpStatus.CONFLICT,
+                        response -> Mono.error(new RemoteConflictException("La operacion no pudo completarse por conflicto")))
+                .onStatus(HttpStatusCode::is5xxServerError,
+                        response -> Mono.error(new RemoteServiceException("cuenta-service no esta disponible")))
                 .bodyToMono(CuentaResponseDTO.class)
-                .switchIfEmpty(Mono.error(new RemoteResourceNotFoundException(SERVICE_NAME + " no devolvio datos de la cuenta")))
-                .onErrorMap(WebClientRequestException.class, this::servicioNoDisponible);
+                .switchIfEmpty(Mono.error(new RemoteResourceNotFoundException("cuenta-service no devolvio datos de la cuenta")))
+                .onErrorMap(this::esFalloTecnico,
+                        error -> new RemoteServiceException("cuenta-service no esta disponible", error));
     }
 
     public Mono<CuentaResponseDTO> retirar(Long id, CuentaOperacionRequestDTO request) {
@@ -46,10 +51,18 @@ public class CuentaServiceClient {
                 .uri("/internal/cuentas/{id}/retiros", id)
                 .bodyValue(request)
                 .retrieve()
-                .onStatus(HttpStatusCode::isError, this::mapearError)
+                .onStatus(status -> status == HttpStatus.NOT_FOUND,
+                        response -> Mono.error(new RemoteResourceNotFoundException("La cuenta indicada no existe")))
+                .onStatus(status -> status == HttpStatus.UNPROCESSABLE_ENTITY || status == HttpStatus.BAD_REQUEST,
+                        response -> Mono.error(new RemoteValidationException("La operacion fue rechazada por cuenta-service")))
+                .onStatus(status -> status == HttpStatus.CONFLICT,
+                        response -> Mono.error(new RemoteConflictException("La operacion no pudo completarse por conflicto")))
+                .onStatus(HttpStatusCode::is5xxServerError,
+                        response -> Mono.error(new RemoteServiceException("cuenta-service no esta disponible")))
                 .bodyToMono(CuentaResponseDTO.class)
-                .switchIfEmpty(Mono.error(new RemoteResourceNotFoundException(SERVICE_NAME + " no devolvio datos de la cuenta")))
-                .onErrorMap(WebClientRequestException.class, this::servicioNoDisponible);
+                .switchIfEmpty(Mono.error(new RemoteResourceNotFoundException("cuenta-service no devolvio datos de la cuenta")))
+                .onErrorMap(this::esFalloTecnico,
+                        error -> new RemoteServiceException("cuenta-service no esta disponible", error));
     }
 
     public Mono<AplicarMovimientoResponseDTO> aplicarMovimiento(AplicarMovimientoRequestDTO request) {
@@ -57,37 +70,24 @@ public class CuentaServiceClient {
                 .uri("/internal/cuentas/aplicar-movimientos")
                 .bodyValue(request)
                 .retrieve()
-                .onStatus(HttpStatusCode::isError, this::mapearError)
+                .onStatus(status -> status == HttpStatus.NOT_FOUND,
+                        response -> Mono.error(new RemoteResourceNotFoundException("La cuenta indicada no existe")))
+                .onStatus(status -> status == HttpStatus.UNPROCESSABLE_ENTITY || status == HttpStatus.BAD_REQUEST,
+                        response -> Mono.error(new RemoteValidationException("La operacion fue rechazada por cuenta-service")))
+                .onStatus(status -> status == HttpStatus.CONFLICT,
+                        response -> Mono.error(new RemoteConflictException("La operacion no pudo completarse por conflicto")))
+                .onStatus(HttpStatusCode::is5xxServerError,
+                        response -> Mono.error(new RemoteServiceException("cuenta-service no esta disponible")))
                 .bodyToMono(AplicarMovimientoResponseDTO.class)
-                .switchIfEmpty(Mono.error(new RemoteResourceNotFoundException(SERVICE_NAME + " no devolvio datos de la transferencia")))
-                .onErrorMap(WebClientRequestException.class, this::servicioNoDisponible);
+                .switchIfEmpty(Mono.error(new RemoteResourceNotFoundException("cuenta-service no devolvio datos de la transferencia")))
+                .onErrorMap(this::esFalloTecnico,
+                        error -> new RemoteServiceException("cuenta-service no esta disponible", error));
     }
 
-    private Mono<? extends Throwable> mapearError(ClientResponse response) {
-        return response.bodyToMono(String.class)
-                .defaultIfEmpty("")
-                .map(body -> switch (response.statusCode().value()) {
-                    case 404 -> new RemoteResourceNotFoundException(mensajeRemoto(body, "Recurso no encontrado en cuenta-service"));
-                    case 400, 422 -> new RemoteValidationException(mensajeRemoto(body, "Solicitud rechazada por cuenta-service"));
-                    case 409 -> new RemoteConflictException(mensajeRemoto(body, "Conflicto al aplicar operacion en cuenta-service"));
-                    default -> {
-                        if (response.statusCode().is5xxServerError()) {
-                            yield new RemoteServiceException(mensajeRemoto(body, "cuenta-service no esta disponible"));
-                        }
-                        yield new RemoteServiceException(mensajeRemoto(body, "Error remoto de cuenta-service"));
-                    }
-                });
-    }
-
-    private String mensajeRemoto(String body, String fallback) {
-        if (body == null || body.isBlank()) {
-            return fallback;
-        }
-
-        return fallback + ": " + body;
-    }
-
-    private RemoteServiceException servicioNoDisponible(WebClientRequestException ex) {
-        return new RemoteServiceException("cuenta-service no esta disponible", ex);
+    private boolean esFalloTecnico(Throwable error) {
+        return !(error instanceof RemoteResourceNotFoundException)
+                && !(error instanceof RemoteValidationException)
+                && !(error instanceof RemoteConflictException)
+                && !(error instanceof RemoteServiceException);
     }
 }

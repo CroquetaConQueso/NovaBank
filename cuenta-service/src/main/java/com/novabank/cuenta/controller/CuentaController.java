@@ -2,15 +2,17 @@ package com.novabank.cuenta.controller;
 
 import com.novabank.cuenta.dto.CuentaCreateRequestDTO;
 import com.novabank.cuenta.dto.CuentaResponseDTO;
+import com.novabank.cuenta.dto.MovimientoEventDTO;
 import com.novabank.cuenta.dto.SaldoResponseDTO;
 import com.novabank.cuenta.service.CuentaService;
+import com.novabank.cuenta.service.MovimientoEventService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
+import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -27,9 +29,14 @@ import reactor.core.publisher.Mono;
 public class CuentaController {
 
     private final CuentaService cuentaService;
+    private final MovimientoEventService movimientoEventService;
 
-    public CuentaController(CuentaService cuentaService) {
+    public CuentaController(
+            CuentaService cuentaService,
+            MovimientoEventService movimientoEventService
+    ) {
         this.cuentaService = cuentaService;
+        this.movimientoEventService = movimientoEventService;
     }
 
     @GetMapping("/cliente/{clienteId}")
@@ -93,6 +100,20 @@ public class CuentaController {
     })
     public Mono<SaldoResponseDTO> consultarSaldo(@PathVariable Long id) {
         return cuentaService.consultarSaldo(id);
+    }
+
+    @GetMapping(value = "/{id}/movimientos/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    @Operation(
+            summary = "Suscribirse a movimientos de una cuenta",
+            description = "Devuelve un stream SSE en memoria con los movimientos aplicados sobre una cuenta."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Stream SSE abierto correctamente"),
+            @ApiResponse(responseCode = "400", description = "Identificador invalido"),
+            @ApiResponse(responseCode = "401", description = "Token ausente o invalido al acceder mediante Gateway")
+    })
+    public Flux<MovimientoEventDTO> streamMovimientos(@PathVariable Long id) {
+        return movimientoEventService.streamDeCuenta(id);
     }
 
 }

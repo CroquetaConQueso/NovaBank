@@ -18,3 +18,18 @@ CREATE TABLE IF NOT EXISTS account_number_sequence (
 
 MERGE INTO account_number_sequence KEY(id)
 VALUES (1, 1);
+
+CREATE TABLE IF NOT EXISTS operaciones_idempotentes (
+    id BIGSERIAL PRIMARY KEY,
+    operation_id VARCHAR(100) NOT NULL,
+    request_hash VARCHAR(64) NOT NULL,
+    estado VARCHAR(20) NOT NULL,
+    fecha_creacion TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    fecha_actualizacion TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uk_operaciones_idempotentes_operation_id UNIQUE (operation_id),
+    CONSTRAINT chk_operaciones_idempotentes_estado
+        CHECK (estado IN ('PROCESSING', 'COMPLETED', 'FAILED'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_operaciones_idempotentes_estado
+    ON operaciones_idempotentes (estado);

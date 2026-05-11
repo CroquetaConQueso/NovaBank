@@ -1,6 +1,8 @@
 package com.novabank.cuenta.repository;
 
 import com.novabank.cuenta.model.Cuenta;
+import com.novabank.cuenta.model.EstadoOperacionIdempotente;
+import com.novabank.cuenta.model.OperacionIdempotente;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -22,9 +24,14 @@ class CuentaRepositoryTest {
     @Autowired
     private CuentaNumeroSecuenciaRepository cuentaNumeroSecuenciaRepository;
 
+    @Autowired
+    private OperacionIdempotenteRepository operacionIdempotenteRepository;
+
     @BeforeEach
     void setUp() {
-        cuentaRepository.deleteAll().block();
+        operacionIdempotenteRepository.deleteAll()
+                .then(cuentaRepository.deleteAll())
+                .block();
     }
 
     @Test
@@ -62,6 +69,27 @@ class CuentaRepositoryTest {
                         })
                         .then(cuentaNumeroSecuenciaRepository.findById(1L)))
                 .assertNext(secuencia -> assertThat(secuencia.getNextValue()).isEqualTo(2L))
+                .verifyComplete();
+    }
+
+    @Test
+    void guardaYBuscaOperacionIdempotentePorOperationId() {
+        OperacionIdempotente operacion = OperacionIdempotente.builder()
+                .operationId("op-repo-1")
+                .requestHash("abc123")
+                .estado(EstadoOperacionIdempotente.PROCESSING)
+                .build();
+        operacion.prepararParaCreacion();
+
+        StepVerifier.create(operacionIdempotenteRepository.save(operacion)
+                        .then(operacionIdempotenteRepository.findByOperationId("op-repo-1")))
+                .assertNext(guardada -> {
+                    assertThat(guardada.getId()).isNotNull();
+                    assertThat(guardada.getOperationId()).isEqualTo("op-repo-1");
+                    assertThat(guardada.getEstado()).isEqualTo(EstadoOperacionIdempotente.PROCESSING);
+                    assertThat(guardada.getFechaCreacion()).isNotNull();
+                    assertThat(guardada.getFechaActualizacion()).isNotNull();
+                })
                 .verifyComplete();
     }
 

@@ -50,6 +50,9 @@ class CuentaServiceTest {
     @Spy
     private CuentaMapper cuentaMapper;
 
+    @Mock
+    private MovimientoEventService movimientoEventService;
+
     @InjectMocks
     private CuentaService cuentaService;
 
@@ -190,6 +193,7 @@ class CuentaServiceTest {
                 .verifyComplete();
 
         assertThat(cuenta.getSaldo()).isEqualByComparingTo("150.00");
+        verify(movimientoEventService).publicar(any());
     }
 
     @Test
@@ -205,6 +209,7 @@ class CuentaServiceTest {
                 .verify();
 
         verify(cuentaRepository, never()).findById(eq(1L));
+        verify(movimientoEventService, never()).publicar(any());
     }
 
     @Test
@@ -238,6 +243,7 @@ class CuentaServiceTest {
                 .verify();
 
         assertThat(cuenta.getSaldo()).isEqualByComparingTo("25.00");
+        verify(movimientoEventService, never()).publicar(any());
     }
 
     @Test
@@ -263,6 +269,7 @@ class CuentaServiceTest {
 
         assertThat(origen.getSaldo()).isEqualByComparingTo("125.00");
         assertThat(destino.getSaldo()).isEqualByComparingTo("85.00");
+        verify(movimientoEventService, org.mockito.Mockito.times(2)).publicar(any());
     }
 
     @Test
@@ -310,6 +317,7 @@ class CuentaServiceTest {
 
         assertThat(origen.getSaldo()).isEqualByComparingTo("10.00");
         assertThat(destino.getSaldo()).isEqualByComparingTo("20.00");
+        verify(movimientoEventService, never()).publicar(any());
     }
 
     private ClienteResponseDTO cliente(Long id) {

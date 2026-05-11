@@ -1,15 +1,21 @@
 package com.novabank.cuenta.controller;
 
+import com.novabank.cuenta.dto.AplicarMovimientoRequestDTO;
+import com.novabank.cuenta.dto.AplicarMovimientoResponseDTO;
 import com.novabank.cuenta.dto.CuentaCreateRequestDTO;
 import com.novabank.cuenta.dto.CuentaOperacionRequestDTO;
 import com.novabank.cuenta.dto.CuentaResponseDTO;
+import com.novabank.cuenta.dto.MovimientoEventDTO;
 import com.novabank.cuenta.dto.SaldoResponseDTO;
 import com.novabank.cuenta.dto.TransferenciaInternaRequestDTO;
 import com.novabank.cuenta.exception.GlobalExceptionHandler;
+import com.novabank.cuenta.exception.IdempotencyConflictException;
 import com.novabank.cuenta.exception.InsufficientBalanceException;
 import com.novabank.cuenta.exception.RemoteServiceException;
 import com.novabank.cuenta.exception.ResourceNotFoundException;
+import com.novabank.cuenta.service.CuentaMovimientoAtomicoService;
 import com.novabank.cuenta.service.CuentaService;
+import com.novabank.cuenta.service.MovimientoEventService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.reactive.WebFluxTest;
@@ -37,6 +43,12 @@ class CuentaControllerTest {
 
     @MockBean
     private CuentaService cuentaService;
+
+    @MockBean
+    private CuentaMovimientoAtomicoService cuentaMovimientoAtomicoService;
+
+    @MockBean
+    private MovimientoEventService movimientoEventService;
 
     @Test
     void crearCuentaDevuelveCreatedYBody() {
@@ -338,6 +350,101 @@ class CuentaControllerTest {
                 .expectStatus().isBadRequest()
                 .expectBody()
                 .jsonPath("$.code").isEqualTo("VALIDATION_ERROR");
+    }
+
+    @Test
+    void streamMovimientosDevuelveTextEventStream() {
+        when(movimientoEventService.streamDeCuenta(10L))
+                .thenReturn(Flux.just(new MovimientoEventDTO(
+                        10L,
+                        null,
+                        "DEPOSITO",
+                        new BigDecimal("25.00"),
+                        new BigDecimal("75.00"),
+                        "Deposito interno",
+                        LocalDateTime.now(),
+                        null
+                )));
+
+        webTestClient.get()
+                .uri("/api/cuentas/10/movimientos/stream")
+                .exchange()
+                .expectStatus().isOk()
+                .expectHeader().contentTypeCompatibleWith(MediaType.TEXT_EVENT_STREAM)
+                .expectBodyList(MovimientoEventDTO.class)
+                .hasSize(1);
+    }
+
+    @Test
+    void aplicarMovimientoAtomicoDevuelveRespuestaInterna() {
+        when(cuentaMovimientoAtomicoService.aplicarMovimiento(any(AplicarMovimientoRequestDTO.class)))
+                .thenReturn(Mono.just(new AplicarMovimientoResponseDTO(
+                        "op-1",
+                        "COMPLETED",
+                        "Operacion aplicada correctamente",
+                        cuentaResponse(1L, "ES91210000000000000001", "75.00"),
+                        cuentaResponse(2L, "ES91210000000000000002", "125.00")
+                )));
+
+        webTestClient.post()
+                .uri("/internal/cuentas/aplicar-movimientos")
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(new AplicarMovimientoRequestDTO(
+                        "op-1",
+                        1L,
+                        2L,
+                        new BigDecimal("25.00"),
+                        "Transferencia interna"
+                ))
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody()
+                .jsonPath("$.operationId").isEqualTo("op-1")
+                .jsonPath("$.estado").isEqualTo("COMPLETED")
+                .jsonPath("$.cuentaOrigen.id").isEqualTo(1)
+                .jsonPath("$.cuentaDestino.id").isEqualTo(2);
+    }
+
+    @Test
+    void aplicarMovimientoSinOperationIdDevuelve400() {
+        webTestClient.post()
+                .uri("/internal/cuentas/aplicar-movimientos")
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(new AplicarMovimientoRequestDTO(
+                        " ",
+                        1L,
+                        2L,
+                        new BigDecimal("25.00"),
+                        null
+                ))
+                .exchange()
+                .expectStatus().isBadRequest()
+                .expectBody()
+                .jsonPath("$.code").isEqualTo("VALIDATION_ERROR")
+                .jsonPath("$.fieldErrors.operationId").exists();
+    }
+
+    @Test
+    void aplicarMovimientoConConflictoIdempotenteDevuelve409() {
+        when(cuentaMovimientoAtomicoService.aplicarMovimiento(any(AplicarMovimientoRequestDTO.class)))
+                .thenReturn(Mono.error(new IdempotencyConflictException(
+                        "La operacion ya existe con una peticion diferente"
+                )));
+
+        webTestClient.post()
+                .uri("/internal/cuentas/aplicar-movimientos")
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(new AplicarMovimientoRequestDTO(
+                        "op-1",
+                        1L,
+                        2L,
+                        new BigDecimal("25.00"),
+                        null
+                ))
+                .exchange()
+                .expectStatus().isEqualTo(409)
+                .expectBody()
+                .jsonPath("$.code").isEqualTo("IDEMPOTENCY_CONFLICT");
     }
 
     private CuentaResponseDTO cuentaResponse() {

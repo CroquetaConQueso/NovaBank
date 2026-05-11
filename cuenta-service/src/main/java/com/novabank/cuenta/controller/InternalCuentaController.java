@@ -1,8 +1,11 @@
 package com.novabank.cuenta.controller;
 
+import com.novabank.cuenta.dto.AplicarMovimientoRequestDTO;
+import com.novabank.cuenta.dto.AplicarMovimientoResponseDTO;
 import com.novabank.cuenta.dto.CuentaOperacionRequestDTO;
 import com.novabank.cuenta.dto.CuentaResponseDTO;
 import com.novabank.cuenta.dto.TransferenciaInternaRequestDTO;
+import com.novabank.cuenta.service.CuentaMovimientoAtomicoService;
 import com.novabank.cuenta.service.CuentaService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -23,9 +26,14 @@ import reactor.core.publisher.Mono;
 public class InternalCuentaController {
 
     private final CuentaService cuentaService;
+    private final CuentaMovimientoAtomicoService cuentaMovimientoAtomicoService;
 
-    public InternalCuentaController(CuentaService cuentaService) {
+    public InternalCuentaController(
+            CuentaService cuentaService,
+            CuentaMovimientoAtomicoService cuentaMovimientoAtomicoService
+    ) {
         this.cuentaService = cuentaService;
+        this.cuentaMovimientoAtomicoService = cuentaMovimientoAtomicoService;
     }
 
     @PostMapping("/{id}/depositos")
@@ -78,5 +86,23 @@ public class InternalCuentaController {
             @Valid @RequestBody TransferenciaInternaRequestDTO request
     ) {
         return cuentaService.transferir(request);
+    }
+
+    @PostMapping("/aplicar-movimientos")
+    @Operation(
+            summary = "Aplicar movimiento atomico",
+            description = "Aplica una transferencia interna con idempotencia inicial. Endpoint interno preparado para operacion-service."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Movimiento atomico aplicado o ya procesado"),
+            @ApiResponse(responseCode = "400", description = "Datos invalidos o peticion mal formada"),
+            @ApiResponse(responseCode = "404", description = "Cuenta origen o destino no encontrada"),
+            @ApiResponse(responseCode = "409", description = "Conflicto de idempotencia"),
+            @ApiResponse(responseCode = "422", description = "Saldo insuficiente")
+    })
+    public Mono<AplicarMovimientoResponseDTO> aplicarMovimiento(
+            @Valid @RequestBody AplicarMovimientoRequestDTO request
+    ) {
+        return cuentaMovimientoAtomicoService.aplicarMovimiento(request);
     }
 }

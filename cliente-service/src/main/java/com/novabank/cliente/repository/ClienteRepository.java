@@ -1,49 +1,48 @@
 package com.novabank.cliente.repository;
 
 import com.novabank.cliente.model.Cliente;
-import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.r2dbc.repository.Query;
 import org.springframework.data.repository.query.Param;
+import org.springframework.data.repository.reactive.ReactiveCrudRepository;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 
-import java.util.List;
-import java.util.Optional;
+public interface ClienteRepository extends ReactiveCrudRepository<Cliente, Long> {
 
-public interface ClienteRepository extends JpaRepository<Cliente, Long> {
+    Mono<Cliente> findByDni(String dni);
 
-    Optional<Cliente> findByDni(String dni);
+    Mono<Cliente> findByEmail(String email);
 
-    Optional<Cliente> findByEmail(String email);
+    Mono<Cliente> findByTelefono(String telefono);
 
-    Optional<Cliente> findByTelefono(String telefono);
+    Mono<Boolean> existsByDni(String dni);
 
-    boolean existsByDni(String dni);
+    Mono<Boolean> existsByEmail(String email);
 
-    boolean existsByEmail(String email);
-
-    boolean existsByTelefono(String telefono);
+    Mono<Boolean> existsByTelefono(String telefono);
 
     @Query("""
-           SELECT c
-           FROM Cliente c
-           WHERE c.dni = :dni
-              OR c.email = :email
-              OR c.telefono = :telefono
+           SELECT id, nombre, apellidos, dni, email, telefono, fecha_creacion
+           FROM clientes
+           WHERE dni = :dni
+              OR email = :email
+              OR telefono = :telefono
            """)
-    List<Cliente> buscarDuplicados(
+    Flux<Cliente> buscarDuplicados(
             @Param("dni") String dni,
             @Param("email") String email,
             @Param("telefono") String telefono
     );
 
     @Query("""
-           SELECT c
-           FROM Cliente c
-           WHERE c.id <> :id
-             AND (c.dni = :dni
-              OR c.email = :email
-              OR c.telefono = :telefono)
+           SELECT id, nombre, apellidos, dni, email, telefono, fecha_creacion
+           FROM clientes
+           WHERE id <> :id
+             AND (dni = :dni
+              OR email = :email
+              OR telefono = :telefono)
            """)
-    List<Cliente> buscarDuplicadosExcluyendoId(
+    Flux<Cliente> buscarDuplicadosExcluyendoId(
             @Param("id") Long id,
             @Param("dni") String dni,
             @Param("email") String email,

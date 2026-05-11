@@ -20,6 +20,7 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.List;
@@ -29,15 +30,18 @@ import java.util.UUID;
 public class OperacionService {
 
     private final CuentaServiceClient cuentaServiceClient;
+    private final ExchangeRateService exchangeRateService;
     private final MovimientoRepository movimientoRepository;
     private final MovimientoMapper movimientoMapper;
 
     public OperacionService(
             CuentaServiceClient cuentaServiceClient,
+            ExchangeRateService exchangeRateService,
             MovimientoRepository movimientoRepository,
             MovimientoMapper movimientoMapper
     ) {
         this.cuentaServiceClient = cuentaServiceClient;
+        this.exchangeRateService = exchangeRateService;
         this.movimientoRepository = movimientoRepository;
         this.movimientoMapper = movimientoMapper;
     }

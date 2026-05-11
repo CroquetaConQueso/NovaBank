@@ -3,7 +3,9 @@ package com.novabank.operacion.controller;
 import com.novabank.operacion.dto.MovimientoResponseDTO;
 import com.novabank.operacion.dto.OperacionRequestDTO;
 import com.novabank.operacion.dto.OperacionResponseDTO;
+import com.novabank.operacion.dto.TransferenciaDivisaRequestDTO;
 import com.novabank.operacion.dto.TransferenciaRequestDTO;
+import com.novabank.operacion.exception.ExchangeRateUnavailableException;
 import com.novabank.operacion.exception.GlobalExceptionHandler;
 import com.novabank.operacion.exception.RemoteResourceNotFoundException;
 import com.novabank.operacion.exception.RemoteServiceException;
@@ -84,6 +86,48 @@ class OperacionControllerTest {
                 .expectStatus().isOk()
                 .expectBody()
                 .jsonPath("$.tipoOperacion").isEqualTo("TRANSFERENCIA");
+    }
+
+    @Test
+    void transferenciaEnDivisaUsaRutaEsperada() {
+        when(operacionService.transferirEnDivisa(any(TransferenciaDivisaRequestDTO.class)))
+                .thenReturn(Mono.just(response("TRANSFERENCIA")));
+
+        webTestClient.post()
+                .uri("/api/operaciones/transferencias/divisa")
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(new TransferenciaDivisaRequestDTO(
+                        10L,
+                        11L,
+                        new BigDecimal("100.00"),
+                        "USD",
+                        "EUR"
+                ))
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody()
+                .jsonPath("$.tipoOperacion").isEqualTo("TRANSFERENCIA");
+    }
+
+    @Test
+    void transferenciaEnDivisaSinTipoCambioDevuelve503() {
+        when(operacionService.transferirEnDivisa(any(TransferenciaDivisaRequestDTO.class)))
+                .thenReturn(Mono.error(new ExchangeRateUnavailableException("No hay tasa fiable")));
+
+        webTestClient.post()
+                .uri("/api/operaciones/transferencias/divisa")
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(new TransferenciaDivisaRequestDTO(
+                        10L,
+                        11L,
+                        new BigDecimal("100.00"),
+                        "USD",
+                        "EUR"
+                ))
+                .exchange()
+                .expectStatus().isEqualTo(503)
+                .expectBody()
+                .jsonPath("$.code").isEqualTo("EXCHANGE_RATE_UNAVAILABLE");
     }
 
     @Test

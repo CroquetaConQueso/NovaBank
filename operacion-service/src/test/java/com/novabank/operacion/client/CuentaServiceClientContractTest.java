@@ -7,6 +7,7 @@ import com.novabank.operacion.exception.RemoteConflictException;
 import com.novabank.operacion.exception.RemoteResourceNotFoundException;
 import com.novabank.operacion.exception.RemoteServiceException;
 import com.novabank.operacion.exception.RemoteValidationException;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.RegisterExtension;
 import org.springframework.web.reactive.function.client.WebClient;
@@ -29,6 +30,11 @@ class CuentaServiceClientContractTest {
     static WireMockExtension wireMock = WireMockExtension.newInstance()
             .options(wireMockConfig().dynamicPort())
             .build();
+
+    @BeforeEach
+    void setUp() {
+        cuentaServiceClient = new CuentaServiceClient(WebClient.builder(), wireMock.getRuntimeInfo().getHttpBaseUrl());
+    }
 
     @Test
     void depositarLlamaEndpointInternoYDevuelveCuentaActualizada() {
@@ -258,5 +264,18 @@ class CuentaServiceClientContractTest {
                   "fechaCreacion": "2026-01-15T10:30:00"
                 }
                 """.formatted(id, numeroCuenta, saldo);
+    }
+
+    private ResponseDefinitionBuilder errorResponse(int status, String code, String message) {
+        return aResponse()
+                .withStatus(status)
+                .withHeader("Content-Type", "application/json")
+                .withBody("""
+                        {
+                          "code": "%s",
+                          "message": "%s",
+                          "service": "cuenta-service"
+                        }
+                        """.formatted(code, message));
     }
 }

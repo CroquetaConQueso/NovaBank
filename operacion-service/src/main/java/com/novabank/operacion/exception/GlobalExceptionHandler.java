@@ -40,6 +40,12 @@ public class GlobalExceptionHandler {
                 .body(ErrorResponseDTO.of("CUENTA_SERVICE_UNAVAILABLE", ex.getMessage())));
     }
 
+    @ExceptionHandler(ExchangeRateUnavailableException.class)
+    public Mono<ResponseEntity<ErrorResponseDTO>> handleExchangeRateUnavailable(ExchangeRateUnavailableException ex) {
+        return Mono.just(ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                .body(ErrorResponseDTO.of("EXCHANGE_RATE_UNAVAILABLE", ex.getMessage())));
+    }
+
     @ExceptionHandler({
             IllegalArgumentException.class,
             ValidationException.class

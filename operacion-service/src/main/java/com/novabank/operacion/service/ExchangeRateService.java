@@ -3,6 +3,9 @@ package com.novabank.operacion.service;
 import com.novabank.operacion.dto.ExchangeRateResponseDTO;
 import com.novabank.operacion.exception.ExchangeRateUnavailableException;
 import com.novabank.operacion.exception.ValidationException;
+import com.novabank.operacion.tracing.CorrelationIdSupport;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.stereotype.Service;
@@ -18,6 +21,8 @@ import java.util.concurrent.TimeoutException;
 
 @Service
 public class ExchangeRateService {
+
+    private static final Logger log = LoggerFactory.getLogger(ExchangeRateService.class);
 
     private final WebClient webClient;
     private final Duration timeout;
@@ -44,6 +49,24 @@ public class ExchangeRateService {
                 .onStatus(HttpStatusCode::isError, this::mapearError)
                 .bodyToMono(ExchangeRateResponseDTO.class)
                 .timeout(timeout)
+                .doOnEach(signal -> {
+                    if (signal.isOnNext()) {
+                        log.info(
+                                "correlationId={} tasa recibida from={} to={}",
+                                CorrelationIdSupport.fromContext(signal.getContextView()),
+                                fromNormalizado,
+                                toNormalizado
+                        );
+                    }
+                    if (signal.isOnError()) {
+                        log.warn(
+                                "correlationId={} fallo consultando tasa from={} to={}",
+                                CorrelationIdSupport.fromContext(signal.getContextView()),
+                                fromNormalizado,
+                                toNormalizado
+                        );
+                    }
+                })
                 .map(ExchangeRateResponseDTO::tasa)
                 .flatMap(this::validarTasa)
                 .onErrorMap(WebClientRequestException.class, this::servicioNoDisponible)

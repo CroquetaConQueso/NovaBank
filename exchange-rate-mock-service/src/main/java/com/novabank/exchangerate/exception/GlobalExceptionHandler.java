@@ -1,6 +1,7 @@
 package com.novabank.exchangerate.exception;
 
 import com.novabank.exchangerate.dto.ErrorResponseDTO;
+import com.novabank.exchangerate.tracing.CorrelationIdSupport;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -13,19 +14,21 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(ExchangeRateNotFoundException.class)
     public Mono<ResponseEntity<ErrorResponseDTO>> handleExchangeRateNotFound(ExchangeRateNotFoundException exception) {
-        return Mono.just(ResponseEntity.status(HttpStatus.NOT_FOUND)
-                .body(ErrorResponseDTO.of("EXCHANGE_RATE_NOT_FOUND", exception.getMessage())));
+        return response(HttpStatus.NOT_FOUND, "EXCHANGE_RATE_NOT_FOUND", exception.getMessage());
     }
 
     @ExceptionHandler({IllegalArgumentException.class, ServerWebInputException.class})
     public Mono<ResponseEntity<ErrorResponseDTO>> handleBadRequest(Exception exception) {
-        return Mono.just(ResponseEntity.badRequest()
-                .body(ErrorResponseDTO.of("BAD_REQUEST", exception.getMessage())));
+        return response(HttpStatus.BAD_REQUEST, "BAD_REQUEST", exception.getMessage());
     }
 
     @ExceptionHandler(Exception.class)
     public Mono<ResponseEntity<ErrorResponseDTO>> handleUnexpected(Exception exception) {
-        return Mono.just(ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(ErrorResponseDTO.of("INTERNAL_ERROR", "Error inesperado en exchange-rate-mock-service")));
+        return response(HttpStatus.INTERNAL_SERVER_ERROR, "INTERNAL_ERROR", "Error inesperado en exchange-rate-mock-service");
+    }
+
+    private Mono<ResponseEntity<ErrorResponseDTO>> response(HttpStatus status, String code, String message) {
+        return Mono.deferContextual(contextView -> Mono.just(ResponseEntity.status(status)
+                .body(ErrorResponseDTO.of(code, message, CorrelationIdSupport.fromContext(contextView)))));
     }
 }

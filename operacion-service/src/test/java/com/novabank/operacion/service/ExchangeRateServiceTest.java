@@ -2,10 +2,11 @@ package com.novabank.operacion.service;
 
 import com.github.tomakehurst.wiremock.junit5.WireMockExtension;
 import com.novabank.operacion.exception.ExchangeRateUnavailableException;
+import com.novabank.operacion.config.WebClientConfig;
+import com.novabank.operacion.tracing.CorrelationIdSupport;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.RegisterExtension;
-import org.springframework.web.reactive.function.client.WebClient;
 import reactor.test.StepVerifier;
 
 import java.time.Duration;
@@ -30,7 +31,7 @@ class ExchangeRateServiceTest {
     @BeforeEach
     void setUp() {
         exchangeRateService = new ExchangeRateService(
-                WebClient.builder(),
+                new WebClientConfig().webClientBuilder(),
                 wireMock.getRuntimeInfo().getHttpBaseUrl(),
                 Duration.ofMillis(100)
         );
@@ -53,6 +54,27 @@ class ExchangeRateServiceTest {
                 .verifyComplete();
 
         wireMock.verify(getRequestedFor(urlEqualTo("/api/exchange-rate?from=USD&to=EUR")));
+    }
+
+    @Test
+    void propagaCorrelationIdHaciaExchangeRateService() {
+        wireMock.stubFor(get(urlEqualTo("/api/exchange-rate?from=USD&to=EUR"))
+                .willReturn(okJson("""
+                        {
+                          "from": "USD",
+                          "to": "EUR",
+                          "tasa": 0.92,
+                          "timestamp": "2026-05-11T10:00:00Z"
+                        }
+                        """)));
+
+        StepVerifier.create(exchangeRateService.obtenerTasa("USD", "EUR")
+                        .contextWrite(context -> context.put(CorrelationIdSupport.CONTEXT_KEY, "cid-rate-test")))
+                .assertNext(tasa -> assertThat(tasa).isEqualByComparingTo("0.92"))
+                .verifyComplete();
+
+        wireMock.verify(getRequestedFor(urlEqualTo("/api/exchange-rate?from=USD&to=EUR"))
+                .withHeader(CorrelationIdSupport.HEADER_NAME, com.github.tomakehurst.wiremock.client.WireMock.equalTo("cid-rate-test")));
     }
 
     @Test

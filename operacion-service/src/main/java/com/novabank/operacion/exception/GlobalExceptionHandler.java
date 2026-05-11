@@ -1,6 +1,7 @@
 package com.novabank.operacion.exception;
 
 import com.novabank.operacion.dto.ErrorResponseDTO;
+import com.novabank.operacion.tracing.CorrelationIdSupport;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.FieldError;
@@ -18,32 +19,27 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(RemoteResourceNotFoundException.class)
     public Mono<ResponseEntity<ErrorResponseDTO>> handleRemoteNotFound(RemoteResourceNotFoundException ex) {
-        return Mono.just(ResponseEntity.status(HttpStatus.NOT_FOUND)
-                .body(ErrorResponseDTO.of("RESOURCE_NOT_FOUND", ex.getMessage())));
+        return response(HttpStatus.NOT_FOUND, "RESOURCE_NOT_FOUND", ex.getMessage());
     }
 
     @ExceptionHandler(RemoteValidationException.class)
     public Mono<ResponseEntity<ErrorResponseDTO>> handleRemoteValidation(RemoteValidationException ex) {
-        return Mono.just(ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY)
-                .body(ErrorResponseDTO.of("REMOTE_VALIDATION_ERROR", ex.getMessage())));
+        return response(HttpStatus.UNPROCESSABLE_ENTITY, "REMOTE_VALIDATION_ERROR", ex.getMessage());
     }
 
     @ExceptionHandler(RemoteConflictException.class)
     public Mono<ResponseEntity<ErrorResponseDTO>> handleRemoteConflict(RemoteConflictException ex) {
-        return Mono.just(ResponseEntity.status(HttpStatus.CONFLICT)
-                .body(ErrorResponseDTO.of("REMOTE_CONFLICT", ex.getMessage())));
+        return response(HttpStatus.CONFLICT, "REMOTE_CONFLICT", ex.getMessage());
     }
 
     @ExceptionHandler(RemoteServiceException.class)
     public Mono<ResponseEntity<ErrorResponseDTO>> handleRemoteService(RemoteServiceException ex) {
-        return Mono.just(ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
-                .body(ErrorResponseDTO.of("CUENTA_SERVICE_UNAVAILABLE", ex.getMessage())));
+        return response(HttpStatus.SERVICE_UNAVAILABLE, "CUENTA_SERVICE_UNAVAILABLE", ex.getMessage());
     }
 
     @ExceptionHandler(ExchangeRateUnavailableException.class)
     public Mono<ResponseEntity<ErrorResponseDTO>> handleExchangeRateUnavailable(ExchangeRateUnavailableException ex) {
-        return Mono.just(ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
-                .body(ErrorResponseDTO.of("EXCHANGE_RATE_UNAVAILABLE", ex.getMessage())));
+        return response(HttpStatus.SERVICE_UNAVAILABLE, "EXCHANGE_RATE_UNAVAILABLE", ex.getMessage());
     }
 
     @ExceptionHandler({
@@ -51,14 +47,12 @@ public class GlobalExceptionHandler {
             ValidationException.class
     })
     public Mono<ResponseEntity<ErrorResponseDTO>> handleBadRequest(RuntimeException ex) {
-        return Mono.just(ResponseEntity.badRequest()
-                .body(ErrorResponseDTO.of("BAD_REQUEST", ex.getMessage())));
+        return response(HttpStatus.BAD_REQUEST, "BAD_REQUEST", ex.getMessage());
     }
 
     @ExceptionHandler(ServerWebInputException.class)
     public Mono<ResponseEntity<ErrorResponseDTO>> handleUnreadableMessage(ServerWebInputException ex) {
-        return Mono.just(ResponseEntity.badRequest()
-                .body(ErrorResponseDTO.of("BAD_REQUEST", "La peticion contiene un JSON invalido")));
+        return response(HttpStatus.BAD_REQUEST, "BAD_REQUEST", "La peticion contiene un JSON invalido");
     }
 
     @ExceptionHandler(WebExchangeBindException.class)
@@ -69,20 +63,22 @@ public class GlobalExceptionHandler {
             fieldErrors.putIfAbsent(error.getField(), error.getDefaultMessage());
         }
 
-        return Mono.just(ResponseEntity.badRequest()
+        return Mono.deferContextual(contextView -> Mono.just(ResponseEntity.badRequest()
                 .body(ErrorResponseDTO.withFieldErrors(
                         "VALIDATION_ERROR",
                         "La peticion contiene campos invalidos",
+                        CorrelationIdSupport.fromContext(contextView),
                         fieldErrors
-                )));
+                ))));
     }
 
     @ExceptionHandler(Exception.class)
     public Mono<ResponseEntity<ErrorResponseDTO>> handleGeneric(Exception ex) {
-        return Mono.just(ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(ErrorResponseDTO.of(
-                        "INTERNAL_SERVER_ERROR",
-                        "Se ha producido un error inesperado"
-                )));
+        return response(HttpStatus.INTERNAL_SERVER_ERROR, "INTERNAL_SERVER_ERROR", "Se ha producido un error inesperado");
+    }
+
+    private Mono<ResponseEntity<ErrorResponseDTO>> response(HttpStatus status, String code, String message) {
+        return Mono.deferContextual(contextView -> Mono.just(ResponseEntity.status(status)
+                .body(ErrorResponseDTO.of(code, message, CorrelationIdSupport.fromContext(contextView)))));
     }
 }

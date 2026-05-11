@@ -1,6 +1,7 @@
 package com.novabank.cuenta.exception;
 
 import com.novabank.cuenta.dto.ErrorResponseDTO;
+import com.novabank.cuenta.tracing.CorrelationIdSupport;
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -19,35 +20,28 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(ResourceNotFoundException.class)
     public Mono<ResponseEntity<ErrorResponseDTO>> handleNotFound(ResourceNotFoundException ex) {
-        return Mono.just(ResponseEntity.status(HttpStatus.NOT_FOUND)
-                .body(ErrorResponseDTO.of("RESOURCE_NOT_FOUND", ex.getMessage())));
+        return response(HttpStatus.NOT_FOUND, "RESOURCE_NOT_FOUND", ex.getMessage());
     }
 
     @ExceptionHandler(InsufficientBalanceException.class)
     public Mono<ResponseEntity<ErrorResponseDTO>> handleInsufficientBalance(InsufficientBalanceException ex) {
-        return Mono.just(ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY)
-                .body(ErrorResponseDTO.of("INSUFFICIENT_BALANCE", ex.getMessage())));
+        return response(HttpStatus.UNPROCESSABLE_ENTITY, "INSUFFICIENT_BALANCE", ex.getMessage());
     }
 
     @ExceptionHandler(IdempotencyConflictException.class)
     public Mono<ResponseEntity<ErrorResponseDTO>> handleIdempotencyConflict(IdempotencyConflictException ex) {
-        return Mono.just(ResponseEntity.status(HttpStatus.CONFLICT)
-                .body(ErrorResponseDTO.of("IDEMPOTENCY_CONFLICT", ex.getMessage())));
+        return response(HttpStatus.CONFLICT, "IDEMPOTENCY_CONFLICT", ex.getMessage());
     }
 
     @ExceptionHandler(RemoteServiceException.class)
     public Mono<ResponseEntity<ErrorResponseDTO>> handleRemoteService(RemoteServiceException ex) {
-        return Mono.just(ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
-                .body(ErrorResponseDTO.of("CLIENTE_SERVICE_UNAVAILABLE", ex.getMessage())));
+        return response(HttpStatus.SERVICE_UNAVAILABLE, "CLIENTE_SERVICE_UNAVAILABLE", ex.getMessage());
     }
 
     @ExceptionHandler(OptimisticLockingFailureException.class)
     public Mono<ResponseEntity<ErrorResponseDTO>> handleOptimisticLocking(OptimisticLockingFailureException ex) {
-        return Mono.just(ResponseEntity.status(HttpStatus.CONFLICT)
-                .body(ErrorResponseDTO.of(
-                        "CONCURRENT_MODIFICATION",
-                        "La cuenta fue modificada por otra operacion. Vuelve a intentarlo."
-                )));
+        return response(HttpStatus.CONFLICT, "CONCURRENT_MODIFICATION",
+                "La cuenta fue modificada por otra operacion. Vuelve a intentarlo.");
     }
 
     @ExceptionHandler({
@@ -55,14 +49,12 @@ public class GlobalExceptionHandler {
             ValidationException.class
     })
     public Mono<ResponseEntity<ErrorResponseDTO>> handleBadRequest(RuntimeException ex) {
-        return Mono.just(ResponseEntity.badRequest()
-                .body(ErrorResponseDTO.of("BAD_REQUEST", ex.getMessage())));
+        return response(HttpStatus.BAD_REQUEST, "BAD_REQUEST", ex.getMessage());
     }
 
     @ExceptionHandler(ServerWebInputException.class)
     public Mono<ResponseEntity<ErrorResponseDTO>> handleUnreadableMessage(ServerWebInputException ex) {
-        return Mono.just(ResponseEntity.badRequest()
-                .body(ErrorResponseDTO.of("BAD_REQUEST", "La peticion contiene un JSON invalido")));
+        return response(HttpStatus.BAD_REQUEST, "BAD_REQUEST", "La peticion contiene un JSON invalido");
     }
 
     @ExceptionHandler(WebExchangeBindException.class)
@@ -73,20 +65,22 @@ public class GlobalExceptionHandler {
             fieldErrors.putIfAbsent(error.getField(), error.getDefaultMessage());
         }
 
-        return Mono.just(ResponseEntity.badRequest()
+        return Mono.deferContextual(contextView -> Mono.just(ResponseEntity.badRequest()
                 .body(ErrorResponseDTO.withFieldErrors(
                         "VALIDATION_ERROR",
                         "La peticion contiene campos invalidos",
+                        CorrelationIdSupport.fromContext(contextView),
                         fieldErrors
-                )));
+                ))));
     }
 
     @ExceptionHandler(Exception.class)
     public Mono<ResponseEntity<ErrorResponseDTO>> handleGeneric(Exception ex) {
-        return Mono.just(ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(ErrorResponseDTO.of(
-                        "INTERNAL_SERVER_ERROR",
-                        "Se ha producido un error inesperado"
-                )));
+        return response(HttpStatus.INTERNAL_SERVER_ERROR, "INTERNAL_SERVER_ERROR", "Se ha producido un error inesperado");
+    }
+
+    private Mono<ResponseEntity<ErrorResponseDTO>> response(HttpStatus status, String code, String message) {
+        return Mono.deferContextual(contextView -> Mono.just(ResponseEntity.status(status)
+                .body(ErrorResponseDTO.of(code, message, CorrelationIdSupport.fromContext(contextView)))));
     }
 }

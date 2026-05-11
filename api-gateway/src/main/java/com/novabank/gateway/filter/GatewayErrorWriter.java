@@ -3,6 +3,7 @@ package com.novabank.gateway.filter;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.novabank.gateway.dto.ErrorResponseDTO;
+import com.novabank.gateway.tracing.CorrelationIdSupport;
 import org.springframework.core.io.buffer.DataBuffer;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -31,7 +32,12 @@ public class GatewayErrorWriter {
         exchange.getResponse().getHeaders().setContentType(MediaType.APPLICATION_JSON);
         exchange.getResponse().getHeaders().set(HttpHeaders.CACHE_CONTROL, "no-store");
 
-        byte[] bytes = serialize(ErrorResponseDTO.of(code, message));
+        String correlationId = CorrelationIdSupport.current(exchange);
+        if (correlationId != null && !correlationId.isBlank()) {
+            exchange.getResponse().getHeaders().set(CorrelationIdSupport.HEADER_NAME, correlationId);
+        }
+
+        byte[] bytes = serialize(ErrorResponseDTO.of(code, message, correlationId));
         DataBuffer buffer = exchange.getResponse().bufferFactory().wrap(bytes);
         return exchange.getResponse().writeWith(Mono.just(buffer));
     }

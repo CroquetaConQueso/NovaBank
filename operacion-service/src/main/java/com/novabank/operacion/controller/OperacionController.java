@@ -3,6 +3,7 @@ package com.novabank.operacion.controller;
 import com.novabank.operacion.dto.MovimientoResponseDTO;
 import com.novabank.operacion.dto.OperacionRequestDTO;
 import com.novabank.operacion.dto.OperacionResponseDTO;
+import com.novabank.operacion.dto.TransferenciaDivisaRequestDTO;
 import com.novabank.operacion.dto.TransferenciaRequestDTO;
 import com.novabank.operacion.service.OperacionService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -88,6 +89,25 @@ public class OperacionController {
             @Valid @RequestBody TransferenciaRequestDTO request
     ) {
         return operacionService.transferir(request);
+    }
+
+    @PostMapping("/transferencias/divisa")
+    @Operation(
+            summary = "Realizar transferencia en divisa",
+            description = "Consulta una tasa de cambio fiable antes de solicitar a cuenta-service la actualizacion de saldos."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Transferencia en divisa realizada correctamente"),
+            @ApiResponse(responseCode = "400", description = "Datos invalidos o peticion mal formada"),
+            @ApiResponse(responseCode = "401", description = "Token ausente o invalido al acceder mediante Gateway"),
+            @ApiResponse(responseCode = "404", description = "Cuenta origen o destino no encontrada"),
+            @ApiResponse(responseCode = "422", description = "Saldo insuficiente"),
+            @ApiResponse(responseCode = "503", description = "Tipo de cambio no disponible o servicio remoto no disponible")
+    })
+    public Mono<OperacionResponseDTO> transferirEnDivisa(
+            @Valid @RequestBody TransferenciaDivisaRequestDTO request
+    ) {
+        return operacionService.transferirEnDivisa(request);
     }
 
     @GetMapping("/cuentas/{cuentaId}/movimientos")

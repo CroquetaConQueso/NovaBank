@@ -1,12 +1,14 @@
 package com.novabank.operacion.service;
 
 import com.novabank.operacion.client.CuentaServiceClient;
+import com.novabank.operacion.dto.AplicarMovimientoRequestDTO;
+import com.novabank.operacion.dto.AplicarMovimientoResponseDTO;
 import com.novabank.operacion.dto.CuentaOperacionRequestDTO;
 import com.novabank.operacion.dto.CuentaResponseDTO;
 import com.novabank.operacion.dto.MovimientoResponseDTO;
 import com.novabank.operacion.dto.OperacionRequestDTO;
 import com.novabank.operacion.dto.OperacionResponseDTO;
-import com.novabank.operacion.dto.TransferenciaInternaRequestDTO;
+import com.novabank.operacion.dto.TransferenciaDivisaRequestDTO;
 import com.novabank.operacion.dto.TransferenciaRequestDTO;
 import com.novabank.operacion.exception.RemoteResourceNotFoundException;
 import com.novabank.operacion.exception.ValidationException;
@@ -18,26 +20,30 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
-import reactor.core.scheduler.Schedulers;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.List;
+import java.util.UUID;
 
 @Service
 public class OperacionService {
 
     private final CuentaServiceClient cuentaServiceClient;
+    private final ExchangeRateService exchangeRateService;
     private final MovimientoRepository movimientoRepository;
     private final MovimientoMapper movimientoMapper;
 
     public OperacionService(
             CuentaServiceClient cuentaServiceClient,
+            ExchangeRateService exchangeRateService,
             MovimientoRepository movimientoRepository,
             MovimientoMapper movimientoMapper
     ) {
         this.cuentaServiceClient = cuentaServiceClient;
+        this.exchangeRateService = exchangeRateService;
         this.movimientoRepository = movimientoRepository;
         this.movimientoMapper = movimientoMapper;
     }
@@ -48,7 +54,11 @@ public class OperacionService {
      */
     @Transactional
     public Mono<OperacionResponseDTO> depositar(OperacionRequestDTO request) {
-        return Mono.defer(() -> cuentaServiceClientTransicionalDepositar(request))
+        return Mono.defer(() -> cuentaServiceClient.depositar(
+                        request.cuentaId(),
+                        new CuentaOperacionRequestDTO(request.cantidad())
+                ))
+                .switchIfEmpty(Mono.error(new RemoteResourceNotFoundException("cuenta-service no devolvio datos de la cuenta")))
                 .flatMap(cuenta -> guardarMovimiento(cuenta, TipoMovimiento.DEPOSITO, request.cantidad()))
                 .map(movimiento -> new OperacionResponseDTO(
                         "DEPOSITO",
@@ -63,7 +73,11 @@ public class OperacionService {
      */
     @Transactional
     public Mono<OperacionResponseDTO> retirar(OperacionRequestDTO request) {
-        return Mono.defer(() -> cuentaServiceClientTransicionalRetirar(request))
+        return Mono.defer(() -> cuentaServiceClient.retirar(
+                        request.cuentaId(),
+                        new CuentaOperacionRequestDTO(request.cantidad())
+                ))
+                .switchIfEmpty(Mono.error(new RemoteResourceNotFoundException("cuenta-service no devolvio datos de la cuenta")))
                 .flatMap(cuenta -> guardarMovimiento(cuenta, TipoMovimiento.RETIRO, request.cantidad()))
                 .map(movimiento -> new OperacionResponseDTO(
                         "RETIRO",
@@ -78,29 +92,26 @@ public class OperacionService {
      */
     @Transactional
     public Mono<OperacionResponseDTO> transferir(TransferenciaRequestDTO request) {
-        return Mono.defer(() -> cuentaServiceClientTransicionalTransferir(request))
-                .flatMap(cuentas -> {
-                    CuentaResponseDTO cuentaOrigen = encontrarCuenta(cuentas, request.cuentaOrigenId());
-                    CuentaResponseDTO cuentaDestino = encontrarCuenta(cuentas, request.cuentaDestinoId());
+        return aplicarTransferencia(request, request.cantidad(), "Transferencia realizada correctamente");
+    }
 
-                    Mono<MovimientoResponseDTO> movimientoOrigen = guardarMovimiento(
-                            cuentaOrigen,
-                            TipoMovimiento.TRANSFERENCIA_SALIENTE,
-                            request.cantidad()
-                    );
-                    Mono<MovimientoResponseDTO> movimientoDestino = guardarMovimiento(
-                            cuentaDestino,
-                            TipoMovimiento.TRANSFERENCIA_ENTRANTE,
-                            request.cantidad()
-                    );
-
-                    return Mono.zip(movimientoOrigen, movimientoDestino)
-                            .map(tuple -> new OperacionResponseDTO(
-                                    "TRANSFERENCIA",
-                                    "Transferencia realizada correctamente",
-                                    List.of(tuple.getT1(), tuple.getT2())
-                            ));
-                });
+    /**
+     * Consulta una tasa fiable antes de tocar saldos. Si el proveedor falla,
+     * el flujo termina sin llamar a cuenta-service ni persistir movimientos.
+     */
+    @Transactional
+    public Mono<OperacionResponseDTO> transferirEnDivisa(TransferenciaDivisaRequestDTO request) {
+        return exchangeRateService.obtenerTasa(request.monedaOrigen(), request.monedaDestino())
+                .map(tasa -> request.monto().multiply(tasa).setScale(2, RoundingMode.HALF_UP))
+                .flatMap(montoConvertido -> aplicarTransferencia(
+                        new TransferenciaRequestDTO(
+                                request.cuentaOrigenId(),
+                                request.cuentaDestinoId(),
+                                montoConvertido
+                        ),
+                        montoConvertido,
+                        "Transferencia en divisa realizada correctamente"
+                ));
     }
 
     /**
@@ -152,55 +163,55 @@ public class OperacionService {
                 .map(movimientoMapper::toResponse);
     }
 
-    /**
-     * Transicion temporal para #117: Feign sigue siendo bloqueante, por eso se
-     * aisla en boundedElastic hasta sustituirlo por WebClient reactivo.
-     */
-    private Mono<CuentaResponseDTO> cuentaServiceClientTransicionalDepositar(OperacionRequestDTO request) {
-        return Mono.fromCallable(() -> cuentaServiceClient.depositar(
-                        request.cuentaId(),
-                        new CuentaOperacionRequestDTO(request.cantidad())
-                ))
-                .switchIfEmpty(Mono.error(new RemoteResourceNotFoundException("cuenta-service no devolvio datos de la cuenta")))
-                .subscribeOn(Schedulers.boundedElastic());
-    }
-
-    /**
-     * Transicion temporal para #117: mantiene el contrato actual mientras la
-     * capa web y la persistencia ya funcionan con Reactor.
-     */
-    private Mono<CuentaResponseDTO> cuentaServiceClientTransicionalRetirar(OperacionRequestDTO request) {
-        return Mono.fromCallable(() -> cuentaServiceClient.retirar(
-                        request.cuentaId(),
-                        new CuentaOperacionRequestDTO(request.cantidad())
-                ))
-                .switchIfEmpty(Mono.error(new RemoteResourceNotFoundException("cuenta-service no devolvio datos de la cuenta")))
-                .subscribeOn(Schedulers.boundedElastic());
-    }
-
-    /**
-     * Transicion temporal para #117: la llamada Feign se retirara cuando
-     * operacion-service use WebClient balanceado hacia cuenta-service.
-     */
-    private Mono<List<CuentaResponseDTO>> cuentaServiceClientTransicionalTransferir(TransferenciaRequestDTO request) {
-        return Mono.fromCallable(() -> cuentaServiceClient.transferir(new TransferenciaInternaRequestDTO(
+    private Mono<OperacionResponseDTO> aplicarTransferencia(
+            TransferenciaRequestDTO request,
+            BigDecimal cantidadMovimiento,
+            String mensaje
+    ) {
+        return Mono.defer(() -> cuentaServiceClient.aplicarMovimiento(new AplicarMovimientoRequestDTO(
+                        UUID.randomUUID().toString(),
                         request.cuentaOrigenId(),
                         request.cuentaDestinoId(),
-                        request.cantidad()
+                        request.cantidad(),
+                        "Transferencia entre cuentas"
                 )))
                 .switchIfEmpty(Mono.error(new RemoteResourceNotFoundException("cuenta-service no devolvio datos de la transferencia")))
-                .subscribeOn(Schedulers.boundedElastic());
+                .flatMap(response -> guardarMovimientosTransferencia(response, cantidadMovimiento, mensaje));
     }
 
-    private CuentaResponseDTO encontrarCuenta(List<CuentaResponseDTO> cuentas, Long cuentaId) {
-        if (cuentas == null) {
-            throw new RemoteResourceNotFoundException("cuenta-service no devolvio datos de la transferencia");
+    private Mono<OperacionResponseDTO> guardarMovimientosTransferencia(
+            AplicarMovimientoResponseDTO response,
+            BigDecimal cantidad,
+            String mensaje
+    ) {
+        CuentaResponseDTO cuentaOrigen = validarCuentaRemota(response == null ? null : response.cuentaOrigen(), "origen");
+        CuentaResponseDTO cuentaDestino = validarCuentaRemota(response.cuentaDestino(), "destino");
+
+        Mono<MovimientoResponseDTO> movimientoOrigen = guardarMovimiento(
+                cuentaOrigen,
+                TipoMovimiento.TRANSFERENCIA_SALIENTE,
+                cantidad
+        );
+        Mono<MovimientoResponseDTO> movimientoDestino = guardarMovimiento(
+                cuentaDestino,
+                TipoMovimiento.TRANSFERENCIA_ENTRANTE,
+                cantidad
+        );
+
+        return Mono.zip(movimientoOrigen, movimientoDestino)
+                .map(tuple -> new OperacionResponseDTO(
+                        "TRANSFERENCIA",
+                        mensaje,
+                        List.of(tuple.getT1(), tuple.getT2())
+                ));
+    }
+
+    private CuentaResponseDTO validarCuentaRemota(CuentaResponseDTO cuenta, String tipo) {
+        if (cuenta == null || cuenta.id() == null) {
+            throw new RemoteResourceNotFoundException("cuenta-service no devolvio la cuenta " + tipo);
         }
 
-        return cuentas.stream()
-                .filter(cuenta -> cuentaId.equals(cuenta.id()))
-                .findFirst()
-                .orElseThrow(() -> new RemoteResourceNotFoundException("cuenta-service no devolvio la cuenta " + cuentaId));
+        return cuenta;
     }
 
     private void validarId(Long cuentaId) {

@@ -1,47 +1,47 @@
 package com.novabank.operacion.client;
 
+import com.github.tomakehurst.wiremock.junit5.WireMockExtension;
+import com.github.tomakehurst.wiremock.client.ResponseDefinitionBuilder;
+import com.novabank.operacion.dto.AplicarMovimientoRequestDTO;
 import com.novabank.operacion.dto.CuentaOperacionRequestDTO;
-import com.novabank.operacion.dto.CuentaResponseDTO;
-import com.novabank.operacion.dto.TransferenciaInternaRequestDTO;
+import com.novabank.operacion.exception.RemoteConflictException;
 import com.novabank.operacion.exception.RemoteResourceNotFoundException;
 import com.novabank.operacion.exception.RemoteServiceException;
 import com.novabank.operacion.exception.RemoteValidationException;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.cloud.contract.wiremock.AutoConfigureWireMock;
-import org.springframework.test.context.ActiveProfiles;
+import org.junit.jupiter.api.extension.RegisterExtension;
+import org.springframework.web.reactive.function.client.WebClient;
+import reactor.test.StepVerifier;
 
 import java.math.BigDecimal;
-import java.util.List;
 
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalToJson;
 import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
-import static com.github.tomakehurst.wiremock.client.WireMock.stubFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo;
-import static com.github.tomakehurst.wiremock.client.WireMock.verify;
+import static com.github.tomakehurst.wiremock.core.WireMockConfiguration.wireMockConfig;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-@SpringBootTest(properties = {
-        "spring.cloud.config.enabled=false",
-        "eureka.client.enabled=false",
-        "spring.cloud.openfeign.client.config.cuenta-service.url=http://localhost:${wiremock.server.port}",
-        "spring.cloud.openfeign.circuitbreaker.enabled=false"
-})
-@AutoConfigureWireMock(port = 0)
-@ActiveProfiles("test")
 class CuentaServiceClientContractTest {
 
-    @Autowired
+    @RegisterExtension
+    static WireMockExtension wireMock = WireMockExtension.newInstance()
+            .options(wireMockConfig().dynamicPort())
+            .build();
+
     private CuentaServiceClient cuentaServiceClient;
+
+    @BeforeEach
+    void setUp() {
+        cuentaServiceClient = new CuentaServiceClient(WebClient.builder(), wireMock.getRuntimeInfo().getHttpBaseUrl());
+    }
 
     @Test
     void depositarLlamaEndpointInternoYDevuelveCuentaActualizada() {
-        stubFor(post(urlEqualTo("/internal/cuentas/10/depositos"))
+        wireMock.stubFor(post(urlEqualTo("/internal/cuentas/10/depositos"))
                 .withRequestBody(equalToJson("""
                         {
                           "cantidad": 50.00
@@ -49,161 +49,156 @@ class CuentaServiceClientContractTest {
                         """, true, true))
                 .willReturn(okJson(cuentaJson(10L, "ES91210000000000000001", "150.00"))));
 
-        CuentaResponseDTO response = cuentaServiceClient.depositar(
-                10L,
-                new CuentaOperacionRequestDTO(new BigDecimal("50.00"))
-        );
+        StepVerifier.create(cuentaServiceClient.depositar(
+                        10L,
+                        new CuentaOperacionRequestDTO(new BigDecimal("50.00"))
+                ))
+                .assertNext(response -> {
+                    assertThat(response.id()).isEqualTo(10L);
+                    assertThat(response.saldo()).isEqualByComparingTo("150.00");
+                })
+                .verifyComplete();
 
-        assertThat(response.id()).isEqualTo(10L);
-        assertThat(response.saldo()).isEqualByComparingTo("150.00");
-        verify(postRequestedFor(urlEqualTo("/internal/cuentas/10/depositos")));
+        wireMock.verify(postRequestedFor(urlEqualTo("/internal/cuentas/10/depositos")));
     }
 
     @Test
     void retirarLlamaEndpointInternoYDevuelveCuentaActualizada() {
-        stubFor(post(urlEqualTo("/internal/cuentas/10/retiros"))
+        wireMock.stubFor(post(urlEqualTo("/internal/cuentas/10/retiros"))
                 .willReturn(okJson(cuentaJson(10L, "ES91210000000000000001", "75.00"))));
 
-        CuentaResponseDTO response = cuentaServiceClient.retirar(
-                10L,
-                new CuentaOperacionRequestDTO(new BigDecimal("25.00"))
-        );
+        StepVerifier.create(cuentaServiceClient.retirar(
+                        10L,
+                        new CuentaOperacionRequestDTO(new BigDecimal("25.00"))
+                ))
+                .assertNext(response -> assertThat(response.saldo()).isEqualByComparingTo("75.00"))
+                .verifyComplete();
 
-        assertThat(response.saldo()).isEqualByComparingTo("75.00");
-        verify(postRequestedFor(urlEqualTo("/internal/cuentas/10/retiros")));
+        wireMock.verify(postRequestedFor(urlEqualTo("/internal/cuentas/10/retiros")));
     }
 
     @Test
-    void transferirUsaEndpointInternoUnicoYDevuelveDosCuentasActualizadas() {
-        stubFor(post(urlEqualTo("/internal/cuentas/transferencias"))
+    void aplicarMovimientoUsaEndpointAtomicoYDevuelveCuentasActualizadas() {
+        wireMock.stubFor(post(urlEqualTo("/internal/cuentas/aplicar-movimientos"))
                 .withRequestBody(equalToJson("""
                         {
+                          "operationId": "op-1",
                           "cuentaOrigenId": 10,
                           "cuentaDestinoId": 11,
-                          "cantidad": 25.00
+                          "monto": 25.00,
+                          "concepto": "Transferencia entre cuentas"
                         }
                         """, true, true))
                 .willReturn(okJson("""
-                        [
-                          {
+                        {
+                          "operationId": "op-1",
+                          "estado": "COMPLETED",
+                          "mensaje": "Operacion aplicada",
+                          "cuentaOrigen": {
                             "id": 10,
                             "numeroCuenta": "ES91210000000000000001",
                             "clienteId": 1,
                             "saldo": 75.00,
                             "fechaCreacion": "2026-01-15T10:30:00"
                           },
-                          {
+                          "cuentaDestino": {
                             "id": 11,
                             "numeroCuenta": "ES91210000000000000002",
                             "clienteId": 2,
                             "saldo": 125.00,
                             "fechaCreacion": "2026-01-15T10:30:01"
                           }
-                        ]
+                        }
                         """)));
 
-        List<CuentaResponseDTO> response = cuentaServiceClient.transferir(
-                new TransferenciaInternaRequestDTO(10L, 11L, new BigDecimal("25.00"))
-        );
+        StepVerifier.create(cuentaServiceClient.aplicarMovimiento(new AplicarMovimientoRequestDTO(
+                        "op-1",
+                        10L,
+                        11L,
+                        new BigDecimal("25.00"),
+                        "Transferencia entre cuentas"
+                )))
+                .assertNext(response -> {
+                    assertThat(response.cuentaOrigen().id()).isEqualTo(10L);
+                    assertThat(response.cuentaDestino().id()).isEqualTo(11L);
+                })
+                .verifyComplete();
 
-        assertThat(response).hasSize(2);
-        assertThat(response.get(0).id()).isEqualTo(10L);
-        assertThat(response.get(1).id()).isEqualTo(11L);
-        verify(postRequestedFor(urlEqualTo("/internal/cuentas/transferencias")));
+        wireMock.verify(postRequestedFor(urlEqualTo("/internal/cuentas/aplicar-movimientos")));
     }
 
     @Test
     void error422RemotoSeTraduceAValidationException() {
-        stubFor(post(urlEqualTo("/internal/cuentas/10/retiros"))
-                .willReturn(aResponse()
-                        .withStatus(422)
-                        .withHeader("Content-Type", "application/json")
-                        .withBody("""
-                                {
-                                  "code": "INSUFFICIENT_BALANCE",
-                                  "message": "Saldo insuficiente",
-                                  "service": "cuenta-service"
-                                }
-                                """)));
+        wireMock.stubFor(post(urlEqualTo("/internal/cuentas/10/retiros"))
+                .willReturn(errorResponse(422, "INSUFFICIENT_BALANCE", "Saldo insuficiente")));
 
-        assertThatThrownBy(() -> cuentaServiceClient.retirar(
-                10L,
-                new CuentaOperacionRequestDTO(new BigDecimal("999.00"))
-        ))
-                .isInstanceOf(RemoteValidationException.class)
-                .hasMessageContaining("cuenta-service");
-
-        verify(postRequestedFor(urlEqualTo("/internal/cuentas/10/retiros")));
+        StepVerifier.create(cuentaServiceClient.retirar(
+                        10L,
+                        new CuentaOperacionRequestDTO(new BigDecimal("999.00"))
+                ))
+                .expectError(RemoteValidationException.class)
+                .verify();
     }
 
     @Test
     void error404RemotoSeTraduceAResourceNotFound() {
-        stubFor(post(urlEqualTo("/internal/cuentas/99/depositos"))
-                .willReturn(aResponse()
-                        .withStatus(404)
-                        .withHeader("Content-Type", "application/json")
-                        .withBody("""
-                                {
-                                  "code": "RESOURCE_NOT_FOUND",
-                                  "message": "No existe ninguna cuenta con id 99",
-                                  "service": "cuenta-service"
-                                }
-                                """)));
+        wireMock.stubFor(post(urlEqualTo("/internal/cuentas/99/depositos"))
+                .willReturn(errorResponse(404, "RESOURCE_NOT_FOUND", "No existe ninguna cuenta con id 99")));
 
-        assertThatThrownBy(() -> cuentaServiceClient.depositar(
-                99L,
-                new CuentaOperacionRequestDTO(new BigDecimal("10.00"))
-        ))
-                .isInstanceOf(RemoteResourceNotFoundException.class)
-                .hasMessageContaining("cuenta");
+        StepVerifier.create(cuentaServiceClient.depositar(
+                        99L,
+                        new CuentaOperacionRequestDTO(new BigDecimal("10.00"))
+                ))
+                .expectError(RemoteResourceNotFoundException.class)
+                .verify();
+    }
 
-        verify(postRequestedFor(urlEqualTo("/internal/cuentas/99/depositos")));
+    @Test
+    void error409RemotoSeTraduceAConflictException() {
+        wireMock.stubFor(post(urlEqualTo("/internal/cuentas/aplicar-movimientos"))
+                .willReturn(errorResponse(409, "IDEMPOTENCY_CONFLICT", "La operacion ya existe con otro cuerpo")));
+
+        StepVerifier.create(cuentaServiceClient.aplicarMovimiento(new AplicarMovimientoRequestDTO(
+                        "op-1",
+                        10L,
+                        11L,
+                        new BigDecimal("10.00"),
+                        "Transferencia entre cuentas"
+                )))
+                .expectError(RemoteConflictException.class)
+                .verify();
     }
 
     @Test
     void error400RemotoSeTraduceAValidationException() {
-        stubFor(post(urlEqualTo("/internal/cuentas/transferencias"))
-                .willReturn(aResponse()
-                        .withStatus(400)
-                        .withHeader("Content-Type", "application/json")
-                        .withBody("""
-                                {
-                                  "code": "VALIDATION_ERROR",
-                                  "message": "La cuenta origen y destino deben ser diferentes",
-                                  "service": "cuenta-service"
-                                }
-                                """)));
+        wireMock.stubFor(post(urlEqualTo("/internal/cuentas/aplicar-movimientos"))
+                .willReturn(errorResponse(400, "VALIDATION_ERROR", "La cuenta origen y destino deben ser diferentes")));
 
-        assertThatThrownBy(() -> cuentaServiceClient.transferir(
-                new TransferenciaInternaRequestDTO(10L, 10L, new BigDecimal("10.00"))
-        ))
-                .isInstanceOf(RemoteValidationException.class)
-                .hasMessageContaining("cuenta-service");
-
-        verify(postRequestedFor(urlEqualTo("/internal/cuentas/transferencias")));
+        StepVerifier.create(cuentaServiceClient.aplicarMovimiento(new AplicarMovimientoRequestDTO(
+                        "op-1",
+                        10L,
+                        10L,
+                        new BigDecimal("10.00"),
+                        "Transferencia entre cuentas"
+                )))
+                .expectError(RemoteValidationException.class)
+                .verify();
     }
 
     @Test
     void error500RemotoSeTraduceAServicioNoDisponible() {
-        stubFor(post(urlEqualTo("/internal/cuentas/transferencias"))
-                .willReturn(aResponse()
-                        .withStatus(500)
-                        .withHeader("Content-Type", "application/json")
-                        .withBody("""
-                                {
-                                  "code": "INTERNAL_ERROR",
-                                  "message": "Error inesperado",
-                                  "service": "cuenta-service"
-                                }
-                                """)));
+        wireMock.stubFor(post(urlEqualTo("/internal/cuentas/aplicar-movimientos"))
+                .willReturn(errorResponse(500, "INTERNAL_ERROR", "Error inesperado")));
 
-        assertThatThrownBy(() -> cuentaServiceClient.transferir(
-                new TransferenciaInternaRequestDTO(10L, 11L, new BigDecimal("10.00"))
-        ))
-                .isInstanceOf(RemoteServiceException.class)
-                .hasMessageContaining("cuenta-service");
-
-        verify(postRequestedFor(urlEqualTo("/internal/cuentas/transferencias")));
+        StepVerifier.create(cuentaServiceClient.aplicarMovimiento(new AplicarMovimientoRequestDTO(
+                        "op-1",
+                        10L,
+                        11L,
+                        new BigDecimal("10.00"),
+                        "Transferencia entre cuentas"
+                )))
+                .expectError(RemoteServiceException.class)
+                .verify();
     }
 
     private String cuentaJson(Long id, String numeroCuenta, String saldo) {
@@ -216,5 +211,18 @@ class CuentaServiceClientContractTest {
                   "fechaCreacion": "2026-01-15T10:30:00"
                 }
                 """.formatted(id, numeroCuenta, saldo);
+    }
+
+    private ResponseDefinitionBuilder errorResponse(int status, String code, String message) {
+        return aResponse()
+                .withStatus(status)
+                .withHeader("Content-Type", "application/json")
+                .withBody("""
+                        {
+                          "code": "%s",
+                          "message": "%s",
+                          "service": "cuenta-service"
+                        }
+                        """.formatted(code, message));
     }
 }

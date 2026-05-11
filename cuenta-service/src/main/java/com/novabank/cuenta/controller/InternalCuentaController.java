@@ -9,14 +9,13 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
-import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-
-import java.util.List;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 
 @RestController
 @RequestMapping("/internal/cuentas")
@@ -39,11 +38,11 @@ public class InternalCuentaController {
             @ApiResponse(responseCode = "400", description = "Datos invalidos o peticion mal formada"),
             @ApiResponse(responseCode = "404", description = "Cuenta no encontrada")
     })
-    public ResponseEntity<CuentaResponseDTO> depositar(
+    public Mono<CuentaResponseDTO> depositar(
             @PathVariable Long id,
             @Valid @RequestBody CuentaOperacionRequestDTO request
     ) {
-        return ResponseEntity.ok(cuentaService.depositar(id, request));
+        return cuentaService.depositar(id, request);
     }
 
     @PostMapping("/{id}/retiros")
@@ -57,11 +56,11 @@ public class InternalCuentaController {
             @ApiResponse(responseCode = "404", description = "Cuenta no encontrada"),
             @ApiResponse(responseCode = "422", description = "Saldo insuficiente")
     })
-    public ResponseEntity<CuentaResponseDTO> retirar(
+    public Mono<CuentaResponseDTO> retirar(
             @PathVariable Long id,
             @Valid @RequestBody CuentaOperacionRequestDTO request
     ) {
-        return ResponseEntity.ok(cuentaService.retirar(id, request));
+        return cuentaService.retirar(id, request);
     }
 
     @PostMapping("/transferencias")
@@ -75,9 +74,9 @@ public class InternalCuentaController {
             @ApiResponse(responseCode = "404", description = "Cuenta origen o destino no encontrada"),
             @ApiResponse(responseCode = "422", description = "Saldo insuficiente")
     })
-    public ResponseEntity<List<CuentaResponseDTO>> transferir(
+    public Flux<CuentaResponseDTO> transferir(
             @Valid @RequestBody TransferenciaInternaRequestDTO request
     ) {
-        return ResponseEntity.ok(cuentaService.transferir(request));
+        return cuentaService.transferir(request);
     }
 }

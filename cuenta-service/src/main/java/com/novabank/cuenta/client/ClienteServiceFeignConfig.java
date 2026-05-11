@@ -4,9 +4,16 @@ import com.novabank.cuenta.exception.RemoteServiceException;
 import com.novabank.cuenta.exception.ResourceNotFoundException;
 import feign.Response;
 import feign.codec.ErrorDecoder;
+import org.springframework.boot.autoconfigure.http.HttpMessageConverters;
 import org.springframework.context.annotation.Bean;
+import org.springframework.http.converter.json.MappingJackson2HttpMessageConverter;
 
 public class ClienteServiceFeignConfig {
+
+    @Bean
+    HttpMessageConverters feignHttpMessageConverters() {
+        return new HttpMessageConverters(new MappingJackson2HttpMessageConverter());
+    }
 
     @Bean
     ErrorDecoder clienteServiceErrorDecoder() {

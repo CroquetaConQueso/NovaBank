@@ -5,6 +5,7 @@ import com.novabank.cuenta.repository.CuentaNumeroSecuenciaRepository;
 import com.novabank.cuenta.repository.CuentaRepository;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
+import reactor.core.publisher.Mono;
 
 @Component
 public class GeneradorNumeroCuentaSecuencial implements GeneradorNumeroCuentaStrategy {
@@ -25,27 +26,36 @@ public class GeneradorNumeroCuentaSecuencial implements GeneradorNumeroCuentaStr
     }
 
     /**
-     * Usa una fila de secuencia protegida en base de datos para evitar numeros
-     * duplicados cuando se crean cuentas concurrentemente.
+     * Mantiene el Strategy Pattern usando una fila de secuencia bloqueada en
+     * base de datos para reducir el riesgo de numeros duplicados.
      */
     @Override
     @Transactional
-    public String generarNumeroCuenta() {
-        CuentaNumeroSecuencia secuencia = secuenciaRepository.findByIdForUpdate(SEQUENCE_ID)
-                .orElseGet(() -> secuenciaRepository.saveAndFlush(
-                        new CuentaNumeroSecuencia(SEQUENCE_ID, INITIAL_VALUE)
-                ));
+    public Mono<String> generarNumeroCuenta() {
+        return secuenciaRepository.findByIdForUpdate(SEQUENCE_ID)
+                .switchIfEmpty(secuenciaRepository.save(new CuentaNumeroSecuencia(SEQUENCE_ID, INITIAL_VALUE)))
+                .flatMap(this::generarDesdeSecuencia);
+    }
 
-        long siguiente = secuencia.getNextValue();
+    private Mono<String> generarDesdeSecuencia(CuentaNumeroSecuencia secuencia) {
+        return buscarNumeroDisponible(secuencia.getNextValue())
+                .flatMap(numeroDisponible -> {
+                    secuencia.setNextValue(extraerSecuencia(numeroDisponible) + 1);
+                    return secuenciaRepository.save(secuencia).thenReturn(numeroDisponible);
+                });
+    }
+
+    private Mono<String> buscarNumeroDisponible(long siguiente) {
         String numeroCuenta = formatear(siguiente);
 
-        while (cuentaRepository.existsByNumeroCuenta(numeroCuenta)) {
-            siguiente++;
-            numeroCuenta = formatear(siguiente);
-        }
+        return cuentaRepository.existsByNumeroCuenta(numeroCuenta)
+                .flatMap(existe -> existe
+                        ? buscarNumeroDisponible(siguiente + 1)
+                        : Mono.just(numeroCuenta));
+    }
 
-        secuencia.setNextValue(siguiente + 1);
-        return numeroCuenta;
+    private long extraerSecuencia(String numeroCuenta) {
+        return Long.parseLong(numeroCuenta.substring(PREFIX.length()));
     }
 
     private String formatear(long secuencia) {

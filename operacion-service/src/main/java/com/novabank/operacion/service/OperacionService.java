@@ -16,6 +16,9 @@ import com.novabank.operacion.model.TipoMovimiento;
 import com.novabank.operacion.repository.MovimientoRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -44,18 +47,14 @@ public class OperacionService {
      * la base propia de operacion-service.
      */
     @Transactional
-    public OperacionResponseDTO depositar(OperacionRequestDTO request) {
-        CuentaResponseDTO cuenta = cuentaServiceClient.depositar(
-                request.cuentaId(),
-                new CuentaOperacionRequestDTO(request.cantidad())
-        );
-        MovimientoResponseDTO movimiento = guardarMovimiento(cuenta, TipoMovimiento.DEPOSITO, request.cantidad());
-
-        return new OperacionResponseDTO(
-                "DEPOSITO",
-                "Deposito realizado correctamente",
-                List.of(movimiento)
-        );
+    public Mono<OperacionResponseDTO> depositar(OperacionRequestDTO request) {
+        return Mono.defer(() -> cuentaServiceClientTransicionalDepositar(request))
+                .flatMap(cuenta -> guardarMovimiento(cuenta, TipoMovimiento.DEPOSITO, request.cantidad()))
+                .map(movimiento -> new OperacionResponseDTO(
+                        "DEPOSITO",
+                        "Deposito realizado correctamente",
+                        List.of(movimiento)
+                ));
     }
 
     /**
@@ -63,18 +62,14 @@ public class OperacionService {
      * aqui el historial financiero resultante.
      */
     @Transactional
-    public OperacionResponseDTO retirar(OperacionRequestDTO request) {
-        CuentaResponseDTO cuenta = cuentaServiceClient.retirar(
-                request.cuentaId(),
-                new CuentaOperacionRequestDTO(request.cantidad())
-        );
-        MovimientoResponseDTO movimiento = guardarMovimiento(cuenta, TipoMovimiento.RETIRO, request.cantidad());
-
-        return new OperacionResponseDTO(
-                "RETIRO",
-                "Retiro realizado correctamente",
-                List.of(movimiento)
-        );
+    public Mono<OperacionResponseDTO> retirar(OperacionRequestDTO request) {
+        return Mono.defer(() -> cuentaServiceClientTransicionalRetirar(request))
+                .flatMap(cuenta -> guardarMovimiento(cuenta, TipoMovimiento.RETIRO, request.cantidad()))
+                .map(movimiento -> new OperacionResponseDTO(
+                        "RETIRO",
+                        "Retiro realizado correctamente",
+                        List.of(movimiento)
+                ));
     }
 
     /**
@@ -82,24 +77,30 @@ public class OperacionService {
      * los dos movimientos que forman el historial de la operacion.
      */
     @Transactional
-    public OperacionResponseDTO transferir(TransferenciaRequestDTO request) {
-        List<CuentaResponseDTO> cuentas = cuentaServiceClient.transferir(new TransferenciaInternaRequestDTO(
-                request.cuentaOrigenId(),
-                request.cuentaDestinoId(),
-                request.cantidad()
-        ));
-        CuentaResponseDTO cuentaOrigen = encontrarCuenta(cuentas, request.cuentaOrigenId());
-        CuentaResponseDTO cuentaDestino = encontrarCuenta(cuentas, request.cuentaDestinoId());
-        List<MovimientoResponseDTO> movimientos = List.of(
-                guardarMovimiento(cuentaOrigen, TipoMovimiento.TRANSFERENCIA_SALIENTE, request.cantidad()),
-                guardarMovimiento(cuentaDestino, TipoMovimiento.TRANSFERENCIA_ENTRANTE, request.cantidad())
-        );
+    public Mono<OperacionResponseDTO> transferir(TransferenciaRequestDTO request) {
+        return Mono.defer(() -> cuentaServiceClientTransicionalTransferir(request))
+                .flatMap(cuentas -> {
+                    CuentaResponseDTO cuentaOrigen = encontrarCuenta(cuentas, request.cuentaOrigenId());
+                    CuentaResponseDTO cuentaDestino = encontrarCuenta(cuentas, request.cuentaDestinoId());
 
-        return new OperacionResponseDTO(
-                "TRANSFERENCIA",
-                "Transferencia realizada correctamente",
-                movimientos
-        );
+                    Mono<MovimientoResponseDTO> movimientoOrigen = guardarMovimiento(
+                            cuentaOrigen,
+                            TipoMovimiento.TRANSFERENCIA_SALIENTE,
+                            request.cantidad()
+                    );
+                    Mono<MovimientoResponseDTO> movimientoDestino = guardarMovimiento(
+                            cuentaDestino,
+                            TipoMovimiento.TRANSFERENCIA_ENTRANTE,
+                            request.cantidad()
+                    );
+
+                    return Mono.zip(movimientoOrigen, movimientoDestino)
+                            .map(tuple -> new OperacionResponseDTO(
+                                    "TRANSFERENCIA",
+                                    "Transferencia realizada correctamente",
+                                    List.of(tuple.getT1(), tuple.getT2())
+                            ));
+                });
     }
 
     /**
@@ -107,33 +108,31 @@ public class OperacionService {
      * referencia logica de cuenta, sin foreign key entre bases de servicios.
      */
     @Transactional(readOnly = true)
-    public List<MovimientoResponseDTO> listarMovimientos(Long cuentaId, LocalDate fechaInicio, LocalDate fechaFin) {
-        validarId(cuentaId);
+    public Flux<MovimientoResponseDTO> listarMovimientos(Long cuentaId, LocalDate fechaInicio, LocalDate fechaFin) {
+        return Flux.defer(() -> {
+            validarId(cuentaId);
 
-        if (fechaInicio == null && fechaFin == null) {
-            return movimientoRepository.findByCuentaIdOrderByFechaDesc(cuentaId)
-                    .stream()
-                    .map(movimientoMapper::toResponse)
-                    .toList();
-        }
-        if (fechaInicio == null || fechaFin == null) {
-            throw new IllegalArgumentException("Debe informar fechaInicio y fechaFin para filtrar por rango");
-        }
-        if (fechaInicio.isAfter(fechaFin)) {
-            throw new IllegalArgumentException("fechaInicio no puede ser posterior a fechaFin");
-        }
+            if (fechaInicio == null && fechaFin == null) {
+                return movimientoRepository.findByCuentaIdOrderByFechaDesc(cuentaId)
+                        .map(movimientoMapper::toResponse);
+            }
+            if (fechaInicio == null || fechaFin == null) {
+                throw new IllegalArgumentException("Debe informar fechaInicio y fechaFin para filtrar por rango");
+            }
+            if (fechaInicio.isAfter(fechaFin)) {
+                throw new IllegalArgumentException("fechaInicio no puede ser posterior a fechaFin");
+            }
 
-        return movimientoRepository.findByCuentaIdAndFechaBetweenOrderByFechaDesc(
-                        cuentaId,
-                        fechaInicio.atStartOfDay(),
-                        fechaFin.atTime(LocalTime.MAX)
-                )
-                .stream()
-                .map(movimientoMapper::toResponse)
-                .toList();
+            return movimientoRepository.findByCuentaIdAndFechaBetweenOrderByFechaDesc(
+                            cuentaId,
+                            fechaInicio.atStartOfDay(),
+                            fechaFin.atTime(LocalTime.MAX)
+                    )
+                    .map(movimientoMapper::toResponse);
+        });
     }
 
-    private MovimientoResponseDTO guardarMovimiento(
+    private Mono<MovimientoResponseDTO> guardarMovimiento(
             CuentaResponseDTO cuenta,
             TipoMovimiento tipo,
             BigDecimal cantidad
@@ -147,8 +146,50 @@ public class OperacionService {
         movimiento.setNumeroCuenta(cuenta.numeroCuenta());
         movimiento.setTipo(tipo);
         movimiento.setCantidad(cantidad);
+        movimiento.prepararParaCreacion();
 
-        return movimientoMapper.toResponse(movimientoRepository.save(movimiento));
+        return movimientoRepository.save(movimiento)
+                .map(movimientoMapper::toResponse);
+    }
+
+    /**
+     * Transicion temporal para #117: Feign sigue siendo bloqueante, por eso se
+     * aisla en boundedElastic hasta sustituirlo por WebClient reactivo.
+     */
+    private Mono<CuentaResponseDTO> cuentaServiceClientTransicionalDepositar(OperacionRequestDTO request) {
+        return Mono.fromCallable(() -> cuentaServiceClient.depositar(
+                        request.cuentaId(),
+                        new CuentaOperacionRequestDTO(request.cantidad())
+                ))
+                .switchIfEmpty(Mono.error(new RemoteResourceNotFoundException("cuenta-service no devolvio datos de la cuenta")))
+                .subscribeOn(Schedulers.boundedElastic());
+    }
+
+    /**
+     * Transicion temporal para #117: mantiene el contrato actual mientras la
+     * capa web y la persistencia ya funcionan con Reactor.
+     */
+    private Mono<CuentaResponseDTO> cuentaServiceClientTransicionalRetirar(OperacionRequestDTO request) {
+        return Mono.fromCallable(() -> cuentaServiceClient.retirar(
+                        request.cuentaId(),
+                        new CuentaOperacionRequestDTO(request.cantidad())
+                ))
+                .switchIfEmpty(Mono.error(new RemoteResourceNotFoundException("cuenta-service no devolvio datos de la cuenta")))
+                .subscribeOn(Schedulers.boundedElastic());
+    }
+
+    /**
+     * Transicion temporal para #117: la llamada Feign se retirara cuando
+     * operacion-service use WebClient balanceado hacia cuenta-service.
+     */
+    private Mono<List<CuentaResponseDTO>> cuentaServiceClientTransicionalTransferir(TransferenciaRequestDTO request) {
+        return Mono.fromCallable(() -> cuentaServiceClient.transferir(new TransferenciaInternaRequestDTO(
+                        request.cuentaOrigenId(),
+                        request.cuentaDestinoId(),
+                        request.cantidad()
+                )))
+                .switchIfEmpty(Mono.error(new RemoteResourceNotFoundException("cuenta-service no devolvio datos de la transferencia")))
+                .subscribeOn(Schedulers.boundedElastic());
     }
 
     private CuentaResponseDTO encontrarCuenta(List<CuentaResponseDTO> cuentas, Long cuentaId) {

@@ -4,6 +4,7 @@ import com.novabank.cuenta.client.ClienteServiceClient;
 import com.novabank.cuenta.dto.CuentaCreateRequestDTO;
 import com.novabank.cuenta.dto.CuentaOperacionRequestDTO;
 import com.novabank.cuenta.dto.CuentaResponseDTO;
+import com.novabank.cuenta.dto.MovimientoEventDTO;
 import com.novabank.cuenta.dto.SaldoResponseDTO;
 import com.novabank.cuenta.dto.TransferenciaInternaRequestDTO;
 import com.novabank.cuenta.exception.InsufficientBalanceException;
@@ -19,6 +20,7 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -30,17 +32,20 @@ public class CuentaService {
     private final ClienteServiceClient clienteServiceClient;
     private final GeneradorNumeroCuentaStrategy generadorNumeroCuentaStrategy;
     private final CuentaMapper cuentaMapper;
+    private final MovimientoEventService movimientoEventService;
 
     public CuentaService(
             CuentaRepository cuentaRepository,
             ClienteServiceClient clienteServiceClient,
             GeneradorNumeroCuentaStrategy generadorNumeroCuentaStrategy,
-            CuentaMapper cuentaMapper
+            CuentaMapper cuentaMapper,
+            MovimientoEventService movimientoEventService
     ) {
         this.cuentaRepository = cuentaRepository;
         this.clienteServiceClient = clienteServiceClient;
         this.generadorNumeroCuentaStrategy = generadorNumeroCuentaStrategy;
         this.cuentaMapper = cuentaMapper;
+        this.movimientoEventService = movimientoEventService;
     }
 
     @Transactional
@@ -110,6 +115,7 @@ public class CuentaService {
                         return cuenta;
                     })
                     .flatMap(cuentaRepository::save)
+                    .doOnNext(cuenta -> publicarEvento(cuenta, "DEPOSITO", cantidad, "Deposito interno", null))
                     .map(cuentaMapper::toResponse);
         });
     }
@@ -130,6 +136,7 @@ public class CuentaService {
                         return cuenta;
                     })
                     .flatMap(cuentaRepository::save)
+                    .doOnNext(cuenta -> publicarEvento(cuenta, "RETIRO", cantidad, "Retiro interno", null))
                     .map(cuentaMapper::toResponse);
         });
     }
@@ -159,6 +166,7 @@ public class CuentaService {
                             .flatMap(cuentas -> aplicarTransferencia(cuentas, origenId, destinoId, cantidad));
                 })
                 .flatMapMany(cuentas -> cuentaRepository.saveAll(cuentas)
+                        .doOnNext(cuenta -> publicarEventoTransferencia(cuenta, origenDestinoTipo(cuenta, request), request.cantidad()))
                         .map(cuentaMapper::toResponse));
     }
 
@@ -187,6 +195,36 @@ public class CuentaService {
         cuentaDestino.setSaldo(cuentaDestino.getSaldo().add(cantidad));
 
         return Mono.just(List.of(cuentaOrigen, cuentaDestino));
+    }
+
+    private String origenDestinoTipo(Cuenta cuenta, TransferenciaInternaRequestDTO request) {
+        if (cuenta.getId().equals(request.cuentaOrigenId())) {
+            return "TRANSFERENCIA_SALIENTE";
+        }
+        return "TRANSFERENCIA_ENTRANTE";
+    }
+
+    private void publicarEventoTransferencia(Cuenta cuenta, String tipo, BigDecimal cantidad) {
+        publicarEvento(cuenta, tipo, cantidad, "Transferencia interna", null);
+    }
+
+    private void publicarEvento(
+            Cuenta cuenta,
+            String tipo,
+            BigDecimal monto,
+            String descripcion,
+            String operationId
+    ) {
+        movimientoEventService.publicar(new MovimientoEventDTO(
+                cuenta.getId(),
+                null,
+                tipo,
+                monto,
+                cuenta.getSaldo(),
+                descripcion,
+                LocalDateTime.now(),
+                operationId
+        ));
     }
 
     private Cuenta buscarEnMapa(Map<Long, Cuenta> cuentas, Long id) {

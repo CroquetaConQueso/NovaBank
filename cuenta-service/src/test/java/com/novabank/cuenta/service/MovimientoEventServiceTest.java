@@ -1,0 +1,55 @@
+package com.novabank.cuenta.service;
+
+import com.novabank.cuenta.dto.MovimientoEventDTO;
+import org.junit.jupiter.api.Test;
+import reactor.test.StepVerifier;
+
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
+
+class MovimientoEventServiceTest {
+
+    private final MovimientoEventService movimientoEventService = new MovimientoEventService();
+
+    @Test
+    void publicarMovimientoPermiteRecibirloEnStreamDeCuenta() {
+        StepVerifier.create(movimientoEventService.streamDeCuenta(1L))
+                .then(() -> movimientoEventService.publicar(evento(1L, "DEPOSITO")))
+                .expectNextMatches(evento -> evento.cuentaId().equals(1L)
+                        && evento.tipo().equals("DEPOSITO")
+                        && evento.monto().compareTo(new BigDecimal("25.00")) == 0)
+                .thenCancel()
+                .verify();
+    }
+
+    @Test
+    void streamDeCuentaFiltraEventosDeOtrasCuentas() {
+        StepVerifier.create(movimientoEventService.streamDeCuenta(2L))
+                .then(() -> movimientoEventService.publicar(evento(1L, "DEPOSITO")))
+                .then(() -> movimientoEventService.publicar(evento(2L, "RETIRO")))
+                .expectNextMatches(evento -> evento.cuentaId().equals(2L)
+                        && evento.tipo().equals("RETIRO"))
+                .thenCancel()
+                .verify();
+    }
+
+    @Test
+    void cuentaInvalidaDevuelveError() {
+        StepVerifier.create(movimientoEventService.streamDeCuenta(0L))
+                .expectError(IllegalArgumentException.class)
+                .verify();
+    }
+
+    private MovimientoEventDTO evento(Long cuentaId, String tipo) {
+        return new MovimientoEventDTO(
+                cuentaId,
+                null,
+                tipo,
+                new BigDecimal("25.00"),
+                new BigDecimal("100.00"),
+                "Evento de prueba",
+                LocalDateTime.now(),
+                "op-test"
+        );
+    }
+}

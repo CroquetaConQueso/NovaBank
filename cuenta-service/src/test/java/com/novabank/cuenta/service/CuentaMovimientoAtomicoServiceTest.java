@@ -13,6 +13,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.data.r2dbc.DataR2dbcTest;
+import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Import;
 import org.springframework.test.context.ActiveProfiles;
 import reactor.core.publisher.Mono;
@@ -21,6 +22,10 @@ import reactor.test.StepVerifier;
 import java.math.BigDecimal;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.reset;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 
 @DataR2dbcTest
 @Import({CuentaMovimientoAtomicoService.class, CuentaMapper.class})
@@ -36,8 +41,12 @@ class CuentaMovimientoAtomicoServiceTest {
     @Autowired
     private OperacionIdempotenteRepository operacionIdempotenteRepository;
 
+    @MockBean
+    private MovimientoEventService movimientoEventService;
+
     @BeforeEach
     void setUp() {
+        reset(movimientoEventService);
         operacionIdempotenteRepository.deleteAll()
                 .then(cuentaRepository.deleteAll())
                 .block();
@@ -100,6 +109,42 @@ class CuentaMovimientoAtomicoServiceTest {
                             .containsExactlyInAnyOrder(new BigDecimal("75.00"), new BigDecimal("125.00"));
                 })
                 .verifyComplete();
+    }
+
+    @Test
+    void operacionAtomicaExitosaPublicaEventosParaOrigenYDestino() {
+        StepVerifier.create(guardarCuentas()
+                        .flatMap(cuentas -> cuentaMovimientoAtomicoService.aplicarMovimiento(request(
+                                "op-sse-1",
+                                cuentas.origenId(),
+                                cuentas.destinoId(),
+                                "25.00"
+                        ))))
+                .expectNextCount(1)
+                .verifyComplete();
+
+        verify(movimientoEventService, times(2)).publicar(any());
+    }
+
+    @Test
+    void repeticionIdempotenteNoPublicaEventoDuplicado() {
+        StepVerifier.create(guardarCuentas()
+                        .flatMap(cuentas -> cuentaMovimientoAtomicoService.aplicarMovimiento(request(
+                                        "op-sse-2",
+                                        cuentas.origenId(),
+                                        cuentas.destinoId(),
+                                        "25.00"
+                                ))
+                                .then(cuentaMovimientoAtomicoService.aplicarMovimiento(request(
+                                        "op-sse-2",
+                                        cuentas.origenId(),
+                                        cuentas.destinoId(),
+                                        "25.00"
+                                )))))
+                .expectNextCount(1)
+                .verifyComplete();
+
+        verify(movimientoEventService, times(2)).publicar(any());
     }
 
     @Test

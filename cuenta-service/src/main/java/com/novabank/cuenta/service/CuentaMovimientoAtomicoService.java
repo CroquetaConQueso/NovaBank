@@ -3,6 +3,7 @@ package com.novabank.cuenta.service;
 import com.novabank.cuenta.dto.AplicarMovimientoRequestDTO;
 import com.novabank.cuenta.dto.AplicarMovimientoResponseDTO;
 import com.novabank.cuenta.dto.CuentaResponseDTO;
+import com.novabank.cuenta.dto.MovimientoEventDTO;
 import com.novabank.cuenta.exception.IdempotencyConflictException;
 import com.novabank.cuenta.exception.InsufficientBalanceException;
 import com.novabank.cuenta.exception.ResourceNotFoundException;
@@ -20,6 +21,7 @@ import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.time.LocalDateTime;
 import java.util.HexFormat;
 import java.util.Locale;
 
@@ -29,15 +31,18 @@ public class CuentaMovimientoAtomicoService {
     private final CuentaRepository cuentaRepository;
     private final OperacionIdempotenteRepository operacionIdempotenteRepository;
     private final CuentaMapper cuentaMapper;
+    private final MovimientoEventService movimientoEventService;
 
     public CuentaMovimientoAtomicoService(
             CuentaRepository cuentaRepository,
             OperacionIdempotenteRepository operacionIdempotenteRepository,
-            CuentaMapper cuentaMapper
+            CuentaMapper cuentaMapper,
+            MovimientoEventService movimientoEventService
     ) {
         this.cuentaRepository = cuentaRepository;
         this.operacionIdempotenteRepository = operacionIdempotenteRepository;
         this.cuentaMapper = cuentaMapper;
+        this.movimientoEventService = movimientoEventService;
     }
 
     /**
@@ -102,7 +107,8 @@ public class CuentaMovimientoAtomicoService {
                                 "Operacion aplicada correctamente",
                                 cuentas.origen(),
                                 cuentas.destino()
-                        )));
+                        ))
+                        .doOnSuccess(response -> publicarEventos(datos, cuentas)));
     }
 
     private Mono<Void> aplicarTransferencia(CuentasMovimiento cuentas, DatosMovimiento datos) {
@@ -154,6 +160,24 @@ public class CuentaMovimientoAtomicoService {
                 origen,
                 destino
         );
+    }
+
+    private void publicarEventos(DatosMovimiento datos, CuentasMovimiento cuentas) {
+        publicarEvento(cuentas.origen(), "TRANSFERENCIA_SALIENTE", datos);
+        publicarEvento(cuentas.destino(), "TRANSFERENCIA_ENTRANTE", datos);
+    }
+
+    private void publicarEvento(Cuenta cuenta, String tipo, DatosMovimiento datos) {
+        movimientoEventService.publicar(new MovimientoEventDTO(
+                cuenta.getId(),
+                null,
+                tipo,
+                datos.monto(),
+                cuenta.getSaldo(),
+                datos.concepto().isBlank() ? "Movimiento atomico interno" : datos.concepto(),
+                LocalDateTime.now(),
+                datos.operationId()
+        ));
     }
 
     private DatosMovimiento validar(AplicarMovimientoRequestDTO request) {

@@ -2,6 +2,9 @@ package com.novabank.exchangerate.service;
 
 import com.novabank.exchangerate.dto.ExchangeRateResponseDTO;
 import com.novabank.exchangerate.exception.ExchangeRateNotFoundException;
+import com.novabank.exchangerate.tracing.CorrelationIdSupport;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
 
@@ -11,6 +14,8 @@ import java.util.Map;
 
 @Service
 public class ExchangeRateService {
+
+    private static final Logger log = LoggerFactory.getLogger(ExchangeRateService.class);
 
     private final Map<String, BigDecimal> tasas = Map.of(
             "USD_EUR", new BigDecimal("0.92"),
@@ -29,7 +34,17 @@ public class ExchangeRateService {
                 ));
             }
 
-            return Mono.just(new ExchangeRateResponseDTO(from, to, tasa, Instant.now()));
+            return Mono.just(new ExchangeRateResponseDTO(from, to, tasa, Instant.now()))
+                    .doOnEach(signal -> {
+                        if (signal.isOnNext()) {
+                            log.info(
+                                    "correlationId={} tasa mock consultada from={} to={}",
+                                    CorrelationIdSupport.fromContext(signal.getContextView()),
+                                    from,
+                                    to
+                            );
+                        }
+                    });
         });
     }
 }

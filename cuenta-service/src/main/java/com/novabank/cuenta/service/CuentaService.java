@@ -14,10 +14,14 @@ import com.novabank.cuenta.mapper.CuentaMapper;
 import com.novabank.cuenta.model.Cuenta;
 import com.novabank.cuenta.repository.CuentaRepository;
 import com.novabank.cuenta.service.strategy.GeneradorNumeroCuentaStrategy;
+import com.novabank.cuenta.tracing.CorrelationIdSupport;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.core.publisher.Signal;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -27,6 +31,8 @@ import java.util.Map;
 
 @Service
 public class CuentaService {
+
+    private static final Logger log = LoggerFactory.getLogger(CuentaService.class);
 
     private final CuentaRepository cuentaRepository;
     private final ClienteServiceClient clienteServiceClient;
@@ -65,6 +71,7 @@ public class CuentaService {
                         return cuenta;
                     })
                     .flatMap(cuentaRepository::save)
+                    .doOnEach(signal -> logCuentaCreada(signal))
                     .map(cuentaMapper::toResponse);
         });
     }
@@ -115,6 +122,7 @@ public class CuentaService {
                         return cuenta;
                     })
                     .flatMap(cuentaRepository::save)
+                    .doOnEach(signal -> logMovimiento(signal, "DEPOSITO", cantidad))
                     .doOnNext(cuenta -> publicarEvento(cuenta, "DEPOSITO", cantidad, "Deposito interno", null))
                     .map(cuentaMapper::toResponse);
         });
@@ -136,6 +144,7 @@ public class CuentaService {
                         return cuenta;
                     })
                     .flatMap(cuentaRepository::save)
+                    .doOnEach(signal -> logMovimiento(signal, "RETIRO", cantidad))
                     .doOnNext(cuenta -> publicarEvento(cuenta, "RETIRO", cantidad, "Retiro interno", null))
                     .map(cuentaMapper::toResponse);
         });
@@ -245,6 +254,7 @@ public class CuentaService {
 
     private void validarSaldoSuficiente(Cuenta cuenta, BigDecimal cantidad) {
         if (cuenta.getSaldo().compareTo(cantidad) < 0) {
+            log.warn("saldo insuficiente cuentaId={} importe={}", cuenta.getId(), cantidad);
             throw new InsufficientBalanceException(
                     "Saldo insuficiente. Saldo disponible: " + cuenta.getSaldo()
                             + " EUR. Importe solicitado: " + cantidad + " EUR."
@@ -269,6 +279,29 @@ public class CuentaService {
         }
 
         return id;
+    }
+
+    private void logCuentaCreada(Signal<Cuenta> signal) {
+        if (signal.isOnNext()) {
+            log.info(
+                    "correlationId={} cuenta creada id={} clienteId={}",
+                    CorrelationIdSupport.fromContext(signal.getContextView()),
+                    signal.get().getId(),
+                    signal.get().getClienteId()
+            );
+        }
+    }
+
+    private void logMovimiento(Signal<Cuenta> signal, String tipo, BigDecimal cantidad) {
+        if (signal.isOnNext()) {
+            log.info(
+                    "correlationId={} movimiento interno tipo={} cuentaId={} importe={}",
+                    CorrelationIdSupport.fromContext(signal.getContextView()),
+                    tipo,
+                    signal.get().getId(),
+                    cantidad
+            );
+        }
     }
 
 }

@@ -4,6 +4,8 @@ import com.github.tomakehurst.wiremock.junit5.WireMockExtension;
 import com.novabank.cuenta.dto.ClienteResponseDTO;
 import com.novabank.cuenta.exception.RemoteServiceException;
 import com.novabank.cuenta.exception.ResourceNotFoundException;
+import com.novabank.cuenta.config.WebClientConfig;
+import com.novabank.cuenta.tracing.CorrelationIdSupport;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.RegisterExtension;
 import org.springframework.web.reactive.function.client.WebClient;
@@ -50,6 +52,30 @@ class ClienteServiceClientContractTest {
                 .verifyComplete();
 
         wireMock.verify(getRequestedFor(urlEqualTo("/api/clientes/7")));
+    }
+
+    @Test
+    void propagaCorrelationIdAlConsultarCliente() {
+        wireMock.stubFor(get(urlEqualTo("/api/clientes/7"))
+                .willReturn(okJson("""
+                        {
+                          "id": 7,
+                          "nombre": "Ana",
+                          "apellidos": "Garcia",
+                          "dni": "12345678Z",
+                          "email": "ana@example.com",
+                          "telefono": "600111222",
+                          "fechaCreacion": "2026-01-15T10:30:00"
+                        }
+                        """)));
+
+        StepVerifier.create(client().obtenerCliente(7L)
+                        .contextWrite(context -> context.put(CorrelationIdSupport.CONTEXT_KEY, "cid-cuenta-test")))
+                .assertNext(response -> assertThat(response.id()).isEqualTo(7L))
+                .verifyComplete();
+
+        wireMock.verify(getRequestedFor(urlEqualTo("/api/clientes/7"))
+                .withHeader(CorrelationIdSupport.HEADER_NAME, com.github.tomakehurst.wiremock.client.WireMock.equalTo("cid-cuenta-test")));
     }
 
     @Test
@@ -117,6 +143,6 @@ class ClienteServiceClientContractTest {
     }
 
     private ClienteServiceClient client() {
-        return new ClienteServiceClient(WebClient.builder(), wireMock.getRuntimeInfo().getHttpBaseUrl());
+        return new ClienteServiceClient(new WebClientConfig().webClientBuilder(), wireMock.getRuntimeInfo().getHttpBaseUrl());
     }
 }

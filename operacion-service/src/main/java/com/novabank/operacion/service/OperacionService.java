@@ -7,6 +7,7 @@ import com.novabank.operacion.dto.CuentaResponseDTO;
 import com.novabank.operacion.dto.MovimientoResponseDTO;
 import com.novabank.operacion.dto.OperacionRequestDTO;
 import com.novabank.operacion.dto.OperacionResponseDTO;
+import com.novabank.operacion.dto.TransferenciaDivisaRequestDTO;
 import com.novabank.operacion.dto.TransferenciaRequestDTO;
 import com.novabank.operacion.exception.RemoteResourceNotFoundException;
 import com.novabank.operacion.exception.ValidationException;
@@ -14,10 +15,14 @@ import com.novabank.operacion.mapper.MovimientoMapper;
 import com.novabank.operacion.model.Movimiento;
 import com.novabank.operacion.model.TipoMovimiento;
 import com.novabank.operacion.repository.MovimientoRepository;
+import com.novabank.operacion.tracing.CorrelationIdSupport;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.core.publisher.Signal;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -28,6 +33,8 @@ import java.util.UUID;
 
 @Service
 public class OperacionService {
+
+    private static final Logger log = LoggerFactory.getLogger(OperacionService.class);
 
     private final CuentaServiceClient cuentaServiceClient;
     private final ExchangeRateService exchangeRateService;
@@ -58,6 +65,7 @@ public class OperacionService {
                 )
                 .switchIfEmpty(Mono.error(new RemoteResourceNotFoundException("cuenta-service no devolvio datos de la cuenta")))
                 .flatMap(cuenta -> guardarMovimiento(cuenta, TipoMovimiento.DEPOSITO, request.cantidad()))
+                .doOnEach(signal -> logOperacion(signal, "DEPOSITO"))
                 .map(movimiento -> new OperacionResponseDTO(
                         "DEPOSITO",
                         "Deposito realizado correctamente",
@@ -77,6 +85,7 @@ public class OperacionService {
                 )
                 .switchIfEmpty(Mono.error(new RemoteResourceNotFoundException("cuenta-service no devolvio datos de la cuenta")))
                 .flatMap(cuenta -> guardarMovimiento(cuenta, TipoMovimiento.RETIRO, request.cantidad()))
+                .doOnEach(signal -> logOperacion(signal, "RETIRO"))
                 .map(movimiento -> new OperacionResponseDTO(
                         "RETIRO",
                         "Retiro realizado correctamente",
@@ -113,12 +122,34 @@ public class OperacionService {
                     );
 
                     return Mono.zip(movimientoOrigen, movimientoDestino)
+                            .doOnEach(signal -> logTransferencia(signal, "Transferencia realizada correctamente"))
                             .map(tuple -> new OperacionResponseDTO(
                                     "TRANSFERENCIA",
                                     "Transferencia realizada correctamente",
                                     List.of(tuple.getT1(), tuple.getT2())
                             ));
                 });
+    }
+
+    /**
+     * Consulta la tasa antes de tocar saldos; si el proveedor falla, el flujo
+     * termina sin llamar a cuenta-service ni persistir movimientos.
+     */
+    @Transactional
+    public Mono<OperacionResponseDTO> transferirEnDivisa(TransferenciaDivisaRequestDTO request) {
+        return exchangeRateService.obtenerTasa(request.monedaOrigen(), request.monedaDestino())
+                .map(tasa -> request.monto().multiply(tasa).setScale(2, RoundingMode.HALF_UP))
+                .doOnNext(montoConvertido -> log.info("monto convertido para transferencia en divisa importe={}", montoConvertido))
+                .flatMap(montoConvertido -> transferir(new TransferenciaRequestDTO(
+                        request.cuentaOrigenId(),
+                        request.cuentaDestinoId(),
+                        montoConvertido
+                )))
+                .map(response -> new OperacionResponseDTO(
+                        response.tipoOperacion(),
+                        "Transferencia en divisa realizada correctamente",
+                        response.movimientos()
+                ));
     }
 
     /**
@@ -181,6 +212,28 @@ public class OperacionService {
     private void validarId(Long cuentaId) {
         if (cuentaId == null || cuentaId <= 0) {
             throw new ValidationException("El id de la cuenta debe ser positivo");
+        }
+    }
+
+    private void logOperacion(Signal<MovimientoResponseDTO> signal, String tipo) {
+        if (signal.isOnNext()) {
+            log.info(
+                    "correlationId={} operacion={} cuentaId={} movimientoId={}",
+                    CorrelationIdSupport.fromContext(signal.getContextView()),
+                    tipo,
+                    signal.get().cuentaId(),
+                    signal.get().id()
+            );
+        }
+    }
+
+    private void logTransferencia(Signal<?> signal, String mensaje) {
+        if (signal.isOnNext()) {
+            log.info(
+                    "correlationId={} transferencia completada detalle={}",
+                    CorrelationIdSupport.fromContext(signal.getContextView()),
+                    mensaje
+            );
         }
     }
 }

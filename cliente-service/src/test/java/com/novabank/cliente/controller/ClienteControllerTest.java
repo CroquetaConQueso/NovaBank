@@ -6,6 +6,8 @@ import com.novabank.cliente.exception.DuplicateResourceException;
 import com.novabank.cliente.exception.GlobalExceptionHandler;
 import com.novabank.cliente.exception.ResourceNotFoundException;
 import com.novabank.cliente.service.ClienteService;
+import com.novabank.cliente.tracing.CorrelationIdSupport;
+import com.novabank.cliente.tracing.CorrelationIdWebFilter;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.reactive.WebFluxTest;
@@ -23,7 +25,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
 @WebFluxTest(ClienteController.class)
-@Import(GlobalExceptionHandler.class)
+@Import({GlobalExceptionHandler.class, CorrelationIdWebFilter.class})
 @ActiveProfiles("test")
 class ClienteControllerTest {
 
@@ -126,11 +128,14 @@ class ClienteControllerTest {
 
         webTestClient.get()
                 .uri("/api/clientes/99")
+                .header(CorrelationIdSupport.HEADER_NAME, "cid-cliente-test")
                 .exchange()
                 .expectStatus().isNotFound()
+                .expectHeader().valueEquals(CorrelationIdSupport.HEADER_NAME, "cid-cliente-test")
                 .expectBody()
                 .jsonPath("$.code").isEqualTo("RESOURCE_NOT_FOUND")
-                .jsonPath("$.service").isEqualTo("cliente-service");
+                .jsonPath("$.service").isEqualTo("cliente-service")
+                .jsonPath("$.correlationId").isEqualTo("cid-cliente-test");
     }
 
     @Test

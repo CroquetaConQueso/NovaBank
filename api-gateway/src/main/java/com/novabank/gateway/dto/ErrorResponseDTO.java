@@ -6,12 +6,17 @@ public record ErrorResponseDTO(
         String code,
         String message,
         String service,
-        LocalDateTime timestamp
+        LocalDateTime timestamp,
+        String correlationId
 ) {
 
     private static final String SERVICE_NAME = "api-gateway";
 
     public static ErrorResponseDTO of(String code, String message) {
-        return new ErrorResponseDTO(code, message, SERVICE_NAME, LocalDateTime.now());
+        return of(code, message, null);
+    }
+
+    public static ErrorResponseDTO of(String code, String message, String correlationId) {
+        return new ErrorResponseDTO(code, message, SERVICE_NAME, LocalDateTime.now(), correlationId);
     }
 }

@@ -13,6 +13,8 @@ import com.novabank.cuenta.model.EstadoOperacionIdempotente;
 import com.novabank.cuenta.model.OperacionIdempotente;
 import com.novabank.cuenta.repository.CuentaRepository;
 import com.novabank.cuenta.repository.OperacionIdempotenteRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import reactor.core.publisher.Mono;
@@ -27,6 +29,8 @@ import java.util.Locale;
 
 @Service
 public class CuentaMovimientoAtomicoService {
+
+    private static final Logger log = LoggerFactory.getLogger(CuentaMovimientoAtomicoService.class);
 
     private final CuentaRepository cuentaRepository;
     private final OperacionIdempotenteRepository operacionIdempotenteRepository;
@@ -67,6 +71,7 @@ public class CuentaMovimientoAtomicoService {
             String requestHash
     ) {
         if (!operacion.getRequestHash().equals(requestHash)) {
+            log.warn("conflicto de idempotencia operationId={}", datos.operationId());
             return Mono.error(new IdempotencyConflictException(
                     "La operacion ya existe con una peticion diferente"
             ));
@@ -116,6 +121,7 @@ public class CuentaMovimientoAtomicoService {
         Cuenta destino = cuentas.destino();
 
         if (origen.getSaldo().compareTo(datos.monto()) < 0) {
+            log.warn("saldo insuficiente en movimiento atomico cuentaId={} operationId={}", origen.getId(), datos.operationId());
             return Mono.error(new InsufficientBalanceException(
                     "Saldo insuficiente. Saldo disponible: " + origen.getSaldo()
                             + " EUR. Importe solicitado: " + datos.monto() + " EUR."
@@ -163,6 +169,10 @@ public class CuentaMovimientoAtomicoService {
     }
 
     private void publicarEventos(DatosMovimiento datos, CuentasMovimiento cuentas) {
+        log.info("movimiento atomico completado operationId={} cuentaOrigenId={} cuentaDestinoId={}",
+                datos.operationId(),
+                datos.cuentaOrigenId(),
+                datos.cuentaDestinoId());
         publicarEvento(cuentas.origen(), "TRANSFERENCIA_SALIENTE", datos);
         publicarEvento(cuentas.destino(), "TRANSFERENCIA_ENTRANTE", datos);
     }

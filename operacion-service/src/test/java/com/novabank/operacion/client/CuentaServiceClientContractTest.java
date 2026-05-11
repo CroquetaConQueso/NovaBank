@@ -1,13 +1,15 @@
 package com.novabank.operacion.client;
 
 import com.github.tomakehurst.wiremock.junit5.WireMockExtension;
+import com.github.tomakehurst.wiremock.client.ResponseDefinitionBuilder;
 import com.novabank.operacion.dto.AplicarMovimientoRequestDTO;
 import com.novabank.operacion.dto.CuentaOperacionRequestDTO;
 import com.novabank.operacion.exception.RemoteConflictException;
 import com.novabank.operacion.exception.RemoteResourceNotFoundException;
 import com.novabank.operacion.exception.RemoteServiceException;
 import com.novabank.operacion.exception.RemoteValidationException;
-import org.junit.jupiter.api.BeforeEach;
+import com.novabank.operacion.config.WebClientConfig;
+import com.novabank.operacion.tracing.CorrelationIdSupport;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.RegisterExtension;
 import org.springframework.web.reactive.function.client.WebClient;
@@ -31,11 +33,6 @@ class CuentaServiceClientContractTest {
             .options(wireMockConfig().dynamicPort())
             .build();
 
-    @BeforeEach
-    void setUp() {
-        cuentaServiceClient = new CuentaServiceClient(WebClient.builder(), wireMock.getRuntimeInfo().getHttpBaseUrl());
-    }
-
     @Test
     void depositarLlamaEndpointInternoYDevuelveCuentaActualizada() {
         wireMock.stubFor(post(urlEqualTo("/internal/cuentas/10/depositos"))
@@ -54,6 +51,20 @@ class CuentaServiceClientContractTest {
                 .verifyComplete();
 
         wireMock.verify(postRequestedFor(urlEqualTo("/internal/cuentas/10/depositos")));
+    }
+
+    @Test
+    void propagaCorrelationIdHaciaCuentaService() {
+        wireMock.stubFor(post(urlEqualTo("/internal/cuentas/10/depositos"))
+                .willReturn(okJson(cuentaJson(10L, "ES91210000000000000001", "150.00"))));
+
+        StepVerifier.create(client().depositar(10L, new CuentaOperacionRequestDTO(new BigDecimal("50.00")))
+                        .contextWrite(context -> context.put(CorrelationIdSupport.CONTEXT_KEY, "cid-operacion-test")))
+                .assertNext(response -> assertThat(response.id()).isEqualTo(10L))
+                .verifyComplete();
+
+        wireMock.verify(postRequestedFor(urlEqualTo("/internal/cuentas/10/depositos"))
+                .withHeader(CorrelationIdSupport.HEADER_NAME, com.github.tomakehurst.wiremock.client.WireMock.equalTo("cid-operacion-test")));
     }
 
     @Test
@@ -251,7 +262,7 @@ class CuentaServiceClientContractTest {
     }
 
     private CuentaServiceClient client() {
-        return new CuentaServiceClient(WebClient.builder(), wireMock.getRuntimeInfo().getHttpBaseUrl());
+        return new CuentaServiceClient(new WebClientConfig().webClientBuilder(), wireMock.getRuntimeInfo().getHttpBaseUrl());
     }
 
     private String cuentaJson(Long id, String numeroCuenta, String saldo) {

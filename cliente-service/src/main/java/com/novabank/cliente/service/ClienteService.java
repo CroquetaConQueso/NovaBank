@@ -8,9 +8,13 @@ import com.novabank.cliente.exception.ValidationException;
 import com.novabank.cliente.mapper.ClienteMapper;
 import com.novabank.cliente.model.Cliente;
 import com.novabank.cliente.repository.ClienteRepository;
+import com.novabank.cliente.tracing.CorrelationIdSupport;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.core.publisher.Signal;
 
 import java.util.List;
 import java.util.Locale;
@@ -18,6 +22,8 @@ import java.util.function.Predicate;
 
 @Service
 public class ClienteService {
+
+    private static final Logger log = LoggerFactory.getLogger(ClienteService.class);
 
     private final ClienteRepository clienteRepository;
     private final ClienteMapper clienteMapper;
@@ -46,7 +52,8 @@ public class ClienteService {
                         return cliente;
                     }))
                     .flatMap(clienteRepository::save)
-                    .map(clienteMapper::toResponse);
+                    .map(clienteMapper::toResponse)
+                    .doOnEach(signal -> logClienteCreado(signal));
         });
     }
 
@@ -170,5 +177,15 @@ public class ClienteService {
 
     private boolean contiene(List<Cliente> clientes, Predicate<Cliente> predicate) {
         return clientes != null && clientes.stream().anyMatch(predicate);
+    }
+
+    private void logClienteCreado(Signal<ClienteResponseDTO> signal) {
+        if (signal.isOnNext()) {
+            log.info(
+                    "correlationId={} cliente creado id={}",
+                    CorrelationIdSupport.fromContext(signal.getContextView()),
+                    signal.get().id()
+            );
+        }
     }
 }

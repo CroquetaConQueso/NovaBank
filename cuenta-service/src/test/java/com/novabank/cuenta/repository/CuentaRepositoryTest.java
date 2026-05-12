@@ -3,6 +3,7 @@ package com.novabank.cuenta.repository;
 import com.novabank.cuenta.model.Cuenta;
 import com.novabank.cuenta.model.EstadoOperacionIdempotente;
 import com.novabank.cuenta.model.OperacionIdempotente;
+import com.novabank.cuenta.testsupport.PostgresTestContainerSupport;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -16,7 +17,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 @DataR2dbcTest
 @ActiveProfiles("test")
-class CuentaRepositoryTest {
+class CuentaRepositoryTest extends PostgresTestContainerSupport {
 
     @Autowired
     private CuentaRepository cuentaRepository;

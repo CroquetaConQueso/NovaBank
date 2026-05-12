@@ -9,6 +9,7 @@ import com.novabank.cuenta.model.Cuenta;
 import com.novabank.cuenta.model.EstadoOperacionIdempotente;
 import com.novabank.cuenta.repository.CuentaRepository;
 import com.novabank.cuenta.repository.OperacionIdempotenteRepository;
+import com.novabank.cuenta.testsupport.PostgresTestContainerSupport;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -30,7 +31,7 @@ import static org.mockito.Mockito.verify;
 @DataR2dbcTest
 @Import({CuentaMovimientoAtomicoService.class, CuentaMapper.class})
 @ActiveProfiles("test")
-class CuentaMovimientoAtomicoServiceTest {
+class CuentaMovimientoAtomicoServiceTest extends PostgresTestContainerSupport {
 
     @Autowired
     private CuentaMovimientoAtomicoService cuentaMovimientoAtomicoService;

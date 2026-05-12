@@ -1,5 +1,6 @@
 package com.novabank.auth.config;
 
+import com.novabank.auth.testsupport.PostgresTestContainerSupport;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.reactive.AutoConfigureWebTestClient;
@@ -13,7 +14,7 @@ import org.springframework.test.web.reactive.server.WebTestClient;
 })
 @AutoConfigureWebTestClient
 @ActiveProfiles("test")
-class AuthOpenApiSecurityTest {
+class AuthOpenApiSecurityTest extends PostgresTestContainerSupport {
 
     @Autowired
     private WebTestClient webTestClient;

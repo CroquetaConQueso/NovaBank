@@ -15,6 +15,7 @@ import com.novabank.cuenta.repository.CuentaRepository;
 import com.novabank.cuenta.repository.OperacionIdempotenteRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import reactor.core.publisher.Mono;
@@ -93,15 +94,28 @@ public class CuentaMovimientoAtomicoService {
     }
 
     private Mono<AplicarMovimientoResponseDTO> registrarYAplicar(DatosMovimiento datos, String requestHash) {
-        OperacionIdempotente operacion = OperacionIdempotente.builder()
-                .operationId(datos.operationId())
-                .requestHash(requestHash)
-                .estado(EstadoOperacionIdempotente.PROCESSING)
-                .build();
-        operacion.prepararParaCreacion();
+        return operacionIdempotenteRepository.insertProcessingIfAbsent(datos.operationId(), requestHash)
+                .flatMap(filasInsertadas -> {
+                    if (filasInsertadas == null || filasInsertadas == 0) {
+                        return resolverColisionIdempotente(datos, requestHash);
+                    }
+                    return operacionIdempotenteRepository.findByOperationId(datos.operationId())
+                            .switchIfEmpty(Mono.error(new IdempotencyConflictException(
+                                    "La operacion ya fue registrada y no puede reutilizarse en este estado"
+                            )))
+                            .flatMap(operacion -> aplicarOperacionNueva(operacion, datos));
+                })
+                .onErrorResume(
+                        DataIntegrityViolationException.class,
+                        ex -> resolverColisionIdempotente(datos, requestHash)
+                );
+    }
 
-        return operacionIdempotenteRepository.save(operacion)
-                .then(buscarCuentas(datos))
+    private Mono<AplicarMovimientoResponseDTO> aplicarOperacionNueva(
+            OperacionIdempotente operacion,
+            DatosMovimiento datos
+    ) {
+        return buscarCuentas(datos)
                 .flatMap(cuentas -> aplicarTransferencia(cuentas, datos)
                         .then(Mono.defer(() -> {
                             operacion.marcarCompletada();
@@ -114,6 +128,17 @@ public class CuentaMovimientoAtomicoService {
                                 cuentas.destino()
                         ))
                         .doOnSuccess(response -> publicarEventos(datos, cuentas)));
+    }
+
+    private Mono<AplicarMovimientoResponseDTO> resolverColisionIdempotente(
+            DatosMovimiento datos,
+            String requestHash
+    ) {
+        return operacionIdempotenteRepository.findByOperationId(datos.operationId())
+                .switchIfEmpty(Mono.error(new IdempotencyConflictException(
+                        "La operacion ya fue registrada y no puede reutilizarse en este estado"
+                )))
+                .flatMap(operacion -> resolverOperacionExistente(operacion, datos, requestHash));
     }
 
     private Mono<Void> aplicarTransferencia(CuentasMovimiento cuentas, DatosMovimiento datos) {

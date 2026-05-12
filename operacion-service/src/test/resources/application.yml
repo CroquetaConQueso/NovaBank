@@ -1,10 +1,6 @@
 spring:
   application:
     name: operacion-service
-  r2dbc:
-    url: r2dbc:h2:mem:///operacion_service_test;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1
-    username: sa
-    password:
   sql:
     init:
       mode: always

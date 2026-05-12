@@ -1,6 +1,7 @@
 package com.novabank.auth.repository;
 
 import com.novabank.auth.model.Usuario;
+import com.novabank.auth.testsupport.PostgresTestContainerSupport;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -13,7 +14,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 @DataR2dbcTest
 @ActiveProfiles("test")
-class UsuarioRepositoryTest {
+class UsuarioRepositoryTest extends PostgresTestContainerSupport {
 
     @Autowired
     private UsuarioRepository repository;

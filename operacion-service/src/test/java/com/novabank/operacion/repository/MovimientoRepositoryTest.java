@@ -2,6 +2,7 @@ package com.novabank.operacion.repository;
 
 import com.novabank.operacion.model.Movimiento;
 import com.novabank.operacion.model.TipoMovimiento;
+import com.novabank.operacion.testsupport.PostgresTestContainerSupport;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -16,7 +17,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 @DataR2dbcTest
 @ActiveProfiles("test")
-class MovimientoRepositoryTest {
+class MovimientoRepositoryTest extends PostgresTestContainerSupport {
 
     @Autowired
     private MovimientoRepository movimientoRepository;

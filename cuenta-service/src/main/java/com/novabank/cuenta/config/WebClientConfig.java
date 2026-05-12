@@ -1,5 +1,8 @@
 package com.novabank.cuenta.config;
 
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.web.reactive.function.client.WebClientCustomizer;
 import org.springframework.cloud.client.loadbalancer.LoadBalanced;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -13,11 +16,26 @@ import com.novabank.cuenta.tracing.CorrelationIdSupport;
 @Configuration
 public class WebClientConfig {
 
+    private final ObjectProvider<WebClientCustomizer> webClientCustomizers;
+
+    public WebClientConfig() {
+        this.webClientCustomizers = null;
+    }
+
+    @Autowired
+    public WebClientConfig(ObjectProvider<WebClientCustomizer> webClientCustomizers) {
+        this.webClientCustomizers = webClientCustomizers;
+    }
+
     @Bean
     @LoadBalanced
     public WebClient.Builder webClientBuilder() {
-        return WebClient.builder()
+        WebClient.Builder builder = WebClient.builder()
                 .filter(correlationIdFilter());
+        if (webClientCustomizers != null) {
+            webClientCustomizers.orderedStream().forEach(customizer -> customizer.customize(builder));
+        }
+        return builder;
     }
 
     private ExchangeFilterFunction correlationIdFilter() {

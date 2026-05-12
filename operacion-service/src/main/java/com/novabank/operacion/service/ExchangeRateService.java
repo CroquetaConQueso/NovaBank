@@ -1,7 +1,5 @@
 package com.novabank.operacion.service;
 
-import com.github.benmanes.caffeine.cache.Cache;
-import com.github.benmanes.caffeine.cache.Caffeine;
 import com.novabank.operacion.dto.ExchangeRateResponseDTO;
 import com.novabank.operacion.exception.ExchangeRateUnavailableException;
 import com.novabank.operacion.exception.ValidationException;
@@ -37,7 +35,6 @@ public class ExchangeRateService {
     private final Duration timeout;
     private final CircuitBreaker exchangeRateCircuitBreaker;
     private final Retry exchangeRateRetry;
-    private final Cache<ExchangeRatePair, BigDecimal> cache;
 
     public ExchangeRateService(
             WebClient.Builder webClientBuilder,
@@ -49,10 +46,7 @@ public class ExchangeRateService {
                 baseUrl,
                 timeout,
                 CircuitBreaker.of("exchangeRateCircuitBreaker", circuitBreakerConfig()),
-                Retry.of("exchangeRateRetry", retryConfig()),
-                Caffeine.newBuilder()
-                        .expireAfterWrite(Duration.ofMinutes(5))
-                        .build()
+                Retry.of("exchangeRateRetry", retryConfig())
         );
     }
 
@@ -63,42 +57,15 @@ public class ExchangeRateService {
             CircuitBreaker exchangeRateCircuitBreaker,
             Retry exchangeRateRetry
     ) {
-        this(
-                webClientBuilder,
-                baseUrl,
-                timeout,
-                exchangeRateCircuitBreaker,
-                exchangeRateRetry,
-                Caffeine.newBuilder()
-                        .expireAfterWrite(Duration.ofMinutes(5))
-                        .build()
-        );
-    }
-
-    ExchangeRateService(
-            WebClient.Builder webClientBuilder,
-            String baseUrl,
-            Duration timeout,
-            CircuitBreaker exchangeRateCircuitBreaker,
-            Retry exchangeRateRetry,
-            Cache<ExchangeRatePair, BigDecimal> cache
-    ) {
         this.webClient = webClientBuilder.baseUrl(baseUrl).build();
         this.timeout = timeout;
         this.exchangeRateCircuitBreaker = exchangeRateCircuitBreaker;
         this.exchangeRateRetry = exchangeRateRetry;
-        this.cache = cache;
     }
 
     public Mono<BigDecimal> obtenerTasa(String from, String to) {
-        return obtenerCotizacion(from, to)
-                .map(ExchangeRateQuote::tasa);
-    }
-
-    public Mono<ExchangeRateQuote> obtenerCotizacion(String from, String to) {
         String fromNormalizado = normalizarDivisa(from, "monedaOrigen");
         String toNormalizado = normalizarDivisa(to, "monedaDestino");
-        ExchangeRatePair cacheKey = new ExchangeRatePair(fromNormalizado, toNormalizado);
 
         Mono<BigDecimal> llamadaRemota = webClient.get()
                 .uri(uriBuilder -> uriBuilder.path("/api/exchange-rate")
@@ -137,9 +104,10 @@ public class ExchangeRateService {
         return llamadaRemota
                 .transformDeferred(RetryOperator.of(exchangeRateRetry))
                 .transformDeferred(CircuitBreakerOperator.of(exchangeRateCircuitBreaker))
-                .doOnNext(tasa -> cache.put(cacheKey, tasa))
-                .map(tasa -> new ExchangeRateQuote(tasa, false))
-                .onErrorResume(error -> usarCacheSiErrorTecnico(cacheKey, error));
+                .onErrorMap(
+                        CallNotPermittedException.class,
+                        error -> new ExchangeRateUnavailableException("exchange-rate-service no esta disponible", error)
+                );
     }
 
     private String normalizarDivisa(String valor, String campo) {
@@ -156,30 +124,6 @@ public class ExchangeRateService {
         }
 
         return Mono.just(tasa);
-    }
-
-    private Mono<ExchangeRateQuote> usarCacheSiErrorTecnico(ExchangeRatePair cacheKey, Throwable error) {
-        if (!esErrorTecnico(error)) {
-            return Mono.error(error);
-        }
-
-        BigDecimal tasaCacheada = cache.getIfPresent(cacheKey);
-        if (tasaCacheada != null && tasaCacheada.compareTo(BigDecimal.ZERO) > 0) {
-            log.warn(
-                    "usando tasa cacheada from={} to={} causa={}",
-                    cacheKey.from(),
-                    cacheKey.to(),
-                    error.getClass().getSimpleName()
-            );
-            return Mono.just(new ExchangeRateQuote(tasaCacheada, true));
-        }
-
-        return Mono.error(new ExchangeRateUnavailableException("No se pudo obtener una tasa de cambio fiable", error));
-    }
-
-    private boolean esErrorTecnico(Throwable error) {
-        return error instanceof RetryableExchangeRateUnavailableException
-                || error instanceof CallNotPermittedException;
     }
 
     private Mono<? extends Throwable> mapearError(ClientResponse response) {
@@ -243,8 +187,5 @@ public class ExchangeRateService {
         RetryableExchangeRateUnavailableException(String message, Throwable cause) {
             super(message, cause);
         }
-    }
-
-    record ExchangeRatePair(String from, String to) {
     }
 }

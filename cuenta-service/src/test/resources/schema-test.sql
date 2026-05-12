@@ -16,8 +16,9 @@ CREATE TABLE IF NOT EXISTS account_number_sequence (
     next_value BIGINT NOT NULL
 );
 
-MERGE INTO account_number_sequence KEY(id)
-VALUES (1, 1);
+INSERT INTO account_number_sequence (id, next_value)
+VALUES (1, 1)
+ON CONFLICT (id) DO NOTHING;
 
 CREATE TABLE IF NOT EXISTS operaciones_idempotentes (
     id BIGSERIAL PRIMARY KEY,

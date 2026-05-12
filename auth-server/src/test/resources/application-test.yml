@@ -1,8 +1,4 @@
 spring:
-  r2dbc:
-    url: r2dbc:h2:mem:///auth_server_test;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1
-    username: sa
-    password:
   sql:
     init:
       mode: always

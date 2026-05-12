@@ -137,17 +137,31 @@ public class OperacionService {
      */
     @Transactional
     public Mono<OperacionResponseDTO> transferirEnDivisa(TransferenciaDivisaRequestDTO request) {
-        return exchangeRateService.obtenerTasa(request.monedaOrigen(), request.monedaDestino())
-                .map(tasa -> request.monto().multiply(tasa).setScale(2, RoundingMode.HALF_UP))
-                .doOnNext(montoConvertido -> log.info("monto convertido para transferencia en divisa importe={}", montoConvertido))
-                .flatMap(montoConvertido -> transferir(new TransferenciaRequestDTO(
-                        request.cuentaOrigenId(),
-                        request.cuentaDestinoId(),
-                        montoConvertido
-                )))
+        return exchangeRateService.obtenerCotizacion(request.monedaOrigen(), request.monedaDestino())
+                .flatMap(cotizacion -> {
+                    BigDecimal montoConvertido = request.monto()
+                            .multiply(cotizacion.tasa())
+                            .setScale(2, RoundingMode.HALF_UP);
+                    log.info(
+                            "monto convertido para transferencia en divisa importe={} tasaCacheada={}",
+                            montoConvertido,
+                            cotizacion.cacheada()
+                    );
+                    return transferir(new TransferenciaRequestDTO(
+                            request.cuentaOrigenId(),
+                            request.cuentaDestinoId(),
+                            montoConvertido
+                    )).map(response -> new OperacionResponseDTO(
+                            response.tipoOperacion(),
+                            cotizacion.cacheada()
+                                    ? "Transferencia en divisa realizada correctamente con tasa cacheada"
+                                    : "Transferencia en divisa realizada correctamente",
+                            response.movimientos()
+                    ));
+                })
                 .map(response -> new OperacionResponseDTO(
                         response.tipoOperacion(),
-                        "Transferencia en divisa realizada correctamente",
+                        response.mensaje(),
                         response.movimientos()
                 ));
     }

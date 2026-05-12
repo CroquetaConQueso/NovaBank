@@ -1,16 +1,17 @@
 package com.novabank.auth.exception;
 
 import com.novabank.auth.dto.ErrorResponseDTO;
+import com.novabank.auth.tracing.CorrelationIdSupport;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.ConstraintViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.FieldError;
-import org.springframework.web.bind.MethodArgumentNotValidException;
-import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.bind.support.WebExchangeBindException;
+import org.springframework.web.server.ServerWebInputException;
+import reactor.core.publisher.Mono;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -20,41 +21,39 @@ import java.util.stream.Collectors;
 public class GlobalExceptionHandler {
 
     @ExceptionHandler(DuplicateUserException.class)
-    public ResponseEntity<ErrorResponseDTO> handleDuplicate(DuplicateUserException ex) {
-        return ResponseEntity.status(HttpStatus.CONFLICT)
-                .body(ErrorResponseDTO.of("CONFLICT", ex.getMessage()));
+    public Mono<ResponseEntity<ErrorResponseDTO>> handleDuplicate(DuplicateUserException ex) {
+        return response(HttpStatus.CONFLICT, "CONFLICT", ex.getMessage());
     }
 
     @ExceptionHandler(InvalidCredentialsException.class)
-    public ResponseEntity<ErrorResponseDTO> handleInvalidCredentials(InvalidCredentialsException ex) {
-        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                .body(ErrorResponseDTO.of("UNAUTHORIZED", ex.getMessage()));
+    public Mono<ResponseEntity<ErrorResponseDTO>> handleInvalidCredentials(InvalidCredentialsException ex) {
+        return response(HttpStatus.UNAUTHORIZED, "UNAUTHORIZED", ex.getMessage());
     }
 
     @ExceptionHandler(InvalidTokenException.class)
-    public ResponseEntity<ErrorResponseDTO> handleInvalidToken(InvalidTokenException ex) {
-        return ResponseEntity.badRequest()
-                .body(ErrorResponseDTO.of("INVALID_TOKEN", ex.getMessage()));
+    public Mono<ResponseEntity<ErrorResponseDTO>> handleInvalidToken(InvalidTokenException ex) {
+        return response(HttpStatus.BAD_REQUEST, "INVALID_TOKEN", ex.getMessage());
     }
 
-    @ExceptionHandler(MethodArgumentNotValidException.class)
-    public ResponseEntity<ErrorResponseDTO> handleValidation(MethodArgumentNotValidException ex) {
+    @ExceptionHandler(WebExchangeBindException.class)
+    public Mono<ResponseEntity<ErrorResponseDTO>> handleValidation(WebExchangeBindException ex) {
         Map<String, String> fieldErrors = new LinkedHashMap<>();
 
         for (FieldError error : ex.getBindingResult().getFieldErrors()) {
             fieldErrors.putIfAbsent(error.getField(), error.getDefaultMessage());
         }
 
-        return ResponseEntity.badRequest()
+        return Mono.deferContextual(contextView -> Mono.just(ResponseEntity.badRequest()
                 .body(ErrorResponseDTO.withFieldErrors(
                         "VALIDATION_ERROR",
                         "La peticion contiene campos invalidos",
+                        CorrelationIdSupport.fromContext(contextView),
                         fieldErrors
-                ));
+                ))));
     }
 
     @ExceptionHandler(ConstraintViolationException.class)
-    public ResponseEntity<ErrorResponseDTO> handleConstraintViolation(ConstraintViolationException ex) {
+    public Mono<ResponseEntity<ErrorResponseDTO>> handleConstraintViolation(ConstraintViolationException ex) {
         Map<String, String> fieldErrors = ex.getConstraintViolations().stream()
                 .collect(Collectors.toMap(
                         violation -> violation.getPropertyPath().toString(),
@@ -63,29 +62,27 @@ public class GlobalExceptionHandler {
                         LinkedHashMap::new
                 ));
 
-        return ResponseEntity.badRequest()
+        return Mono.deferContextual(contextView -> Mono.just(ResponseEntity.badRequest()
                 .body(ErrorResponseDTO.withFieldErrors(
                         "VALIDATION_ERROR",
                         "La peticion contiene campos invalidos",
+                        CorrelationIdSupport.fromContext(contextView),
                         fieldErrors
-                ));
+                ))));
     }
 
-    @ExceptionHandler({
-            HttpMessageNotReadableException.class,
-            MissingServletRequestParameterException.class
-    })
-    public ResponseEntity<ErrorResponseDTO> handleBadRequest(Exception ex) {
-        return ResponseEntity.badRequest()
-                .body(ErrorResponseDTO.of("BAD_REQUEST", "La peticion no contiene los datos requeridos"));
+    @ExceptionHandler(ServerWebInputException.class)
+    public Mono<ResponseEntity<ErrorResponseDTO>> handleBadRequest(ServerWebInputException ex) {
+        return response(HttpStatus.BAD_REQUEST, "BAD_REQUEST", "La peticion no contiene los datos requeridos");
     }
 
     @ExceptionHandler(Exception.class)
-    public ResponseEntity<ErrorResponseDTO> handleGeneric(Exception ex) {
-        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(ErrorResponseDTO.of(
-                        "INTERNAL_SERVER_ERROR",
-                        "Se ha producido un error inesperado"
-                ));
+    public Mono<ResponseEntity<ErrorResponseDTO>> handleGeneric(Exception ex) {
+        return response(HttpStatus.INTERNAL_SERVER_ERROR, "INTERNAL_SERVER_ERROR", "Se ha producido un error inesperado");
+    }
+
+    private Mono<ResponseEntity<ErrorResponseDTO>> response(HttpStatus status, String code, String message) {
+        return Mono.deferContextual(contextView -> Mono.just(ResponseEntity.status(status)
+                .body(ErrorResponseDTO.of(code, message, CorrelationIdSupport.fromContext(contextView)))));
     }
 }

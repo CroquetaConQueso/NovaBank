@@ -8,8 +8,13 @@ import com.novabank.cliente.exception.ValidationException;
 import com.novabank.cliente.mapper.ClienteMapper;
 import com.novabank.cliente.model.Cliente;
 import com.novabank.cliente.repository.ClienteRepository;
+import com.novabank.cliente.tracing.CorrelationIdSupport;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
+import reactor.core.publisher.Signal;
 
 import java.util.List;
 import java.util.Locale;
@@ -17,6 +22,8 @@ import java.util.function.Predicate;
 
 @Service
 public class ClienteService {
+
+    private static final Logger log = LoggerFactory.getLogger(ClienteService.class);
 
     private final ClienteRepository clienteRepository;
     private final ClienteMapper clienteMapper;
@@ -30,79 +37,89 @@ public class ClienteService {
      * Normaliza los datos antes de comprobar unicidad para que DNI, email y
      * telefono se comparen con el mismo criterio que se persiste.
      */
-    @Transactional
-    public ClienteResponseDTO crearCliente(ClienteRequestDTO request) {
-        if (request == null) {
-            throw new IllegalArgumentException("Los datos del cliente son obligatorios");
-        }
+    public Mono<ClienteResponseDTO> crearCliente(ClienteRequestDTO request) {
+        return Mono.defer(() -> {
+            if (request == null) {
+                return Mono.error(new IllegalArgumentException("Los datos del cliente son obligatorios"));
+            }
 
-        ClienteRequestDTO normalizado = normalizar(request);
-        validarDuplicados(normalizado);
+            ClienteRequestDTO normalizado = normalizar(request);
 
-        Cliente cliente = clienteMapper.toEntity(normalizado);
-        return clienteMapper.toResponse(clienteRepository.save(cliente));
+            return validarDuplicados(normalizado)
+                    .then(Mono.fromSupplier(() -> {
+                        Cliente cliente = clienteMapper.toEntity(normalizado);
+                        cliente.prepararParaCreacion();
+                        return cliente;
+                    }))
+                    .flatMap(clienteRepository::save)
+                    .map(clienteMapper::toResponse)
+                    .doOnEach(signal -> logClienteCreado(signal));
+        });
     }
 
     /**
      * Excluye el propio cliente al comprobar duplicados para permitir guardar
      * una actualizacion que conserva DNI, email o telefono.
      */
-    @Transactional
-    public ClienteResponseDTO actualizarCliente(Long id, ClienteRequestDTO request) {
-        if (request == null) {
-            throw new IllegalArgumentException("Los datos del cliente son obligatorios");
-        }
+    public Mono<ClienteResponseDTO> actualizarCliente(Long id, ClienteRequestDTO request) {
+        return Mono.defer(() -> {
+            if (request == null) {
+                return Mono.error(new IllegalArgumentException("Los datos del cliente son obligatorios"));
+            }
 
-        Cliente cliente = buscarCliente(id);
-        ClienteRequestDTO normalizado = normalizar(request);
-        validarDuplicados(id, normalizado);
+            ClienteRequestDTO normalizado = normalizar(request);
 
-        cliente.setNombre(normalizado.nombre());
-        cliente.setApellidos(normalizado.apellidos());
-        cliente.setDni(normalizado.dni());
-        cliente.setEmail(normalizado.email());
-        cliente.setTelefono(normalizado.telefono());
-
-        return clienteMapper.toResponse(clienteRepository.save(cliente));
+            return buscarCliente(id)
+                    .flatMap(cliente -> validarDuplicados(id, normalizado)
+                            .then(Mono.defer(() -> {
+                                clienteMapper.updateEntityFromRequest(cliente, normalizado);
+                                return clienteRepository.save(cliente);
+                            })))
+                    .map(clienteMapper::toResponse);
+        });
     }
 
-    @Transactional(readOnly = true)
-    public List<ClienteResponseDTO> listarClientes() {
+    public Flux<ClienteResponseDTO> listarClientes() {
         return clienteRepository.findAll()
-                .stream()
-                .map(clienteMapper::toResponse)
-                .toList();
+                .map(clienteMapper::toResponse);
     }
 
-    @Transactional(readOnly = true)
-    public ClienteResponseDTO obtenerCliente(Long id) {
-        return clienteMapper.toResponse(buscarCliente(id));
+    public Mono<ClienteResponseDTO> obtenerCliente(Long id) {
+        return buscarCliente(id)
+                .map(clienteMapper::toResponse);
     }
 
     /**
      * Aplica la misma normalizacion que el alta para evitar busquedas fallidas
      * por espacios o diferencias de mayusculas.
      */
-    @Transactional(readOnly = true)
-    public ClienteResponseDTO obtenerClientePorDni(String dni) {
-        if (dni == null || dni.isBlank()) {
-            throw new ValidationException("El DNI es obligatorio");
-        }
+    public Mono<ClienteResponseDTO> obtenerClientePorDni(String dni) {
+        return Mono.defer(() -> {
+            if (dni == null || dni.isBlank()) {
+                return Mono.error(new ValidationException("El DNI es obligatorio"));
+            }
 
-        String dniNormalizado = dni.trim().toUpperCase(Locale.ROOT);
+            String dniNormalizado = dni.trim().toUpperCase(Locale.ROOT);
 
-        return clienteRepository.findByDni(dniNormalizado)
-                .map(clienteMapper::toResponse)
-                .orElseThrow(() -> new ResourceNotFoundException("No existe ningun cliente con DNI " + dniNormalizado));
+            return clienteRepository.findByDni(dniNormalizado)
+                    .map(clienteMapper::toResponse)
+                    .switchIfEmpty(Mono.error(
+                            new ResourceNotFoundException("No existe ningun cliente con DNI " + dniNormalizado)
+                    ));
+        });
     }
 
-    Cliente buscarCliente(Long id) {
-        if (id == null || id <= 0) {
-            throw new IllegalArgumentException("El id del cliente debe ser positivo");
-        }
+    Mono<Cliente> buscarCliente(Long id) {
+        return Mono.defer(() -> {
+            if (id == null || id <= 0) {
+                return Mono.error(new IllegalArgumentException("El id del cliente debe ser positivo"));
+            }
 
-        return clienteRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("No existe ningun cliente con id " + id));
+            return clienteRepository.findById(id)
+                    .switchIfEmpty(Mono.error(
+                            new ResourceNotFoundException("No existe ningun cliente con id " + id)
+                    ));
+        });
     }
 
     private ClienteRequestDTO normalizar(ClienteRequestDTO request) {
@@ -123,36 +140,52 @@ public class ClienteService {
         return valor.trim();
     }
 
-    private void validarDuplicados(ClienteRequestDTO request) {
-        validarDuplicados(clienteRepository.buscarDuplicados(
-                request.dni(),
-                request.email(),
-                request.telefono()
-        ), request);
+    private Mono<Void> validarDuplicados(ClienteRequestDTO request) {
+        return clienteRepository.buscarDuplicados(
+                        request.dni(),
+                        request.email(),
+                        request.telefono()
+                )
+                .collectList()
+                .flatMap(duplicados -> validarDuplicados(duplicados, request));
     }
 
-    private void validarDuplicados(Long clienteId, ClienteRequestDTO request) {
-        validarDuplicados(clienteRepository.buscarDuplicadosExcluyendoId(
-                clienteId,
-                request.dni(),
-                request.email(),
-                request.telefono()
-        ), request);
+    private Mono<Void> validarDuplicados(Long clienteId, ClienteRequestDTO request) {
+        return clienteRepository.buscarDuplicadosExcluyendoId(
+                        clienteId,
+                        request.dni(),
+                        request.email(),
+                        request.telefono()
+                )
+                .collectList()
+                .flatMap(duplicados -> validarDuplicados(duplicados, request));
     }
 
-    private void validarDuplicados(List<Cliente> duplicados, ClienteRequestDTO request) {
+    private Mono<Void> validarDuplicados(List<Cliente> duplicados, ClienteRequestDTO request) {
         if (contiene(duplicados, c -> request.dni().equals(c.getDni()))) {
-            throw new DuplicateResourceException("Ya existe un cliente con el DNI " + request.dni());
+            return Mono.error(new DuplicateResourceException("Ya existe un cliente con el DNI " + request.dni()));
         }
         if (contiene(duplicados, c -> request.email().equals(c.getEmail()))) {
-            throw new DuplicateResourceException("Ya existe un cliente con el email " + request.email());
+            return Mono.error(new DuplicateResourceException("Ya existe un cliente con el email " + request.email()));
         }
         if (contiene(duplicados, c -> request.telefono().equals(c.getTelefono()))) {
-            throw new DuplicateResourceException("Ya existe un cliente con el telefono " + request.telefono());
+            return Mono.error(new DuplicateResourceException("Ya existe un cliente con el telefono " + request.telefono()));
         }
+
+        return Mono.empty();
     }
 
     private boolean contiene(List<Cliente> clientes, Predicate<Cliente> predicate) {
         return clientes != null && clientes.stream().anyMatch(predicate);
+    }
+
+    private void logClienteCreado(Signal<ClienteResponseDTO> signal) {
+        if (signal.isOnNext()) {
+            log.info(
+                    "correlationId={} cliente creado id={}",
+                    CorrelationIdSupport.fromContext(signal.getContextView()),
+                    signal.get().id()
+            );
+        }
     }
 }

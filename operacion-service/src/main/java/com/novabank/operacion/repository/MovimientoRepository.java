@@ -1,16 +1,16 @@
 package com.novabank.operacion.repository;
 
 import com.novabank.operacion.model.Movimiento;
-import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.repository.reactive.ReactiveCrudRepository;
+import reactor.core.publisher.Flux;
 
 import java.time.LocalDateTime;
-import java.util.List;
 
-public interface MovimientoRepository extends JpaRepository<Movimiento, Long> {
+public interface MovimientoRepository extends ReactiveCrudRepository<Movimiento, Long> {
 
-    List<Movimiento> findByCuentaIdOrderByFechaDesc(Long cuentaId);
+    Flux<Movimiento> findByCuentaIdOrderByFechaDesc(Long cuentaId);
 
-    List<Movimiento> findByCuentaIdAndFechaBetweenOrderByFechaDesc(
+    Flux<Movimiento> findByCuentaIdAndFechaBetweenOrderByFechaDesc(
             Long cuentaId,
             LocalDateTime fechaInicio,
             LocalDateTime fechaFin

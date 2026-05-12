@@ -4,6 +4,7 @@ import com.novabank.cuenta.client.ClienteServiceClient;
 import com.novabank.cuenta.dto.CuentaCreateRequestDTO;
 import com.novabank.cuenta.dto.CuentaOperacionRequestDTO;
 import com.novabank.cuenta.dto.CuentaResponseDTO;
+import com.novabank.cuenta.dto.MovimientoEventDTO;
 import com.novabank.cuenta.dto.SaldoResponseDTO;
 import com.novabank.cuenta.dto.TransferenciaInternaRequestDTO;
 import com.novabank.cuenta.exception.InsufficientBalanceException;
@@ -13,84 +14,97 @@ import com.novabank.cuenta.mapper.CuentaMapper;
 import com.novabank.cuenta.model.Cuenta;
 import com.novabank.cuenta.repository.CuentaRepository;
 import com.novabank.cuenta.service.strategy.GeneradorNumeroCuentaStrategy;
+import com.novabank.cuenta.tracing.CorrelationIdSupport;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
+import reactor.core.publisher.Signal;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
 @Service
 public class CuentaService {
+
+    private static final Logger log = LoggerFactory.getLogger(CuentaService.class);
 
     private final CuentaRepository cuentaRepository;
     private final ClienteServiceClient clienteServiceClient;
     private final GeneradorNumeroCuentaStrategy generadorNumeroCuentaStrategy;
     private final CuentaMapper cuentaMapper;
+    private final MovimientoEventService movimientoEventService;
 
     public CuentaService(
             CuentaRepository cuentaRepository,
             ClienteServiceClient clienteServiceClient,
             GeneradorNumeroCuentaStrategy generadorNumeroCuentaStrategy,
-            CuentaMapper cuentaMapper
+            CuentaMapper cuentaMapper,
+            MovimientoEventService movimientoEventService
     ) {
         this.cuentaRepository = cuentaRepository;
         this.clienteServiceClient = clienteServiceClient;
         this.generadorNumeroCuentaStrategy = generadorNumeroCuentaStrategy;
         this.cuentaMapper = cuentaMapper;
+        this.movimientoEventService = movimientoEventService;
     }
 
-    /**
-     * Valida el cliente mediante cliente-service y persiste solo clienteId para
-     * evitar relaciones JPA entre bases de datos de servicios distintos.
-     */
     @Transactional
-    public CuentaResponseDTO crearCuenta(CuentaCreateRequestDTO request) {
-        Long clienteId = validarId(request == null ? null : request.clienteId(), "El id del cliente debe ser positivo");
-        clienteServiceClient.obtenerCliente(clienteId);
+    public Mono<CuentaResponseDTO> crearCuenta(CuentaCreateRequestDTO request) {
+        return Mono.defer(() -> {
+            Long clienteId = validarId(request == null ? null : request.clienteId(), "El id del cliente debe ser positivo");
 
-        Cuenta cuenta = new Cuenta();
-        cuenta.setClienteId(clienteId);
-        cuenta.setNumeroCuenta(generadorNumeroCuentaStrategy.generarNumeroCuenta());
-        cuenta.setSaldo(BigDecimal.ZERO);
-
-        return cuentaMapper.toResponse(cuentaRepository.save(cuenta));
+            return clienteServiceClient.obtenerCliente(clienteId)
+                    .then(Mono.defer(generadorNumeroCuentaStrategy::generarNumeroCuenta))
+                    .map(numeroCuenta -> {
+                        Cuenta cuenta = Cuenta.builder()
+                                .clienteId(clienteId)
+                                .numeroCuenta(numeroCuenta)
+                                .saldo(BigDecimal.ZERO)
+                                .build();
+                        cuenta.prepararParaCreacion();
+                        return cuenta;
+                    })
+                    .flatMap(cuentaRepository::save)
+                    .doOnEach(signal -> logCuentaCreada(signal))
+                    .map(cuentaMapper::toResponse);
+        });
     }
 
-    @Transactional(readOnly = true)
-    public CuentaResponseDTO obtenerCuenta(Long id) {
-        return cuentaMapper.toResponse(buscarCuenta(id));
+    public Mono<CuentaResponseDTO> obtenerCuenta(Long id) {
+        return buscarCuenta(id)
+                .map(cuentaMapper::toResponse);
     }
 
-    @Transactional(readOnly = true)
-    public CuentaResponseDTO obtenerCuentaPorNumero(String numeroCuenta) {
-        String numeroNormalizado = normalizarNumeroCuenta(numeroCuenta);
+    public Mono<CuentaResponseDTO> obtenerCuentaPorNumero(String numeroCuenta) {
+        return Mono.defer(() -> {
+            String numeroNormalizado = normalizarNumeroCuenta(numeroCuenta);
 
-        Cuenta cuenta = cuentaRepository.findByNumeroCuenta(numeroNormalizado)
-                .orElseThrow(() -> new ResourceNotFoundException("No existe ninguna cuenta con numero " + numeroNormalizado));
-
-        return cuentaMapper.toResponse(cuenta);
+            return cuentaRepository.findByNumeroCuenta(numeroNormalizado)
+                    .switchIfEmpty(Mono.error(
+                            new ResourceNotFoundException("No existe ninguna cuenta con numero " + numeroNormalizado)
+                    ))
+                    .map(cuentaMapper::toResponse);
+        });
     }
 
-    @Transactional(readOnly = true)
-    public SaldoResponseDTO consultarSaldo(Long id) {
-        Cuenta cuenta = buscarCuenta(id);
-        return new SaldoResponseDTO(cuenta.getId(), cuenta.getNumeroCuenta(), cuenta.getSaldo());
+    public Mono<SaldoResponseDTO> consultarSaldo(Long id) {
+        return buscarCuenta(id)
+                .map(cuenta -> new SaldoResponseDTO(cuenta.getId(), cuenta.getNumeroCuenta(), cuenta.getSaldo()));
     }
 
-    /**
-     * Comprueba la existencia del cliente antes de devolver cuentas para que la
-     * respuesta distinga entre cliente inexistente y cliente sin cuentas.
-     */
-    @Transactional(readOnly = true)
-    public List<CuentaResponseDTO> listarCuentasPorCliente(Long clienteId) {
-        clienteId = validarId(clienteId, "El id del cliente debe ser positivo");
-        clienteServiceClient.obtenerCliente(clienteId);
-
-        return cuentaRepository.findByClienteId(clienteId)
-                .stream()
-                .map(cuentaMapper::toResponse)
-                .toList();
+    public Flux<CuentaResponseDTO> listarCuentasPorCliente(Long clienteId) {
+        return Mono.defer(() -> {
+                    Long id = validarId(clienteId, "El id del cliente debe ser positivo");
+                    return clienteServiceClient.obtenerCliente(id).thenReturn(id);
+                })
+                .flatMapMany(cuentaRepository::findByClienteId)
+                .map(cuentaMapper::toResponse);
     }
 
     /**
@@ -98,12 +112,20 @@ public class CuentaService {
      * registra operacion-service en su propia base.
      */
     @Transactional
-    public CuentaResponseDTO depositar(Long cuentaId, CuentaOperacionRequestDTO request) {
-        BigDecimal cantidad = validarCantidad(request == null ? null : request.cantidad());
-        Cuenta cuenta = buscarCuenta(cuentaId);
+    public Mono<CuentaResponseDTO> depositar(Long cuentaId, CuentaOperacionRequestDTO request) {
+        return Mono.defer(() -> {
+            BigDecimal cantidad = validarCantidad(request == null ? null : request.cantidad());
 
-        cuenta.setSaldo(cuenta.getSaldo().add(cantidad));
-        return cuentaMapper.toResponse(cuenta);
+            return buscarCuenta(cuentaId)
+                    .map(cuenta -> {
+                        cuenta.setSaldo(cuenta.getSaldo().add(cantidad));
+                        return cuenta;
+                    })
+                    .flatMap(cuentaRepository::save)
+                    .doOnEach(signal -> logMovimiento(signal, "DEPOSITO", cantidad))
+                    .doOnNext(cuenta -> publicarEvento(cuenta, "DEPOSITO", cantidad, "Deposito interno", null))
+                    .map(cuentaMapper::toResponse);
+        });
     }
 
     /**
@@ -111,13 +133,21 @@ public class CuentaService {
      * movimiento asociado se crea fuera de este servicio.
      */
     @Transactional
-    public CuentaResponseDTO retirar(Long cuentaId, CuentaOperacionRequestDTO request) {
-        BigDecimal cantidad = validarCantidad(request == null ? null : request.cantidad());
-        Cuenta cuenta = buscarCuenta(cuentaId);
-        validarSaldoSuficiente(cuenta, cantidad);
+    public Mono<CuentaResponseDTO> retirar(Long cuentaId, CuentaOperacionRequestDTO request) {
+        return Mono.defer(() -> {
+            BigDecimal cantidad = validarCantidad(request == null ? null : request.cantidad());
 
-        cuenta.setSaldo(cuenta.getSaldo().subtract(cantidad));
-        return cuentaMapper.toResponse(cuenta);
+            return buscarCuenta(cuentaId)
+                    .map(cuenta -> {
+                        validarSaldoSuficiente(cuenta, cantidad);
+                        cuenta.setSaldo(cuenta.getSaldo().subtract(cantidad));
+                        return cuenta;
+                    })
+                    .flatMap(cuentaRepository::save)
+                    .doOnEach(signal -> logMovimiento(signal, "RETIRO", cantidad))
+                    .doOnNext(cuenta -> publicarEvento(cuenta, "RETIRO", cantidad, "Retiro interno", null))
+                    .map(cuentaMapper::toResponse);
+        });
     }
 
     /**
@@ -125,45 +155,93 @@ public class CuentaService {
      * cuenta-service, sin asumir responsabilidad sobre el historial.
      */
     @Transactional
-    public List<CuentaResponseDTO> transferir(TransferenciaInternaRequestDTO request) {
-        if (request == null) {
-            throw new IllegalArgumentException("Los datos de la transferencia son obligatorios");
-        }
+    public Flux<CuentaResponseDTO> transferir(TransferenciaInternaRequestDTO request) {
+        return Mono.defer(() -> {
+                    if (request == null) {
+                        return Mono.error(new IllegalArgumentException("Los datos de la transferencia son obligatorios"));
+                    }
 
-        Long origenId = validarId(request.cuentaOrigenId(), "El id de la cuenta origen debe ser positivo");
-        Long destinoId = validarId(request.cuentaDestinoId(), "El id de la cuenta destino debe ser positivo");
+                    Long origenId = validarId(request.cuentaOrigenId(), "El id de la cuenta origen debe ser positivo");
+                    Long destinoId = validarId(request.cuentaDestinoId(), "El id de la cuenta destino debe ser positivo");
 
-        if (origenId.equals(destinoId)) {
-            throw new IllegalArgumentException("La cuenta origen y destino deben ser diferentes");
-        }
+                    if (origenId.equals(destinoId)) {
+                        return Mono.error(new IllegalArgumentException("La cuenta origen y destino deben ser diferentes"));
+                    }
 
-        BigDecimal cantidad = validarCantidad(request.cantidad());
-        List<Cuenta> cuentas = cuentaRepository.findAllById(List.of(origenId, destinoId));
-        Cuenta cuentaOrigen = buscarEnLista(cuentas, origenId);
-        Cuenta cuentaDestino = buscarEnLista(cuentas, destinoId);
+                    BigDecimal cantidad = validarCantidad(request.cantidad());
+
+                    return cuentaRepository.findAllById(List.of(origenId, destinoId))
+                            .collectMap(Cuenta::getId)
+                            .flatMap(cuentas -> aplicarTransferencia(cuentas, origenId, destinoId, cantidad));
+                })
+                .flatMapMany(cuentas -> cuentaRepository.saveAll(cuentas)
+                        .doOnNext(cuenta -> publicarEventoTransferencia(cuenta, origenDestinoTipo(cuenta, request), request.cantidad()))
+                        .map(cuentaMapper::toResponse));
+    }
+
+    Mono<Cuenta> buscarCuenta(Long id) {
+        return Mono.defer(() -> {
+            Long cuentaId = validarId(id, "El id de la cuenta debe ser positivo");
+
+            return cuentaRepository.findById(cuentaId)
+                    .switchIfEmpty(Mono.error(
+                            new ResourceNotFoundException("No existe ninguna cuenta con id " + cuentaId)
+                    ));
+        });
+    }
+
+    private Mono<List<Cuenta>> aplicarTransferencia(
+            Map<Long, Cuenta> cuentas,
+            Long origenId,
+            Long destinoId,
+            BigDecimal cantidad
+    ) {
+        Cuenta cuentaOrigen = buscarEnMapa(cuentas, origenId);
+        Cuenta cuentaDestino = buscarEnMapa(cuentas, destinoId);
         validarSaldoSuficiente(cuentaOrigen, cantidad);
 
         cuentaOrigen.setSaldo(cuentaOrigen.getSaldo().subtract(cantidad));
         cuentaDestino.setSaldo(cuentaDestino.getSaldo().add(cantidad));
 
-        return List.of(cuentaOrigen, cuentaDestino)
-                .stream()
-                .map(cuentaMapper::toResponse)
-                .toList();
+        return Mono.just(List.of(cuentaOrigen, cuentaDestino));
     }
 
-    Cuenta buscarCuenta(Long id) {
-        Long cuentaId = validarId(id, "El id de la cuenta debe ser positivo");
-
-        return cuentaRepository.findById(cuentaId)
-                .orElseThrow(() -> new ResourceNotFoundException("No existe ninguna cuenta con id " + cuentaId));
+    private String origenDestinoTipo(Cuenta cuenta, TransferenciaInternaRequestDTO request) {
+        if (cuenta.getId().equals(request.cuentaOrigenId())) {
+            return "TRANSFERENCIA_SALIENTE";
+        }
+        return "TRANSFERENCIA_ENTRANTE";
     }
 
-    private Cuenta buscarEnLista(List<Cuenta> cuentas, Long id) {
-        return cuentas.stream()
-                .filter(cuenta -> id.equals(cuenta.getId()))
-                .findFirst()
-                .orElseThrow(() -> new ResourceNotFoundException("No existe ninguna cuenta con id " + id));
+    private void publicarEventoTransferencia(Cuenta cuenta, String tipo, BigDecimal cantidad) {
+        publicarEvento(cuenta, tipo, cantidad, "Transferencia interna", null);
+    }
+
+    private void publicarEvento(
+            Cuenta cuenta,
+            String tipo,
+            BigDecimal monto,
+            String descripcion,
+            String operationId
+    ) {
+        movimientoEventService.publicar(new MovimientoEventDTO(
+                cuenta.getId(),
+                null,
+                tipo,
+                monto,
+                cuenta.getSaldo(),
+                descripcion,
+                LocalDateTime.now(),
+                operationId
+        ));
+    }
+
+    private Cuenta buscarEnMapa(Map<Long, Cuenta> cuentas, Long id) {
+        Cuenta cuenta = cuentas.get(id);
+        if (cuenta == null) {
+            throw new ResourceNotFoundException("No existe ninguna cuenta con id " + id);
+        }
+        return cuenta;
     }
 
     private String normalizarNumeroCuenta(String numeroCuenta) {
@@ -176,6 +254,7 @@ public class CuentaService {
 
     private void validarSaldoSuficiente(Cuenta cuenta, BigDecimal cantidad) {
         if (cuenta.getSaldo().compareTo(cantidad) < 0) {
+            log.warn("saldo insuficiente cuentaId={} importe={}", cuenta.getId(), cantidad);
             throw new InsufficientBalanceException(
                     "Saldo insuficiente. Saldo disponible: " + cuenta.getSaldo()
                             + " EUR. Importe solicitado: " + cantidad + " EUR."
@@ -201,4 +280,28 @@ public class CuentaService {
 
         return id;
     }
+
+    private void logCuentaCreada(Signal<Cuenta> signal) {
+        if (signal.isOnNext()) {
+            log.info(
+                    "correlationId={} cuenta creada id={} clienteId={}",
+                    CorrelationIdSupport.fromContext(signal.getContextView()),
+                    signal.get().getId(),
+                    signal.get().getClienteId()
+            );
+        }
+    }
+
+    private void logMovimiento(Signal<Cuenta> signal, String tipo, BigDecimal cantidad) {
+        if (signal.isOnNext()) {
+            log.info(
+                    "correlationId={} movimiento interno tipo={} cuentaId={} importe={}",
+                    CorrelationIdSupport.fromContext(signal.getContextView()),
+                    tipo,
+                    signal.get().getId(),
+                    cantidad
+            );
+        }
+    }
+
 }

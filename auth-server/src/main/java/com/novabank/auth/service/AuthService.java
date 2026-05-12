@@ -13,6 +13,7 @@ import com.novabank.auth.repository.UsuarioRepository;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import reactor.core.publisher.Mono;
 
 @Service
 public class AuthService {
@@ -38,20 +39,27 @@ public class AuthService {
      * duplicadas por diferencias de mayusculas o espacios.
      */
     @Transactional
-    public RegisterResponseDTO registrar(RegisterRequestDTO request) {
-        String username = normalizeUsername(request.username());
-        if (usuarioRepository.existsByUsername(username)) {
-            throw new DuplicateUserException("Ya existe un usuario con ese username");
-        }
+    public Mono<RegisterResponseDTO> registrar(RegisterRequestDTO request) {
+        return Mono.defer(() -> {
+            String username = normalizeUsername(request.username());
 
-        Usuario usuario = new Usuario();
-        usuario.setUsername(username);
-        usuario.setPasswordHash(passwordEncoder.encode(request.password()));
-        usuario.setRole(DEFAULT_ROLE);
-        usuario.setEnabled(true);
+            return usuarioRepository.existsByUsername(username)
+                    .flatMap(exists -> {
+                        if (Boolean.TRUE.equals(exists)) {
+                            return Mono.error(new DuplicateUserException("Ya existe un usuario con ese username"));
+                        }
 
-        Usuario saved = usuarioRepository.save(usuario);
-        return toRegisterResponse(saved);
+                        Usuario usuario = new Usuario();
+                        usuario.setUsername(username);
+                        usuario.setPasswordHash(passwordEncoder.encode(request.password()));
+                        usuario.setRole(DEFAULT_ROLE);
+                        usuario.setEnabled(true);
+                        usuario.prepararParaCreacion();
+
+                        return usuarioRepository.save(usuario)
+                                .map(this::toRegisterResponse);
+                    });
+        });
     }
 
     /**
@@ -59,34 +67,44 @@ public class AuthService {
      * hash, sin implementar un servidor OAuth completo.
      */
     @Transactional(readOnly = true)
-    public LoginResponseDTO login(LoginRequestDTO request) {
-        String username = normalizeUsername(request.username());
-        Usuario usuario = usuarioRepository.findByUsername(username)
-                .filter(Usuario::getEnabled)
-                .orElseThrow(() -> new InvalidCredentialsException("Credenciales invalidas"));
+    public Mono<LoginResponseDTO> login(LoginRequestDTO request) {
+        return Mono.defer(() -> {
+            String username = normalizeUsername(request.username());
 
-        if (!passwordEncoder.matches(request.password(), usuario.getPasswordHash())) {
-            throw new InvalidCredentialsException("Credenciales invalidas");
-        }
+            return usuarioRepository.findByUsername(username)
+                    .filter(usuario -> Boolean.TRUE.equals(usuario.getEnabled()))
+                    .switchIfEmpty(Mono.error(new InvalidCredentialsException("Credenciales invalidas")))
+                    .flatMap(usuario -> {
+                        if (!passwordEncoder.matches(request.password(), usuario.getPasswordHash())) {
+                            return Mono.error(new InvalidCredentialsException("Credenciales invalidas"));
+                        }
 
-        return new LoginResponseDTO(jwtService.generarToken(username), "Bearer", jwtService.getExpiration());
+                        return Mono.just(new LoginResponseDTO(
+                                jwtService.generarToken(username),
+                                "Bearer",
+                                jwtService.getExpiration()
+                        ));
+                    });
+        });
     }
 
     /**
      * Permite que el Gateway consulte a auth-server como autoridad central de
      * autenticacion antes de enrutar a los servicios de negocio.
      */
-    public ValidateTokenResponseDTO validarToken(String token) {
-        if (token == null || token.isBlank()) {
-            throw new InvalidTokenException("El token es obligatorio");
-        }
+    public Mono<ValidateTokenResponseDTO> validarToken(String token) {
+        return Mono.defer(() -> {
+            if (token == null || token.isBlank()) {
+                throw new InvalidTokenException("El token es obligatorio");
+            }
 
-        String normalizedToken = normalizeBearerToken(token);
-        if (!jwtService.esTokenValido(normalizedToken)) {
-            return new ValidateTokenResponseDTO(false, null);
-        }
+            String normalizedToken = normalizeBearerToken(token);
+            if (!jwtService.esTokenValido(normalizedToken)) {
+                return Mono.just(new ValidateTokenResponseDTO(false, null));
+            }
 
-        return new ValidateTokenResponseDTO(true, jwtService.extraerUsername(normalizedToken));
+            return Mono.just(new ValidateTokenResponseDTO(true, jwtService.extraerUsername(normalizedToken)));
+        });
     }
 
     private RegisterResponseDTO toRegisterResponse(Usuario usuario) {

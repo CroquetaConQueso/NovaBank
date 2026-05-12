@@ -1,16 +1,15 @@
 package com.novabank.cuenta.repository;
 
 import com.novabank.cuenta.model.Cuenta;
-import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.repository.reactive.ReactiveCrudRepository;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 
-import java.util.List;
-import java.util.Optional;
+public interface CuentaRepository extends ReactiveCrudRepository<Cuenta, Long> {
 
-public interface CuentaRepository extends JpaRepository<Cuenta, Long> {
+    Mono<Cuenta> findByNumeroCuenta(String numeroCuenta);
 
-    Optional<Cuenta> findByNumeroCuenta(String numeroCuenta);
+    Mono<Boolean> existsByNumeroCuenta(String numeroCuenta);
 
-    boolean existsByNumeroCuenta(String numeroCuenta);
-
-    List<Cuenta> findByClienteId(Long clienteId);
+    Flux<Cuenta> findByClienteId(Long clienteId);
 }

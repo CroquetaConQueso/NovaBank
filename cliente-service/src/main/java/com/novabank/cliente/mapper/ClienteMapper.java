@@ -16,17 +16,25 @@ public class ClienteMapper implements ResponseMapper<Cliente, ClienteResponseDTO
      */
     @Override
     public Cliente toEntity(ClienteRequestDTO dto) {
-        Cliente cliente = new Cliente();
+        return Cliente.builder()
+                .nombre(dto.nombre())
+                .apellidos(dto.apellidos())
+                .dni(dto.dni())
+                .email(dto.email())
+                .telefono(dto.telefono())
+                .build();
+    }
+
+    public void updateEntityFromRequest(Cliente cliente, ClienteRequestDTO dto) {
         cliente.setNombre(dto.nombre());
         cliente.setApellidos(dto.apellidos());
         cliente.setDni(dto.dni());
         cliente.setEmail(dto.email());
         cliente.setTelefono(dto.telefono());
-        return cliente;
     }
 
     /**
-     * Devuelve un contrato de salida estable sin exponer la entidad JPA al
+     * Devuelve un contrato de salida estable sin exponer el modelo persistido al
      * controlador.
      */
     @Override

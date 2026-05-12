@@ -26,11 +26,13 @@
         <module>cliente-service</module>
         <module>cuenta-service</module>
         <module>operacion-service</module>
+        <module>exchange-rate-mock-service</module>
     </modules>
 
     <properties>
         <java.version>17</java.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
         <lombok.version>1.18.34</lombok.version>
         <jjwt.version>0.12.6</jjwt.version>
         <springdoc.version>2.6.0</springdoc.version>

@@ -1,10 +1,11 @@
 package com.novabank.operacion.controller;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.novabank.operacion.dto.MovimientoResponseDTO;
 import com.novabank.operacion.dto.OperacionRequestDTO;
 import com.novabank.operacion.dto.OperacionResponseDTO;
+import com.novabank.operacion.dto.TransferenciaDivisaRequestDTO;
 import com.novabank.operacion.dto.TransferenciaRequestDTO;
+import com.novabank.operacion.exception.ExchangeRateUnavailableException;
 import com.novabank.operacion.exception.GlobalExceptionHandler;
 import com.novabank.operacion.exception.RemoteResourceNotFoundException;
 import com.novabank.operacion.exception.RemoteServiceException;
@@ -13,12 +14,14 @@ import com.novabank.operacion.exception.ValidationException;
 import com.novabank.operacion.service.OperacionService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
+import org.springframework.boot.test.autoconfigure.web.reactive.WebFluxTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
-import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.reactive.server.WebTestClient;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -27,229 +30,294 @@ import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@WebMvcTest(OperacionController.class)
+@WebFluxTest(OperacionController.class)
 @Import(GlobalExceptionHandler.class)
 @ActiveProfiles("test")
 class OperacionControllerTest {
 
     @Autowired
-    private MockMvc mockMvc;
-
-    @Autowired
-    private ObjectMapper objectMapper;
+    private WebTestClient webTestClient;
 
     @MockBean
     private OperacionService operacionService;
 
     @Test
-    void depositoDevuelveOperacionRealizada() throws Exception {
+    void depositoDevuelveOperacionRealizada() {
         when(operacionService.depositar(any(OperacionRequestDTO.class)))
-                .thenReturn(response("DEPOSITO"));
+                .thenReturn(Mono.just(response("DEPOSITO")));
 
-        mockMvc.perform(post("/api/operaciones/deposito")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(
-                                new OperacionRequestDTO(10L, new BigDecimal("50.00"))
-                        )))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.tipoOperacion").value("DEPOSITO"))
-                .andExpect(jsonPath("$.mensaje").value("Operacion realizada correctamente"));
+        webTestClient.post()
+                .uri("/api/operaciones/deposito")
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(new OperacionRequestDTO(10L, new BigDecimal("50.00")))
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody()
+                .jsonPath("$.tipoOperacion").isEqualTo("DEPOSITO")
+                .jsonPath("$.mensaje").isEqualTo("Operacion realizada correctamente");
     }
 
     @Test
-    void retiroSinCabecerasEspecialesDevuelveOperacionRealizada() throws Exception {
+    void retiroSinCabecerasEspecialesDevuelveOperacionRealizada() {
         when(operacionService.retirar(any(OperacionRequestDTO.class)))
-                .thenReturn(response("RETIRO"));
+                .thenReturn(Mono.just(response("RETIRO")));
 
-        mockMvc.perform(post("/api/operaciones/retiro")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(
-                                new OperacionRequestDTO(10L, new BigDecimal("50.00"))
-                        )))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.tipoOperacion").value("RETIRO"));
+        webTestClient.post()
+                .uri("/api/operaciones/retiro")
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(new OperacionRequestDTO(10L, new BigDecimal("50.00")))
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody()
+                .jsonPath("$.tipoOperacion").isEqualTo("RETIRO");
     }
 
     @Test
-    void transferenciaUsaRutaEsperada() throws Exception {
+    void transferenciaUsaRutaEsperada() {
         when(operacionService.transferir(any(TransferenciaRequestDTO.class)))
-                .thenReturn(response("TRANSFERENCIA"));
+                .thenReturn(Mono.just(response("TRANSFERENCIA")));
 
-        mockMvc.perform(post("/api/operaciones/transferencia")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(
-                                new TransferenciaRequestDTO(10L, 11L, new BigDecimal("50.00"))
-                        )))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.tipoOperacion").value("TRANSFERENCIA"));
+        webTestClient.post()
+                .uri("/api/operaciones/transferencia")
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(new TransferenciaRequestDTO(10L, 11L, new BigDecimal("50.00")))
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody()
+                .jsonPath("$.tipoOperacion").isEqualTo("TRANSFERENCIA");
     }
 
     @Test
-    void listarMovimientosUsaRutaDeOperacionService() throws Exception {
+    void transferenciaEnDivisaUsaRutaEsperada() {
+        when(operacionService.transferirEnDivisa(any(TransferenciaDivisaRequestDTO.class)))
+                .thenReturn(Mono.just(response("TRANSFERENCIA")));
+
+        webTestClient.post()
+                .uri("/api/operaciones/transferencias/divisa")
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(new TransferenciaDivisaRequestDTO(
+                        10L,
+                        11L,
+                        new BigDecimal("100.00"),
+                        "USD",
+                        "EUR"
+                ))
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody()
+                .jsonPath("$.tipoOperacion").isEqualTo("TRANSFERENCIA");
+    }
+
+    @Test
+    void transferenciaEnDivisaSinTipoCambioDevuelve503() {
+        when(operacionService.transferirEnDivisa(any(TransferenciaDivisaRequestDTO.class)))
+                .thenReturn(Mono.error(new ExchangeRateUnavailableException("No hay tasa fiable")));
+
+        webTestClient.post()
+                .uri("/api/operaciones/transferencias/divisa")
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(new TransferenciaDivisaRequestDTO(
+                        10L,
+                        11L,
+                        new BigDecimal("100.00"),
+                        "USD",
+                        "EUR"
+                ))
+                .exchange()
+                .expectStatus().isEqualTo(503)
+                .expectBody()
+                .jsonPath("$.code").isEqualTo("EXCHANGE_RATE_UNAVAILABLE");
+    }
+
+    @Test
+    void listarMovimientosUsaRutaDeOperacionService() {
         when(operacionService.listarMovimientos(10L, null, null))
-                .thenReturn(List.of(movimiento("DEPOSITO")));
+                .thenReturn(Flux.just(movimiento("DEPOSITO")));
 
-        mockMvc.perform(get("/api/operaciones/cuentas/10/movimientos"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].tipo").value("DEPOSITO"));
+        webTestClient.get()
+                .uri("/api/operaciones/cuentas/10/movimientos")
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody()
+                .jsonPath("$[0].tipo").isEqualTo("DEPOSITO");
     }
 
     @Test
-    void cuentaServiceNoDisponibleDevuelve503Controlado() throws Exception {
+    void cuentaServiceNoDisponibleDevuelve503Controlado() {
         when(operacionService.depositar(any(OperacionRequestDTO.class)))
-                .thenThrow(new RemoteServiceException("cuenta-service no esta disponible"));
+                .thenReturn(Mono.error(new RemoteServiceException("cuenta-service no esta disponible")));
 
-        mockMvc.perform(post("/api/operaciones/deposito")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(
-                                new OperacionRequestDTO(10L, new BigDecimal("50.00"))
-                        )))
-                .andExpect(status().isServiceUnavailable())
-                .andExpect(jsonPath("$.code").value("CUENTA_SERVICE_UNAVAILABLE"))
-                .andExpect(jsonPath("$.service").value("operacion-service"));
+        webTestClient.post()
+                .uri("/api/operaciones/deposito")
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(new OperacionRequestDTO(10L, new BigDecimal("50.00")))
+                .exchange()
+                .expectStatus().isEqualTo(503)
+                .expectBody()
+                .jsonPath("$.code").isEqualTo("CUENTA_SERVICE_UNAVAILABLE")
+                .jsonPath("$.service").isEqualTo("operacion-service");
     }
 
     @Test
-    void depositoConBodyVacioDevuelve400() throws Exception {
-        mockMvc.perform(post("/api/operaciones/deposito")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{}"))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"))
-                .andExpect(jsonPath("$.fieldErrors.cuentaId").exists())
-                .andExpect(jsonPath("$.fieldErrors.cantidad").exists());
+    void depositoConBodyVacioDevuelve400() {
+        webTestClient.post()
+                .uri("/api/operaciones/deposito")
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue("{}")
+                .exchange()
+                .expectStatus().isBadRequest()
+                .expectBody()
+                .jsonPath("$.code").isEqualTo("VALIDATION_ERROR")
+                .jsonPath("$.fieldErrors.cuentaId").exists()
+                .jsonPath("$.fieldErrors.cantidad").exists();
     }
 
     @Test
-    void depositoConJsonMalformadoDevuelve400() throws Exception {
-        mockMvc.perform(post("/api/operaciones/deposito")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{"))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("BAD_REQUEST"));
+    void depositoConJsonMalformadoDevuelve400() {
+        webTestClient.post()
+                .uri("/api/operaciones/deposito")
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue("{")
+                .exchange()
+                .expectStatus().isBadRequest()
+                .expectBody()
+                .jsonPath("$.code").isEqualTo("BAD_REQUEST");
     }
 
     @Test
-    void depositoConCuentaIdNegativoDevuelve400() throws Exception {
-        mockMvc.perform(post("/api/operaciones/deposito")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(
-                                new OperacionRequestDTO(-1L, new BigDecimal("10.00"))
-                        )))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
+    void depositoConCuentaIdNegativoDevuelve400() {
+        webTestClient.post()
+                .uri("/api/operaciones/deposito")
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(new OperacionRequestDTO(-1L, new BigDecimal("10.00")))
+                .exchange()
+                .expectStatus().isBadRequest()
+                .expectBody()
+                .jsonPath("$.code").isEqualTo("VALIDATION_ERROR");
     }
 
     @Test
-    void depositoConCantidadCeroDevuelve400() throws Exception {
-        mockMvc.perform(post("/api/operaciones/deposito")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(
-                                new OperacionRequestDTO(10L, BigDecimal.ZERO)
-                        )))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
+    void depositoConCantidadCeroDevuelve400() {
+        webTestClient.post()
+                .uri("/api/operaciones/deposito")
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(new OperacionRequestDTO(10L, BigDecimal.ZERO))
+                .exchange()
+                .expectStatus().isBadRequest()
+                .expectBody()
+                .jsonPath("$.code").isEqualTo("VALIDATION_ERROR");
     }
 
     @Test
-    void retiroConCantidadNegativaDevuelve400() throws Exception {
-        mockMvc.perform(post("/api/operaciones/retiro")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(
-                                new OperacionRequestDTO(10L, new BigDecimal("-1.00"))
-                        )))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
+    void retiroConCantidadNegativaDevuelve400() {
+        webTestClient.post()
+                .uri("/api/operaciones/retiro")
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(new OperacionRequestDTO(10L, new BigDecimal("-1.00")))
+                .exchange()
+                .expectStatus().isBadRequest()
+                .expectBody()
+                .jsonPath("$.code").isEqualTo("VALIDATION_ERROR");
     }
 
     @Test
-    void transferenciaConCuentaOrigenNulaDevuelve400() throws Exception {
-        mockMvc.perform(post("/api/operaciones/transferencia")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(
-                                new TransferenciaRequestDTO(null, 11L, new BigDecimal("10.00"))
-                        )))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"))
-                .andExpect(jsonPath("$.fieldErrors.cuentaOrigenId").exists());
+    void transferenciaConCuentaOrigenNulaDevuelve400() {
+        webTestClient.post()
+                .uri("/api/operaciones/transferencia")
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(new TransferenciaRequestDTO(null, 11L, new BigDecimal("10.00")))
+                .exchange()
+                .expectStatus().isBadRequest()
+                .expectBody()
+                .jsonPath("$.code").isEqualTo("VALIDATION_ERROR")
+                .jsonPath("$.fieldErrors.cuentaOrigenId").exists();
     }
 
     @Test
-    void transferenciaConCantidadCeroDevuelve400() throws Exception {
-        mockMvc.perform(post("/api/operaciones/transferencia")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(
-                                new TransferenciaRequestDTO(10L, 11L, BigDecimal.ZERO)
-                        )))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
+    void transferenciaConCantidadCeroDevuelve400() {
+        webTestClient.post()
+                .uri("/api/operaciones/transferencia")
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(new TransferenciaRequestDTO(10L, 11L, BigDecimal.ZERO))
+                .exchange()
+                .expectStatus().isBadRequest()
+                .expectBody()
+                .jsonPath("$.code").isEqualTo("VALIDATION_ERROR");
     }
 
     @Test
-    void listarMovimientosSinResultadosDevuelveListaVacia() throws Exception {
-        when(operacionService.listarMovimientos(10L, null, null)).thenReturn(List.of());
+    void listarMovimientosSinResultadosDevuelveListaVacia() {
+        when(operacionService.listarMovimientos(10L, null, null)).thenReturn(Flux.empty());
 
-        mockMvc.perform(get("/api/operaciones/cuentas/10/movimientos"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$").isArray())
-                .andExpect(jsonPath("$").isEmpty());
+        webTestClient.get()
+                .uri("/api/operaciones/cuentas/10/movimientos")
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody()
+                .jsonPath("$").isArray()
+                .jsonPath("$").isEmpty();
     }
 
     @Test
-    void listarMovimientosConCuentaIdInvalidoDevuelve400() throws Exception {
+    void listarMovimientosConCuentaIdInvalidoDevuelve400() {
         when(operacionService.listarMovimientos(0L, null, null))
-                .thenThrow(new ValidationException("El id de cuenta debe ser positivo"));
+                .thenReturn(Flux.error(new ValidationException("El id de cuenta debe ser positivo")));
 
-        mockMvc.perform(get("/api/operaciones/cuentas/0/movimientos"))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("BAD_REQUEST"));
+        webTestClient.get()
+                .uri("/api/operaciones/cuentas/0/movimientos")
+                .exchange()
+                .expectStatus().isBadRequest()
+                .expectBody()
+                .jsonPath("$.code").isEqualTo("BAD_REQUEST");
     }
 
     @Test
-    void listarMovimientosConRangoInvalidoDevuelve400() throws Exception {
+    void listarMovimientosConRangoInvalidoDevuelve400() {
         LocalDate inicio = LocalDate.of(2026, 1, 10);
         LocalDate fin = LocalDate.of(2026, 1, 1);
         when(operacionService.listarMovimientos(10L, inicio, fin))
-                .thenThrow(new IllegalArgumentException("La fecha de inicio no puede ser posterior a la fecha de fin"));
+                .thenReturn(Flux.error(new IllegalArgumentException("La fecha de inicio no puede ser posterior a la fecha de fin")));
 
-        mockMvc.perform(get("/api/operaciones/cuentas/10/movimientos")
-                        .param("fechaInicio", "2026-01-10")
-                        .param("fechaFin", "2026-01-01"))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("BAD_REQUEST"));
+        webTestClient.get()
+                .uri(uriBuilder -> uriBuilder.path("/api/operaciones/cuentas/10/movimientos")
+                        .queryParam("fechaInicio", "2026-01-10")
+                        .queryParam("fechaFin", "2026-01-01")
+                        .build())
+                .exchange()
+                .expectStatus().isBadRequest()
+                .expectBody()
+                .jsonPath("$.code").isEqualTo("BAD_REQUEST");
     }
 
     @Test
-    void depositoConCuentaNoEncontradaDevuelve404() throws Exception {
+    void depositoConCuentaNoEncontradaDevuelve404() {
         when(operacionService.depositar(any(OperacionRequestDTO.class)))
-                .thenThrow(new RemoteResourceNotFoundException("Cuenta no encontrada"));
+                .thenReturn(Mono.error(new RemoteResourceNotFoundException("Cuenta no encontrada")));
 
-        mockMvc.perform(post("/api/operaciones/deposito")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(
-                                new OperacionRequestDTO(99L, new BigDecimal("10.00"))
-                )))
-                .andExpect(status().isNotFound())
-                .andExpect(jsonPath("$.code").value("RESOURCE_NOT_FOUND"));
+        webTestClient.post()
+                .uri("/api/operaciones/deposito")
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(new OperacionRequestDTO(99L, new BigDecimal("10.00")))
+                .exchange()
+                .expectStatus().isNotFound()
+                .expectBody()
+                .jsonPath("$.code").isEqualTo("RESOURCE_NOT_FOUND");
     }
 
     @Test
-    void retiroConSaldoInsuficienteRemotoDevuelve422() throws Exception {
+    void retiroConSaldoInsuficienteRemotoDevuelve422() {
         when(operacionService.retirar(any(OperacionRequestDTO.class)))
-                .thenThrow(new RemoteValidationException("Saldo insuficiente"));
+                .thenReturn(Mono.error(new RemoteValidationException("Saldo insuficiente")));
 
-        mockMvc.perform(post("/api/operaciones/retiro")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(
-                                new OperacionRequestDTO(10L, new BigDecimal("100.00"))
-                        )))
-                .andExpect(status().isUnprocessableEntity())
-                .andExpect(jsonPath("$.code").value("REMOTE_VALIDATION_ERROR"));
+        webTestClient.post()
+                .uri("/api/operaciones/retiro")
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(new OperacionRequestDTO(10L, new BigDecimal("100.00")))
+                .exchange()
+                .expectStatus().isEqualTo(422)
+                .expectBody()
+                .jsonPath("$.code").isEqualTo("REMOTE_VALIDATION_ERROR");
     }
 
     private OperacionResponseDTO response(String tipoOperacion) {
@@ -262,12 +330,12 @@ class OperacionControllerTest {
 
     private MovimientoResponseDTO movimiento(String tipoOperacion) {
         return new MovimientoResponseDTO(
-                        1L,
-                        10L,
-                        "ES91210000000000000001",
-                        tipoOperacion,
-                        new BigDecimal("50.00"),
-                        LocalDateTime.now()
+                1L,
+                10L,
+                "ES91210000000000000001",
+                tipoOperacion,
+                new BigDecimal("50.00"),
+                LocalDateTime.now()
         );
     }
 }

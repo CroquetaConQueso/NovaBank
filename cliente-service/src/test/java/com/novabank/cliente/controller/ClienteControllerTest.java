@@ -1,74 +1,73 @@
 package com.novabank.cliente.controller;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.novabank.cliente.dto.ClienteRequestDTO;
 import com.novabank.cliente.dto.ClienteResponseDTO;
 import com.novabank.cliente.exception.DuplicateResourceException;
 import com.novabank.cliente.exception.GlobalExceptionHandler;
 import com.novabank.cliente.exception.ResourceNotFoundException;
 import com.novabank.cliente.service.ClienteService;
+import com.novabank.cliente.tracing.CorrelationIdSupport;
+import com.novabank.cliente.tracing.CorrelationIdWebFilter;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
+import org.springframework.boot.test.autoconfigure.web.reactive.WebFluxTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
-import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.reactive.server.WebTestClient;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 
 import java.time.LocalDateTime;
-import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@WebMvcTest(ClienteController.class)
-@Import(GlobalExceptionHandler.class)
+@WebFluxTest(ClienteController.class)
+@Import({GlobalExceptionHandler.class, CorrelationIdWebFilter.class})
 @ActiveProfiles("test")
 class ClienteControllerTest {
 
     @Autowired
-    private MockMvc mockMvc;
-
-    @Autowired
-    private ObjectMapper objectMapper;
+    private WebTestClient webTestClient;
 
     @MockBean
     private ClienteService clienteService;
 
     @Test
-    void crearClienteDevuelveCreatedYBody() throws Exception {
-        ClienteResponseDTO response = response();
-        when(clienteService.crearCliente(any(ClienteRequestDTO.class))).thenReturn(response);
+    void crearClienteDevuelveCreatedYBody() {
+        when(clienteService.crearCliente(any(ClienteRequestDTO.class))).thenReturn(Mono.just(response()));
 
-        mockMvc.perform(post("/api/clientes")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(requestValido())))
-                .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.id").value(1))
-                .andExpect(jsonPath("$.dni").value("12345678Z"));
+        webTestClient.post()
+                .uri("/api/clientes")
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(requestValido())
+                .exchange()
+                .expectStatus().isCreated()
+                .expectBody()
+                .jsonPath("$.id").isEqualTo(1)
+                .jsonPath("$.dni").isEqualTo("12345678Z");
     }
 
     @Test
-    void actualizarClienteDevuelveOkYBody() throws Exception {
-        ClienteResponseDTO response = response();
-        when(clienteService.actualizarCliente(any(Long.class), any(ClienteRequestDTO.class))).thenReturn(response);
+    void actualizarClienteDevuelveOkYBody() {
+        when(clienteService.actualizarCliente(any(Long.class), any(ClienteRequestDTO.class)))
+                .thenReturn(Mono.just(response()));
 
-        mockMvc.perform(put("/api/clientes/1")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(requestValido())))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.id").value(1))
-                .andExpect(jsonPath("$.email").value("ana@example.com"));
+        webTestClient.put()
+                .uri("/api/clientes/1")
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(requestValido())
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody()
+                .jsonPath("$.id").isEqualTo(1)
+                .jsonPath("$.email").isEqualTo("ana@example.com");
     }
 
     @Test
-    void crearClienteConRequestInvalidoDevuelveFieldErrors() throws Exception {
+    void crearClienteConRequestInvalidoDevuelveFieldErrors() {
         ClienteRequestDTO request = new ClienteRequestDTO(
                 "",
                 "Garcia",
@@ -77,127 +76,163 @@ class ClienteControllerTest {
                 "123"
         );
 
-        mockMvc.perform(post("/api/clientes")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"))
-                .andExpect(jsonPath("$.service").value("cliente-service"))
-                .andExpect(jsonPath("$.fieldErrors.nombre").exists())
-                .andExpect(jsonPath("$.fieldErrors.dni").exists())
-                .andExpect(jsonPath("$.fieldErrors.email").exists())
-                .andExpect(jsonPath("$.fieldErrors.telefono").exists());
+        webTestClient.post()
+                .uri("/api/clientes")
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(request)
+                .exchange()
+                .expectStatus().isBadRequest()
+                .expectBody()
+                .jsonPath("$.code").isEqualTo("VALIDATION_ERROR")
+                .jsonPath("$.service").isEqualTo("cliente-service")
+                .jsonPath("$.fieldErrors.nombre").exists()
+                .jsonPath("$.fieldErrors.dni").exists()
+                .jsonPath("$.fieldErrors.email").exists()
+                .jsonPath("$.fieldErrors.telefono").exists();
     }
 
     @Test
-    void crearClienteConBodyVacioDevuelve400() throws Exception {
-        mockMvc.perform(post("/api/clientes")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{}"))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"))
-                .andExpect(jsonPath("$.fieldErrors.nombre").exists())
-                .andExpect(jsonPath("$.fieldErrors.apellidos").exists())
-                .andExpect(jsonPath("$.fieldErrors.dni").exists())
-                .andExpect(jsonPath("$.fieldErrors.email").exists())
-                .andExpect(jsonPath("$.fieldErrors.telefono").exists());
+    void crearClienteConBodyVacioDevuelve400() {
+        webTestClient.post()
+                .uri("/api/clientes")
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue("{}")
+                .exchange()
+                .expectStatus().isBadRequest()
+                .expectBody()
+                .jsonPath("$.code").isEqualTo("VALIDATION_ERROR")
+                .jsonPath("$.fieldErrors.nombre").exists()
+                .jsonPath("$.fieldErrors.apellidos").exists()
+                .jsonPath("$.fieldErrors.dni").exists()
+                .jsonPath("$.fieldErrors.email").exists()
+                .jsonPath("$.fieldErrors.telefono").exists();
     }
 
     @Test
-    void crearClienteConJsonMalformadoDevuelve400() throws Exception {
-        mockMvc.perform(post("/api/clientes")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{"))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("BAD_REQUEST"))
-                .andExpect(jsonPath("$.service").value("cliente-service"));
+    void crearClienteConJsonMalformadoDevuelve400() {
+        webTestClient.post()
+                .uri("/api/clientes")
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue("{")
+                .exchange()
+                .expectStatus().isBadRequest()
+                .expectBody()
+                .jsonPath("$.code").isEqualTo("BAD_REQUEST")
+                .jsonPath("$.service").isEqualTo("cliente-service");
     }
 
     @Test
-    void errorDevuelveJsonSimple() throws Exception {
+    void errorDevuelveJsonSimple() {
         when(clienteService.obtenerCliente(99L))
-                .thenThrow(new ResourceNotFoundException("No existe ningun cliente con id 99"));
+                .thenReturn(Mono.error(new ResourceNotFoundException("No existe ningun cliente con id 99")));
 
-        mockMvc.perform(get("/api/clientes/99"))
-                .andExpect(status().isNotFound())
-                .andExpect(jsonPath("$.code").value("RESOURCE_NOT_FOUND"))
-                .andExpect(jsonPath("$.service").value("cliente-service"));
+        webTestClient.get()
+                .uri("/api/clientes/99")
+                .header(CorrelationIdSupport.HEADER_NAME, "cid-cliente-test")
+                .exchange()
+                .expectStatus().isNotFound()
+                .expectHeader().valueEquals(CorrelationIdSupport.HEADER_NAME, "cid-cliente-test")
+                .expectBody()
+                .jsonPath("$.code").isEqualTo("RESOURCE_NOT_FOUND")
+                .jsonPath("$.service").isEqualTo("cliente-service")
+                .jsonPath("$.correlationId").isEqualTo("cid-cliente-test");
     }
 
     @Test
-    void crearClienteDuplicadoDevuelve409() throws Exception {
+    void crearClienteDuplicadoDevuelve409() {
         when(clienteService.crearCliente(any(ClienteRequestDTO.class)))
-                .thenThrow(new DuplicateResourceException("Ya existe un cliente con el DNI 12345678Z"));
+                .thenReturn(Mono.error(new DuplicateResourceException("Ya existe un cliente con el DNI 12345678Z")));
 
-        mockMvc.perform(post("/api/clientes")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(requestValido())))
-                .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.code").value("CONFLICT"));
+        webTestClient.post()
+                .uri("/api/clientes")
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(requestValido())
+                .exchange()
+                .expectStatus().isEqualTo(409)
+                .expectBody()
+                .jsonPath("$.code").isEqualTo("CONFLICT");
     }
 
     @Test
-    void listarClientesDevuelveArray() throws Exception {
-        when(clienteService.listarClientes()).thenReturn(List.of(response()));
+    void listarClientesDevuelveArray() {
+        when(clienteService.listarClientes()).thenReturn(Flux.just(response()));
 
-        mockMvc.perform(get("/api/clientes"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].id").value(1))
-                .andExpect(jsonPath("$[0].email").value("ana@example.com"));
+        webTestClient.get()
+                .uri("/api/clientes")
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody()
+                .jsonPath("$[0].id").isEqualTo(1)
+                .jsonPath("$[0].email").isEqualTo("ana@example.com");
     }
 
     @Test
-    void obtenerClientePorDniDevuelveCliente() throws Exception {
-        when(clienteService.obtenerClientePorDni("12345678Z")).thenReturn(response());
+    void obtenerClientePorDniDevuelveCliente() {
+        when(clienteService.obtenerClientePorDni("12345678Z")).thenReturn(Mono.just(response()));
 
-        mockMvc.perform(get("/api/clientes/dni/12345678Z"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.id").value(1))
-                .andExpect(jsonPath("$.dni").value("12345678Z"));
+        webTestClient.get()
+                .uri("/api/clientes/dni/12345678Z")
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody()
+                .jsonPath("$.id").isEqualTo(1)
+                .jsonPath("$.dni").isEqualTo("12345678Z");
     }
 
     @Test
-    void obtenerClientePorDniInexistenteDevuelve404() throws Exception {
+    void obtenerClientePorDniInexistenteDevuelve404() {
         when(clienteService.obtenerClientePorDni("99999999R"))
-                .thenThrow(new ResourceNotFoundException("No existe ningun cliente con DNI 99999999R"));
+                .thenReturn(Mono.error(new ResourceNotFoundException("No existe ningun cliente con DNI 99999999R")));
 
-        mockMvc.perform(get("/api/clientes/dni/99999999R"))
-                .andExpect(status().isNotFound())
-                .andExpect(jsonPath("$.code").value("RESOURCE_NOT_FOUND"));
+        webTestClient.get()
+                .uri("/api/clientes/dni/99999999R")
+                .exchange()
+                .expectStatus().isNotFound()
+                .expectBody()
+                .jsonPath("$.code").isEqualTo("RESOURCE_NOT_FOUND");
     }
 
     @Test
-    void actualizarClienteInexistenteDevuelve404() throws Exception {
+    void actualizarClienteInexistenteDevuelve404() {
         when(clienteService.actualizarCliente(any(Long.class), any(ClienteRequestDTO.class)))
-                .thenThrow(new ResourceNotFoundException("No existe ningun cliente con id 99"));
+                .thenReturn(Mono.error(new ResourceNotFoundException("No existe ningun cliente con id 99")));
 
-        mockMvc.perform(put("/api/clientes/99")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(requestValido())))
-                .andExpect(status().isNotFound())
-                .andExpect(jsonPath("$.code").value("RESOURCE_NOT_FOUND"));
+        webTestClient.put()
+                .uri("/api/clientes/99")
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(requestValido())
+                .exchange()
+                .expectStatus().isNotFound()
+                .expectBody()
+                .jsonPath("$.code").isEqualTo("RESOURCE_NOT_FOUND");
     }
 
     @Test
-    void actualizarClienteConEmailDuplicadoDevuelve409() throws Exception {
+    void actualizarClienteConEmailDuplicadoDevuelve409() {
         when(clienteService.actualizarCliente(any(Long.class), any(ClienteRequestDTO.class)))
-                .thenThrow(new DuplicateResourceException("Ya existe un cliente con el email ana@example.com"));
+                .thenReturn(Mono.error(new DuplicateResourceException("Ya existe un cliente con el email ana@example.com")));
 
-        mockMvc.perform(put("/api/clientes/1")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(requestValido())))
-                .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.code").value("CONFLICT"));
+        webTestClient.put()
+                .uri("/api/clientes/1")
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(requestValido())
+                .exchange()
+                .expectStatus().isEqualTo(409)
+                .expectBody()
+                .jsonPath("$.code").isEqualTo("CONFLICT");
     }
 
     @Test
-    void obtenerClienteConIdCeroDevuelve400() throws Exception {
+    void obtenerClienteConIdCeroDevuelve400() {
         when(clienteService.obtenerCliente(0L))
-                .thenThrow(new IllegalArgumentException("El id del cliente debe ser positivo"));
+                .thenReturn(Mono.error(new IllegalArgumentException("El id del cliente debe ser positivo")));
 
-        mockMvc.perform(get("/api/clientes/0"))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("BAD_REQUEST"));
+        webTestClient.get()
+                .uri("/api/clientes/0")
+                .exchange()
+                .expectStatus().isBadRequest()
+                .expectBody()
+                .jsonPath("$.code").isEqualTo("BAD_REQUEST");
     }
 
     private ClienteRequestDTO requestValido() {

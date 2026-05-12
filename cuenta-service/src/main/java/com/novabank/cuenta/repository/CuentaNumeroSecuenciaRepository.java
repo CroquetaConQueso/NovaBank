@@ -1,21 +1,22 @@
 package com.novabank.cuenta.repository;
 
 import com.novabank.cuenta.model.CuentaNumeroSecuencia;
-import jakarta.persistence.LockModeType;
-import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.data.jpa.repository.Lock;
-import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.r2dbc.repository.Query;
 import org.springframework.data.repository.query.Param;
+import org.springframework.data.repository.reactive.ReactiveCrudRepository;
+import reactor.core.publisher.Mono;
 
-import java.util.Optional;
-
-public interface CuentaNumeroSecuenciaRepository extends JpaRepository<CuentaNumeroSecuencia, Long> {
+public interface CuentaNumeroSecuenciaRepository extends ReactiveCrudRepository<CuentaNumeroSecuencia, Long> {
 
     /**
-     * La escritura pesimista serializa la lectura del contador y protege la
-     * generacion del numero de cuenta ante altas concurrentes.
+     * El bloqueo pesimista queda expresado como SQL nativo hasta que se revise
+     * la estrategia completa de concurrencia en la fase reactiva.
      */
-    @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @Query("select s from CuentaNumeroSecuencia s where s.id = :id")
-    Optional<CuentaNumeroSecuencia> findByIdForUpdate(@Param("id") Long id);
+    @Query("""
+           SELECT id, next_value
+           FROM account_number_sequence
+           WHERE id = :id
+           FOR UPDATE
+           """)
+    Mono<CuentaNumeroSecuencia> findByIdForUpdate(@Param("id") Long id);
 }

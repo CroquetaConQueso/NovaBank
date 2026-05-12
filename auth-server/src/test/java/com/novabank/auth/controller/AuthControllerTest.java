@@ -9,35 +9,32 @@ import com.novabank.auth.dto.ValidateTokenResponseDTO;
 import com.novabank.auth.exception.DuplicateUserException;
 import com.novabank.auth.exception.GlobalExceptionHandler;
 import com.novabank.auth.exception.InvalidCredentialsException;
+import com.novabank.auth.config.SecurityConfig;
 import com.novabank.auth.service.AuthService;
+import com.novabank.auth.tracing.CorrelationIdWebFilter;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
-import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
+import org.springframework.boot.test.autoconfigure.web.reactive.WebFluxTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
-import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.reactive.server.WebTestClient;
+import reactor.core.publisher.Mono;
 
 import java.time.LocalDateTime;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@WebMvcTest(AuthController.class)
-@Import(GlobalExceptionHandler.class)
-@AutoConfigureMockMvc(addFilters = false)
+@WebFluxTest(AuthController.class)
+@Import({GlobalExceptionHandler.class, SecurityConfig.class, CorrelationIdWebFilter.class})
 @ActiveProfiles("test")
 class AuthControllerTest {
 
     @Autowired
-    private MockMvc mockMvc;
+    private WebTestClient webTestClient;
 
     @Autowired
     private ObjectMapper objectMapper;
@@ -48,130 +45,167 @@ class AuthControllerTest {
     @Test
     void registerDevuelveCreated() throws Exception {
         when(authService.registrar(any(RegisterRequestDTO.class)))
-                .thenReturn(new RegisterResponseDTO(1L, "ana", "USER", true, LocalDateTime.now()));
+                .thenReturn(Mono.just(new RegisterResponseDTO(1L, "ana", "USER", true, LocalDateTime.now())));
 
-        mockMvc.perform(post("/api/auth/register")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(new RegisterRequestDTO("ana", "password123"))))
-                .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.username").value("ana"));
+        webTestClient.post()
+                .uri("/api/auth/register")
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(objectMapper.writeValueAsString(new RegisterRequestDTO("ana", "password123")))
+                .exchange()
+                .expectStatus().isCreated()
+                .expectBody()
+                .jsonPath("$.username").isEqualTo("ana");
     }
 
     @Test
     void registerDuplicadoDevuelve409() throws Exception {
         when(authService.registrar(any(RegisterRequestDTO.class)))
-                .thenThrow(new DuplicateUserException("Ya existe un usuario con ese username"));
+                .thenReturn(Mono.error(new DuplicateUserException("Ya existe un usuario con ese username")));
 
-        mockMvc.perform(post("/api/auth/register")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(new RegisterRequestDTO("ana", "password123"))))
-                .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.code").value("CONFLICT"))
-                .andExpect(jsonPath("$.service").value("auth-server"));
+        webTestClient.post()
+                .uri("/api/auth/register")
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(objectMapper.writeValueAsString(new RegisterRequestDTO("ana", "password123")))
+                .exchange()
+                .expectStatus().isEqualTo(409)
+                .expectBody()
+                .jsonPath("$.code").isEqualTo("CONFLICT")
+                .jsonPath("$.service").isEqualTo("auth-server");
     }
 
     @Test
     void loginCorrectoDevuelveTokenBearer() throws Exception {
         when(authService.login(any(LoginRequestDTO.class)))
-                .thenReturn(new LoginResponseDTO("jwt-token", "Bearer", 86400000L));
+                .thenReturn(Mono.just(new LoginResponseDTO("jwt-token", "Bearer", 86400000L)));
 
-        mockMvc.perform(post("/api/auth/login")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(new LoginRequestDTO("ana", "password123"))))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.token").value("jwt-token"))
-                .andExpect(jsonPath("$.tipo").value("Bearer"));
+        webTestClient.post()
+                .uri("/api/auth/login")
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(objectMapper.writeValueAsString(new LoginRequestDTO("ana", "password123")))
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody()
+                .jsonPath("$.token").isEqualTo("jwt-token")
+                .jsonPath("$.tipo").isEqualTo("Bearer");
     }
 
     @Test
     void loginIncorrectoDevuelve401() throws Exception {
         when(authService.login(any(LoginRequestDTO.class)))
-                .thenThrow(new InvalidCredentialsException("Credenciales invalidas"));
+                .thenReturn(Mono.error(new InvalidCredentialsException("Credenciales invalidas")));
 
-        mockMvc.perform(post("/api/auth/login")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(new LoginRequestDTO("ana", "bad-password"))))
-                .andExpect(status().isUnauthorized())
-                .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
+        webTestClient.post()
+                .uri("/api/auth/login")
+                .contentType(MediaType.APPLICATION_JSON)
+                .header("X-Correlation-Id", "cid-auth-test")
+                .bodyValue(objectMapper.writeValueAsString(new LoginRequestDTO("ana", "bad-password")))
+                .exchange()
+                .expectStatus().isUnauthorized()
+                .expectHeader().valueEquals("X-Correlation-Id", "cid-auth-test")
+                .expectBody()
+                .jsonPath("$.code").isEqualTo("UNAUTHORIZED")
+                .jsonPath("$.correlationId").isEqualTo("cid-auth-test");
     }
 
     @Test
     void validateDevuelveResultado() throws Exception {
         when(authService.validarToken(eq("jwt-token")))
-                .thenReturn(new ValidateTokenResponseDTO(true, "ana"));
+                .thenReturn(Mono.just(new ValidateTokenResponseDTO(true, "ana")));
 
-        mockMvc.perform(get("/api/auth/validate").param("token", "jwt-token"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.valido").value(true))
-                .andExpect(jsonPath("$.username").value("ana"));
+        webTestClient.get()
+                .uri(uriBuilder -> uriBuilder.path("/api/auth/validate").queryParam("token", "jwt-token").build())
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody()
+                .jsonPath("$.valido").isEqualTo(true)
+                .jsonPath("$.username").isEqualTo("ana");
     }
 
     @Test
     void loginRequestInvalidoDevuelveFieldErrors() throws Exception {
-        mockMvc.perform(post("/api/auth/login")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(new LoginRequestDTO("", ""))))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"))
-                .andExpect(jsonPath("$.fieldErrors.username").exists())
-                .andExpect(jsonPath("$.fieldErrors.password").exists());
+        webTestClient.post()
+                .uri("/api/auth/login")
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(objectMapper.writeValueAsString(new LoginRequestDTO("", "")))
+                .exchange()
+                .expectStatus().isBadRequest()
+                .expectBody()
+                .jsonPath("$.code").isEqualTo("VALIDATION_ERROR")
+                .jsonPath("$.fieldErrors.username").exists()
+                .jsonPath("$.fieldErrors.password").exists();
     }
 
     @Test
     void registerRequestInvalidoDevuelveFieldErrors() throws Exception {
-        mockMvc.perform(post("/api/auth/register")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(new RegisterRequestDTO("", ""))))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"))
-                .andExpect(jsonPath("$.fieldErrors.username").exists())
-                .andExpect(jsonPath("$.fieldErrors.password").exists());
+        webTestClient.post()
+                .uri("/api/auth/register")
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(objectMapper.writeValueAsString(new RegisterRequestDTO("", "")))
+                .exchange()
+                .expectStatus().isBadRequest()
+                .expectBody()
+                .jsonPath("$.code").isEqualTo("VALIDATION_ERROR")
+                .jsonPath("$.fieldErrors.username").exists()
+                .jsonPath("$.fieldErrors.password").exists();
     }
 
     @Test
     void registerConJsonMalformadoDevuelve400() throws Exception {
-        mockMvc.perform(post("/api/auth/register")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{"))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("BAD_REQUEST"));
+        webTestClient.post()
+                .uri("/api/auth/register")
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue("{")
+                .exchange()
+                .expectStatus().isBadRequest()
+                .expectBody()
+                .jsonPath("$.code").isEqualTo("BAD_REQUEST");
     }
 
     @Test
     void loginConJsonMalformadoDevuelve400() throws Exception {
-        mockMvc.perform(post("/api/auth/login")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{"))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("BAD_REQUEST"));
+        webTestClient.post()
+                .uri("/api/auth/login")
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue("{")
+                .exchange()
+                .expectStatus().isBadRequest()
+                .expectBody()
+                .jsonPath("$.code").isEqualTo("BAD_REQUEST");
     }
 
     @Test
     void loginUsuarioInexistenteDevuelve401() throws Exception {
         when(authService.login(any(LoginRequestDTO.class)))
-                .thenThrow(new InvalidCredentialsException("Credenciales invalidas"));
+                .thenReturn(Mono.error(new InvalidCredentialsException("Credenciales invalidas")));
 
-        mockMvc.perform(post("/api/auth/login")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(new LoginRequestDTO("nadie", "password123"))))
-                .andExpect(status().isUnauthorized())
-                .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
+        webTestClient.post()
+                .uri("/api/auth/login")
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(objectMapper.writeValueAsString(new LoginRequestDTO("nadie", "password123")))
+                .exchange()
+                .expectStatus().isUnauthorized()
+                .expectBody()
+                .jsonPath("$.code").isEqualTo("UNAUTHORIZED");
     }
 
     @Test
     void validateSinTokenDevuelve400() throws Exception {
-        mockMvc.perform(get("/api/auth/validate"))
-                .andExpect(status().isBadRequest());
+        webTestClient.get()
+                .uri("/api/auth/validate")
+                .exchange()
+                .expectStatus().isBadRequest();
     }
 
     @Test
     void validateTokenMalformadoDevuelveValidoFalse() throws Exception {
         when(authService.validarToken(eq("token-malformado")))
-                .thenReturn(new ValidateTokenResponseDTO(false, null));
+                .thenReturn(Mono.just(new ValidateTokenResponseDTO(false, null)));
 
-        mockMvc.perform(get("/api/auth/validate").param("token", "token-malformado"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.valido").value(false))
-                .andExpect(jsonPath("$.username").doesNotExist());
+        webTestClient.get()
+                .uri(uriBuilder -> uriBuilder.path("/api/auth/validate").queryParam("token", "token-malformado").build())
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody()
+                .jsonPath("$.valido").isEqualTo(false);
     }
 }

@@ -1,13 +1,12 @@
 package com.novabank.auth.repository;
 
 import com.novabank.auth.model.Usuario;
-import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.repository.reactive.ReactiveCrudRepository;
+import reactor.core.publisher.Mono;
 
-import java.util.Optional;
+public interface UsuarioRepository extends ReactiveCrudRepository<Usuario, Long> {
 
-public interface UsuarioRepository extends JpaRepository<Usuario, Long> {
+    Mono<Usuario> findByUsername(String username);
 
-    Optional<Usuario> findByUsername(String username);
-
-    boolean existsByUsername(String username);
+    Mono<Boolean> existsByUsername(String username);
 }

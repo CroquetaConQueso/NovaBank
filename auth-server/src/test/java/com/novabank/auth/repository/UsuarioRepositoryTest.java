@@ -1,41 +1,42 @@
 package com.novabank.auth.repository;
 
 import com.novabank.auth.model.Usuario;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase;
-import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
+import org.springframework.boot.test.autoconfigure.data.r2dbc.DataR2dbcTest;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.test.context.ActiveProfiles;
+import reactor.test.StepVerifier;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-@DataJpaTest
+@DataR2dbcTest
 @ActiveProfiles("test")
-@AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 class UsuarioRepositoryTest {
 
     @Autowired
     private UsuarioRepository repository;
 
+    @BeforeEach
+    void setUp() {
+        repository.deleteAll().block();
+    }
+
     @Test
     void buscaUsuarioPorUsername() {
-        repository.save(usuario("ana"));
-
-        assertThat(repository.findByUsername("ana"))
-                .isPresent()
-                .get()
-                .extracting(Usuario::getRole)
-                .isEqualTo("USER");
+        StepVerifier.create(repository.save(usuario("ana"))
+                        .then(repository.findByUsername("ana")))
+                .assertNext(usuario -> assertThat(usuario.getRole()).isEqualTo("USER"))
+                .verifyComplete();
     }
 
     @Test
     void usernameDebeSerUnico() {
-        repository.saveAndFlush(usuario("ana"));
-
-        assertThatThrownBy(() -> repository.saveAndFlush(usuario("ana")))
-                .isInstanceOf(DataIntegrityViolationException.class);
+        StepVerifier.create(repository.save(usuario("ana"))
+                        .then(repository.save(usuario("ana"))))
+                .expectError(DataIntegrityViolationException.class)
+                .verify();
     }
 
     private Usuario usuario(String username) {
@@ -44,6 +45,7 @@ class UsuarioRepositoryTest {
         usuario.setPasswordHash("{bcrypt}hash");
         usuario.setRole("USER");
         usuario.setEnabled(true);
+        usuario.prepararParaCreacion();
         return usuario;
     }
 }

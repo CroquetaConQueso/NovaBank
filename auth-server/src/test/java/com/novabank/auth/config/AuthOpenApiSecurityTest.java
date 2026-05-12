@@ -2,34 +2,35 @@ package com.novabank.auth.config;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.test.autoconfigure.web.reactive.AutoConfigureWebTestClient;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
-import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.reactive.server.WebTestClient;
 
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
-
-@SpringBootTest(properties = {
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = {
         "spring.cloud.config.enabled=false",
         "eureka.client.enabled=false"
 })
-@AutoConfigureMockMvc
+@AutoConfigureWebTestClient
 @ActiveProfiles("test")
 class AuthOpenApiSecurityTest {
 
     @Autowired
-    private MockMvc mockMvc;
+    private WebTestClient webTestClient;
 
     @Test
-    void openApiDocsEsPublico() throws Exception {
-        mockMvc.perform(get("/v3/api-docs"))
-                .andExpect(status().isOk());
+    void openApiDocsEsPublico() {
+        webTestClient.get()
+                .uri("/v3/api-docs")
+                .exchange()
+                .expectStatus().isOk();
     }
 
     @Test
-    void swaggerUiNoQuedaBloqueadoPorSeguridad() throws Exception {
-        mockMvc.perform(get("/swagger-ui/index.html"))
-                .andExpect(status().isOk());
+    void swaggerUiNoQuedaBloqueadoPorSeguridad() {
+        webTestClient.get()
+                .uri("/swagger-ui.html")
+                .exchange()
+                .expectStatus().is3xxRedirection();
     }
 }

@@ -1,14 +1,12 @@
 spring:
-  datasource:
-    url: jdbc:h2:mem:auth_server_test;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1
-    driver-class-name: org.h2.Driver
+  r2dbc:
+    url: r2dbc:h2:mem:///auth_server_test;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1
     username: sa
     password:
-  jpa:
-    database-platform: org.hibernate.dialect.H2Dialect
-    hibernate:
-      ddl-auto: create-drop
-    show-sql: false
+  sql:
+    init:
+      mode: always
+      schema-locations: classpath:schema-test.sql
 
 eureka:
   client:

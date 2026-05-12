@@ -101,7 +101,7 @@ class ClienteServiceClientContractTest {
                 })
                 .verify();
 
-        wireMock.verify(getRequestedFor(urlEqualTo("/api/clientes/99")));
+        wireMock.verify(1, getRequestedFor(urlEqualTo("/api/clientes/99")));
     }
 
     @Test
@@ -127,7 +127,7 @@ class ClienteServiceClientContractTest {
                 })
                 .verify();
 
-        wireMock.verify(getRequestedFor(urlEqualTo("/api/clientes/7")));
+        wireMock.verify(2, getRequestedFor(urlEqualTo("/api/clientes/7")));
     }
 
     @Test

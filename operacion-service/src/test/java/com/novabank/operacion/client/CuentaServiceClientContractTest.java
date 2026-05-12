@@ -147,7 +147,7 @@ class CuentaServiceClientContractTest {
                 .expectError(RemoteValidationException.class)
                 .verify();
 
-        wireMock.verify(postRequestedFor(urlEqualTo("/internal/cuentas/10/retiros")));
+        wireMock.verify(1, postRequestedFor(urlEqualTo("/internal/cuentas/10/retiros")));
     }
 
     @Test
@@ -168,7 +168,7 @@ class CuentaServiceClientContractTest {
                 .expectError(RemoteResourceNotFoundException.class)
                 .verify();
 
-        wireMock.verify(postRequestedFor(urlEqualTo("/internal/cuentas/99/depositos")));
+        wireMock.verify(1, postRequestedFor(urlEqualTo("/internal/cuentas/99/depositos")));
     }
 
     @Test
@@ -195,7 +195,7 @@ class CuentaServiceClientContractTest {
                 .expectError(RemoteValidationException.class)
                 .verify();
 
-        wireMock.verify(postRequestedFor(urlEqualTo("/internal/cuentas/aplicar-movimientos")));
+        wireMock.verify(1, postRequestedFor(urlEqualTo("/internal/cuentas/aplicar-movimientos")));
     }
 
     @Test
@@ -222,7 +222,7 @@ class CuentaServiceClientContractTest {
                 .expectError(RemoteConflictException.class)
                 .verify();
 
-        wireMock.verify(postRequestedFor(urlEqualTo("/internal/cuentas/aplicar-movimientos")));
+        wireMock.verify(1, postRequestedFor(urlEqualTo("/internal/cuentas/aplicar-movimientos")));
     }
 
     @Test
@@ -249,7 +249,28 @@ class CuentaServiceClientContractTest {
                 .expectError(RemoteServiceException.class)
                 .verify();
 
-        wireMock.verify(postRequestedFor(urlEqualTo("/internal/cuentas/aplicar-movimientos")));
+        wireMock.verify(2, postRequestedFor(urlEqualTo("/internal/cuentas/aplicar-movimientos")));
+    }
+
+    @Test
+    void depositoNoReintentaErroresTecnicosPorNoSerIdempotente() {
+        wireMock.stubFor(post(urlEqualTo("/internal/cuentas/10/depositos"))
+                .willReturn(aResponse()
+                        .withStatus(500)
+                        .withHeader("Content-Type", "application/json")
+                        .withBody("""
+                                {
+                                  "code": "INTERNAL_ERROR",
+                                  "message": "Error inesperado",
+                                  "service": "cuenta-service"
+                                }
+                                """)));
+
+        StepVerifier.create(client().depositar(10L, new CuentaOperacionRequestDTO(new BigDecimal("10.00"))))
+                .expectError(RemoteServiceException.class)
+                .verify();
+
+        wireMock.verify(1, postRequestedFor(urlEqualTo("/internal/cuentas/10/depositos")));
     }
 
     @Test

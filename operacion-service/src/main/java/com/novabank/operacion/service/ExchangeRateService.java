@@ -4,6 +4,13 @@ import com.novabank.operacion.dto.ExchangeRateResponseDTO;
 import com.novabank.operacion.exception.ExchangeRateUnavailableException;
 import com.novabank.operacion.exception.ValidationException;
 import com.novabank.operacion.tracing.CorrelationIdSupport;
+import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
+import io.github.resilience4j.circuitbreaker.CircuitBreaker;
+import io.github.resilience4j.circuitbreaker.CircuitBreakerConfig;
+import io.github.resilience4j.reactor.circuitbreaker.operator.CircuitBreakerOperator;
+import io.github.resilience4j.reactor.retry.RetryOperator;
+import io.github.resilience4j.retry.Retry;
+import io.github.resilience4j.retry.RetryConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -26,21 +33,41 @@ public class ExchangeRateService {
 
     private final WebClient webClient;
     private final Duration timeout;
+    private final CircuitBreaker exchangeRateCircuitBreaker;
+    private final Retry exchangeRateRetry;
 
     public ExchangeRateService(
             WebClient.Builder webClientBuilder,
             @Value("${novabank.clients.exchange-rate-service.base-url:http://EXCHANGE-RATE-SERVICE}") String baseUrl,
             @Value("${novabank.clients.exchange-rate-service.timeout:3s}") Duration timeout
     ) {
+        this(
+                webClientBuilder,
+                baseUrl,
+                timeout,
+                CircuitBreaker.of("exchangeRateCircuitBreaker", circuitBreakerConfig()),
+                Retry.of("exchangeRateRetry", retryConfig())
+        );
+    }
+
+    ExchangeRateService(
+            WebClient.Builder webClientBuilder,
+            String baseUrl,
+            Duration timeout,
+            CircuitBreaker exchangeRateCircuitBreaker,
+            Retry exchangeRateRetry
+    ) {
         this.webClient = webClientBuilder.baseUrl(baseUrl).build();
         this.timeout = timeout;
+        this.exchangeRateCircuitBreaker = exchangeRateCircuitBreaker;
+        this.exchangeRateRetry = exchangeRateRetry;
     }
 
     public Mono<BigDecimal> obtenerTasa(String from, String to) {
         String fromNormalizado = normalizarDivisa(from, "monedaOrigen");
         String toNormalizado = normalizarDivisa(to, "monedaDestino");
 
-        return webClient.get()
+        Mono<BigDecimal> llamadaRemota = webClient.get()
                 .uri(uriBuilder -> uriBuilder.path("/api/exchange-rate")
                         .queryParam("from", fromNormalizado)
                         .queryParam("to", toNormalizado)
@@ -73,6 +100,14 @@ public class ExchangeRateService {
                 .onErrorMap(TimeoutException.class, this::timeout)
                 .onErrorMap(ex -> !(ex instanceof ExchangeRateUnavailableException) && !(ex instanceof ValidationException),
                         ex -> new ExchangeRateUnavailableException("No se pudo obtener una tasa de cambio fiable", ex));
+
+        return llamadaRemota
+                .transformDeferred(RetryOperator.of(exchangeRateRetry))
+                .transformDeferred(CircuitBreakerOperator.of(exchangeRateCircuitBreaker))
+                .onErrorMap(
+                        CallNotPermittedException.class,
+                        error -> new ExchangeRateUnavailableException("exchange-rate-service no esta disponible", error)
+                );
     }
 
     private String normalizarDivisa(String valor, String campo) {
@@ -94,10 +129,16 @@ public class ExchangeRateService {
     private Mono<? extends Throwable> mapearError(ClientResponse response) {
         return response.bodyToMono(String.class)
                 .defaultIfEmpty("")
-                .map(body -> new ExchangeRateUnavailableException(mensajeRemoto(
-                        body,
-                        "No hay una tasa de cambio disponible para la transferencia"
-                )));
+                .map(body -> {
+                    String mensaje = mensajeRemoto(
+                            body,
+                            "No hay una tasa de cambio disponible para la transferencia"
+                    );
+                    if (response.statusCode().is5xxServerError()) {
+                        return new RetryableExchangeRateUnavailableException(mensaje);
+                    }
+                    return new ExchangeRateUnavailableException(mensaje);
+                });
     }
 
     private String mensajeRemoto(String body, String fallback) {
@@ -109,10 +150,42 @@ public class ExchangeRateService {
     }
 
     private ExchangeRateUnavailableException servicioNoDisponible(WebClientRequestException ex) {
-        return new ExchangeRateUnavailableException("exchange-rate-service no esta disponible", ex);
+        return new RetryableExchangeRateUnavailableException("exchange-rate-service no esta disponible", ex);
     }
 
     private ExchangeRateUnavailableException timeout(TimeoutException ex) {
-        return new ExchangeRateUnavailableException("exchange-rate-service no respondio a tiempo", ex);
+        return new RetryableExchangeRateUnavailableException("exchange-rate-service no respondio a tiempo", ex);
+    }
+
+    private static CircuitBreakerConfig circuitBreakerConfig() {
+        return CircuitBreakerConfig.custom()
+                .failureRateThreshold(50)
+                .slidingWindowSize(4)
+                .minimumNumberOfCalls(2)
+                .permittedNumberOfCallsInHalfOpenState(1)
+                .waitDurationInOpenState(Duration.ofSeconds(2))
+                .recordExceptions(RetryableExchangeRateUnavailableException.class)
+                .ignoreExceptions(ValidationException.class)
+                .build();
+    }
+
+    private static RetryConfig retryConfig() {
+        return RetryConfig.custom()
+                .maxAttempts(2)
+                .waitDuration(Duration.ofMillis(100))
+                .retryExceptions(RetryableExchangeRateUnavailableException.class)
+                .ignoreExceptions(ValidationException.class)
+                .build();
+    }
+
+    private static class RetryableExchangeRateUnavailableException extends ExchangeRateUnavailableException {
+
+        RetryableExchangeRateUnavailableException(String message) {
+            super(message);
+        }
+
+        RetryableExchangeRateUnavailableException(String message, Throwable cause) {
+            super(message, cause);
+        }
     }
 }

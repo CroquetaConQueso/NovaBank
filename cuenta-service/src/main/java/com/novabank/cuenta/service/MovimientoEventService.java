@@ -1,37 +1,23 @@
 package com.novabank.cuenta.service;
 
 import com.novabank.cuenta.dto.MovimientoEventDTO;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Sinks;
 
-import java.util.concurrent.atomic.AtomicLong;
-
 @Service
 public class MovimientoEventService {
 
-    private static final Logger log = LoggerFactory.getLogger(MovimientoEventService.class);
-
     private final Sinks.Many<MovimientoEventDTO> sink = Sinks.many()
             .multicast()
-            .directBestEffort();
-    private final AtomicLong eventosDescartados = new AtomicLong();
+            .onBackpressureBuffer();
 
     /**
-     * Bus en memoria para SSE. Prioriza la estabilidad del emisor: un
-     * consumidor lento puede perder eventos y no hay replay tras reinicios.
+     * Bus en memoria para SSE. Los eventos no sobreviven a reinicios del
+     * servicio y solo se entregan a suscriptores activos.
      */
     public void publicar(MovimientoEventDTO evento) {
-        Sinks.EmitResult resultado = sink.tryEmitNext(evento);
-        if (resultado.isFailure()) {
-            long total = eventosDescartados.incrementAndGet();
-            log.warn("evento SSE descartado resultado={} cuentaId={} totalDescartados={}",
-                    resultado,
-                    evento != null ? evento.cuentaId() : null,
-                    total);
-        }
+        sink.tryEmitNext(evento);
     }
 
     public Flux<MovimientoEventDTO> streamDeCuenta(Long cuentaId) {
@@ -41,17 +27,7 @@ public class MovimientoEventService {
             }
 
             return sink.asFlux()
-                    .filter(evento -> cuentaId.equals(evento.cuentaId()))
-                    .onBackpressureDrop(evento -> {
-                        long total = eventosDescartados.incrementAndGet();
-                        log.warn("evento SSE descartado por backpressure cuentaId={} totalDescartados={}",
-                                evento.cuentaId(),
-                                total);
-                    });
+                    .filter(evento -> cuentaId.equals(evento.cuentaId()));
         });
-    }
-
-    long eventosDescartados() {
-        return eventosDescartados.get();
     }
 }

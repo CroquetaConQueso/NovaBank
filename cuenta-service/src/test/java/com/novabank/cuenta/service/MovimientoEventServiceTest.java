@@ -7,8 +7,6 @@ import reactor.test.StepVerifier;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
-import static org.assertj.core.api.Assertions.assertThat;
-
 class MovimientoEventServiceTest {
 
     private final MovimientoEventService movimientoEventService = new MovimientoEventService();
@@ -40,16 +38,6 @@ class MovimientoEventServiceTest {
         StepVerifier.create(movimientoEventService.streamDeCuenta(0L))
                 .expectError(IllegalArgumentException.class)
                 .verify();
-    }
-
-    @Test
-    void consumidorSinDemandaDescartaEventoSinBloquearEmisor() {
-        StepVerifier.create(movimientoEventService.streamDeCuenta(1L), 0)
-                .then(() -> movimientoEventService.publicar(evento(1L, "DEPOSITO")))
-                .thenCancel()
-                .verify();
-
-        assertThat(movimientoEventService.eventosDescartados()).isGreaterThan(0);
     }
 
     private MovimientoEventDTO evento(Long cuentaId, String tipo) {

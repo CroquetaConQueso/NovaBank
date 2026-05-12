@@ -268,8 +268,7 @@ class OperacionServiceTest {
 
     @Test
     void transferenciaEnDivisaConsultaTasaYEjecutaTransferenciaConMontoConvertido() {
-        when(exchangeRateService.obtenerCotizacion("USD", "EUR"))
-                .thenReturn(Mono.just(new ExchangeRateQuote(new BigDecimal("0.92"), false)));
+        when(exchangeRateService.obtenerTasa("USD", "EUR")).thenReturn(Mono.just(new BigDecimal("0.92")));
         when(cuentaServiceClient.aplicarMovimiento(any(AplicarMovimientoRequestDTO.class)))
                 .thenReturn(Mono.just(new AplicarMovimientoResponseDTO(
                         "op-1",
@@ -300,41 +299,13 @@ class OperacionServiceTest {
                 })
                 .verifyComplete();
 
-        verify(exchangeRateService).obtenerCotizacion("USD", "EUR");
+        verify(exchangeRateService).obtenerTasa("USD", "EUR");
         verify(cuentaServiceClient).aplicarMovimiento(any(AplicarMovimientoRequestDTO.class));
     }
 
     @Test
-    void transferenciaEnDivisaConTasaCacheadaInformaElUsoDeCache() {
-        when(exchangeRateService.obtenerCotizacion("USD", "EUR"))
-                .thenReturn(Mono.just(new ExchangeRateQuote(new BigDecimal("0.90"), true)));
-        when(cuentaServiceClient.aplicarMovimiento(any(AplicarMovimientoRequestDTO.class)))
-                .thenReturn(Mono.just(aplicarMovimientoResponse()));
-        AtomicLong ids = new AtomicLong(40L);
-        when(movimientoRepository.save(any(Movimiento.class))).thenAnswer(invocation -> {
-            Movimiento movimiento = invocation.getArgument(0);
-            movimiento.setId(ids.getAndIncrement());
-            movimiento.setFecha(LocalDateTime.now());
-            return Mono.just(movimiento);
-        });
-
-        StepVerifier.create(service.transferirEnDivisa(new TransferenciaDivisaRequestDTO(
-                        10L,
-                        11L,
-                        new BigDecimal("100.00"),
-                        "USD",
-                        "EUR"
-                )))
-                .assertNext(response -> {
-                    assertThat(response.mensaje()).contains("tasa cacheada");
-                    assertThat(response.movimientos().get(0).cantidad()).isEqualByComparingTo("90.00");
-                })
-                .verifyComplete();
-    }
-
-    @Test
     void transferenciaEnDivisaSiFallaTipoCambioNoLlamaCuentaServiceNiGuardaMovimiento() {
-        when(exchangeRateService.obtenerCotizacion("USD", "EUR"))
+        when(exchangeRateService.obtenerTasa("USD", "EUR"))
                 .thenReturn(Mono.error(new ExchangeRateUnavailableException("No hay tasa fiable")));
 
         StepVerifier.create(service.transferirEnDivisa(new TransferenciaDivisaRequestDTO(

@@ -13,11 +13,10 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
-
-import java.util.Optional;
+import reactor.core.publisher.Mono;
+import reactor.test.StepVerifier;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentCaptor.forClass;
 import static org.mockito.Mockito.mock;
@@ -41,12 +40,13 @@ class AuthServiceTest {
 
     @Test
     void registrarGuardaPasswordConBCryptYNormalizaUsername() {
-        when(usuarioRepository.existsByUsername("ana")).thenReturn(false);
-        when(usuarioRepository.save(any(Usuario.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(usuarioRepository.existsByUsername("ana")).thenReturn(Mono.just(false));
+        when(usuarioRepository.save(any(Usuario.class))).thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
 
-        RegisterResponseDTO response = authService.registrar(new RegisterRequestDTO(" Ana ", "password123"));
+        StepVerifier.create(authService.registrar(new RegisterRequestDTO(" Ana ", "password123")))
+                .assertNext(response -> assertThat(response.username()).isEqualTo("ana"))
+                .verifyComplete();
 
-        assertThat(response.username()).isEqualTo("ana");
         var captor = forClass(Usuario.class);
         verify(usuarioRepository).save(captor.capture());
         Usuario guardado = captor.getValue();
@@ -56,76 +56,88 @@ class AuthServiceTest {
 
     @Test
     void registrarUsuarioDuplicadoDevuelveConflicto() {
-        when(usuarioRepository.existsByUsername("ana")).thenReturn(true);
+        when(usuarioRepository.existsByUsername("ana")).thenReturn(Mono.just(true));
 
-        assertThatThrownBy(() -> authService.registrar(new RegisterRequestDTO("ana", "password123")))
-                .isInstanceOf(DuplicateUserException.class);
+        StepVerifier.create(authService.registrar(new RegisterRequestDTO("ana", "password123")))
+                .expectError(DuplicateUserException.class)
+                .verify();
     }
 
     @Test
     void loginCorrectoDevuelveBearerToken() {
         Usuario usuario = usuario("ana", passwordEncoder.encode("password123"), true);
-        when(usuarioRepository.findByUsername("ana")).thenReturn(Optional.of(usuario));
+        when(usuarioRepository.findByUsername("ana")).thenReturn(Mono.just(usuario));
 
-        LoginResponseDTO response = authService.login(new LoginRequestDTO("ana", "password123"));
-
-        assertThat(response.tipo()).isEqualTo("Bearer");
-        assertThat(response.token()).isNotBlank();
-        assertThat(jwtService.esTokenValido(response.token())).isTrue();
+        StepVerifier.create(authService.login(new LoginRequestDTO("ana", "password123")))
+                .assertNext(response -> {
+                    assertThat(response.tipo()).isEqualTo("Bearer");
+                    assertThat(response.token()).isNotBlank();
+                    assertThat(jwtService.esTokenValido(response.token())).isTrue();
+                })
+                .verifyComplete();
     }
 
     @Test
     void loginConPasswordIncorrectaDevuelve401() {
         Usuario usuario = usuario("ana", passwordEncoder.encode("password123"), true);
-        when(usuarioRepository.findByUsername("ana")).thenReturn(Optional.of(usuario));
+        when(usuarioRepository.findByUsername("ana")).thenReturn(Mono.just(usuario));
 
-        assertThatThrownBy(() -> authService.login(new LoginRequestDTO("ana", "bad-password")))
-                .isInstanceOf(InvalidCredentialsException.class);
+        StepVerifier.create(authService.login(new LoginRequestDTO("ana", "bad-password")))
+                .expectError(InvalidCredentialsException.class)
+                .verify();
     }
 
     @Test
     void loginConUsuarioInexistenteDevuelve401() {
-        when(usuarioRepository.findByUsername("nadie")).thenReturn(Optional.empty());
+        when(usuarioRepository.findByUsername("nadie")).thenReturn(Mono.empty());
 
-        assertThatThrownBy(() -> authService.login(new LoginRequestDTO("nadie", "password123")))
-                .isInstanceOf(InvalidCredentialsException.class);
+        StepVerifier.create(authService.login(new LoginRequestDTO("nadie", "password123")))
+                .expectError(InvalidCredentialsException.class)
+                .verify();
     }
 
     @Test
     void loginConUsuarioDeshabilitadoDevuelve401() {
         Usuario usuario = usuario("ana", passwordEncoder.encode("password123"), false);
-        when(usuarioRepository.findByUsername("ana")).thenReturn(Optional.of(usuario));
+        when(usuarioRepository.findByUsername("ana")).thenReturn(Mono.just(usuario));
 
-        assertThatThrownBy(() -> authService.login(new LoginRequestDTO("ana", "password123")))
-                .isInstanceOf(InvalidCredentialsException.class);
+        StepVerifier.create(authService.login(new LoginRequestDTO("ana", "password123")))
+                .expectError(InvalidCredentialsException.class)
+                .verify();
     }
 
     @Test
     void tokenValidoDevuelveUsername() {
         String token = jwtService.generarToken("ana");
 
-        ValidateTokenResponseDTO response = authService.validarToken(token);
-
-        assertThat(response.valido()).isTrue();
-        assertThat(response.username()).isEqualTo("ana");
+        StepVerifier.create(authService.validarToken(token))
+                .assertNext(response -> {
+                    assertThat(response.valido()).isTrue();
+                    assertThat(response.username()).isEqualTo("ana");
+                })
+                .verifyComplete();
     }
 
     @Test
     void tokenInvalidoDevuelveValidoFalse() {
-        ValidateTokenResponseDTO response = authService.validarToken("token-invalido");
-
-        assertThat(response.valido()).isFalse();
-        assertThat(response.username()).isNull();
+        StepVerifier.create(authService.validarToken("token-invalido"))
+                .assertNext(response -> {
+                    assertThat(response.valido()).isFalse();
+                    assertThat(response.username()).isNull();
+                })
+                .verifyComplete();
     }
 
     @Test
     void tokenConPrefijoBearerDevuelveUsername() {
         String token = jwtService.generarToken("ana");
 
-        ValidateTokenResponseDTO response = authService.validarToken("Bearer " + token);
-
-        assertThat(response.valido()).isTrue();
-        assertThat(response.username()).isEqualTo("ana");
+        StepVerifier.create(authService.validarToken("Bearer " + token))
+                .assertNext(response -> {
+                    assertThat(response.valido()).isTrue();
+                    assertThat(response.username()).isEqualTo("ana");
+                })
+                .verifyComplete();
     }
 
     @Test
@@ -133,10 +145,12 @@ class AuthServiceTest {
         JwtService otroJwtService = new JwtService("other-auth-server-secret-key-with-at-least-32-chars", 86400000L);
         String token = otroJwtService.generarToken("ana");
 
-        ValidateTokenResponseDTO response = authService.validarToken(token);
-
-        assertThat(response.valido()).isFalse();
-        assertThat(response.username()).isNull();
+        StepVerifier.create(authService.validarToken(token))
+                .assertNext(response -> {
+                    assertThat(response.valido()).isFalse();
+                    assertThat(response.username()).isNull();
+                })
+                .verifyComplete();
     }
 
     @Test
@@ -144,10 +158,12 @@ class AuthServiceTest {
         JwtService jwtExpirado = new JwtService("test-auth-server-secret-key-with-at-least-32-chars", -1000L);
         String token = jwtExpirado.generarToken("ana");
 
-        ValidateTokenResponseDTO response = authService.validarToken(token);
-
-        assertThat(response.valido()).isFalse();
-        assertThat(response.username()).isNull();
+        StepVerifier.create(authService.validarToken(token))
+                .assertNext(response -> {
+                    assertThat(response.valido()).isFalse();
+                    assertThat(response.username()).isNull();
+                })
+                .verifyComplete();
     }
 
     private Usuario usuario(String username, String passwordHash, boolean enabled) {

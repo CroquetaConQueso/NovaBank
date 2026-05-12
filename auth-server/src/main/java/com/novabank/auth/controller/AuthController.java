@@ -21,6 +21,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import reactor.core.publisher.Mono;
 
 @Validated
 @RestController
@@ -41,8 +42,9 @@ public class AuthController {
             @ApiResponse(responseCode = "400", description = "Datos invalidos o peticion mal formada"),
             @ApiResponse(responseCode = "409", description = "Usuario ya existente")
     })
-    public ResponseEntity<RegisterResponseDTO> register(@Valid @RequestBody RegisterRequestDTO request) {
-        return ResponseEntity.status(HttpStatus.CREATED).body(authService.registrar(request));
+    public Mono<ResponseEntity<RegisterResponseDTO>> register(@Valid @RequestBody RegisterRequestDTO request) {
+        return authService.registrar(request)
+                .map(response -> ResponseEntity.status(HttpStatus.CREATED).body(response));
     }
 
     @PostMapping("/login")
@@ -52,8 +54,9 @@ public class AuthController {
             @ApiResponse(responseCode = "400", description = "Datos invalidos o peticion mal formada"),
             @ApiResponse(responseCode = "401", description = "Credenciales invalidas")
     })
-    public ResponseEntity<LoginResponseDTO> login(@Valid @RequestBody LoginRequestDTO request) {
-        return ResponseEntity.ok(authService.login(request));
+    public Mono<ResponseEntity<LoginResponseDTO>> login(@Valid @RequestBody LoginRequestDTO request) {
+        return authService.login(request)
+                .map(ResponseEntity::ok);
     }
 
     @GetMapping("/validate")
@@ -62,9 +65,10 @@ public class AuthController {
             @ApiResponse(responseCode = "200", description = "Validacion realizada correctamente"),
             @ApiResponse(responseCode = "400", description = "Token ausente o mal informado")
     })
-    public ResponseEntity<ValidateTokenResponseDTO> validate(
+    public Mono<ResponseEntity<ValidateTokenResponseDTO>> validate(
             @RequestParam @NotBlank(message = "El token es obligatorio") String token
     ) {
-        return ResponseEntity.ok(authService.validarToken(token));
+        return authService.validarToken(token)
+                .map(ResponseEntity::ok);
     }
 }

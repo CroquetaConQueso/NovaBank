@@ -1,40 +1,33 @@
 package com.novabank.auth.model;
 
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
-import jakarta.persistence.PrePersist;
-import jakarta.persistence.Table;
+import org.springframework.data.annotation.Id;
+import org.springframework.data.relational.core.mapping.Column;
+import org.springframework.data.relational.core.mapping.Table;
 
 import java.time.LocalDateTime;
 
-@Entity
 @Table(name = "usuarios")
 public class Usuario {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(nullable = false, unique = true, length = 80)
+    @Column("username")
     private String username;
 
-    @Column(name = "password_hash", nullable = false)
+    @Column("password_hash")
     private String passwordHash;
 
-    @Column(nullable = false, length = 40)
+    @Column("role")
     private String role;
 
-    @Column(nullable = false)
+    @Column("enabled")
     private Boolean enabled;
 
-    @Column(name = "fecha_creacion", nullable = false, updatable = false)
+    @Column("fecha_creacion")
     private LocalDateTime fechaCreacion;
 
-    @PrePersist
-    void prePersist() {
+    public void prepararParaCreacion() {
         if (fechaCreacion == null) {
             fechaCreacion = LocalDateTime.now();
         }
@@ -48,6 +41,10 @@ public class Usuario {
 
     public Long getId() {
         return id;
+    }
+
+    public void setId(Long id) {
+        this.id = id;
     }
 
     public String getUsername() {
@@ -84,5 +81,9 @@ public class Usuario {
 
     public LocalDateTime getFechaCreacion() {
         return fechaCreacion;
+    }
+
+    public void setFechaCreacion(LocalDateTime fechaCreacion) {
+        this.fechaCreacion = fechaCreacion;
     }
 }

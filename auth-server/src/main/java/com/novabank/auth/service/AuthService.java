@@ -10,6 +10,7 @@ import com.novabank.auth.exception.InvalidCredentialsException;
 import com.novabank.auth.exception.InvalidTokenException;
 import com.novabank.auth.model.Usuario;
 import com.novabank.auth.repository.UsuarioRepository;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -57,7 +58,13 @@ public class AuthService {
                         usuario.prepararParaCreacion();
 
                         return usuarioRepository.save(usuario)
-                                .map(this::toRegisterResponse);
+                                .map(this::toRegisterResponse)
+                                .onErrorMap(
+                                        DataIntegrityViolationException.class,
+                                        ex -> new DuplicateUserException(
+                                                "Ya existe un usuario con alguno de los datos unicos indicados"
+                                        )
+                                );
                     });
         });
     }

@@ -5,7 +5,7 @@ spring:
     config:
       server:
         git:
-          uri: file:///C:/Users/Usuario/Desktop/config-repo
+          uri: ${CONFIG_REPO_URI:file:///C:/Users/Usuario/Desktop/config-repo}
           default-label: main
 
 server:

@@ -92,6 +92,8 @@ class ExchangeRateServiceTest {
         StepVerifier.create(exchangeRateService.obtenerTasa("USD", "EUR"))
                 .expectError(ExchangeRateUnavailableException.class)
                 .verify();
+
+        wireMock.verify(1, getRequestedFor(urlEqualTo("/api/exchange-rate?from=USD&to=EUR")));
     }
 
     @Test
@@ -110,6 +112,28 @@ class ExchangeRateServiceTest {
         StepVerifier.create(exchangeRateService.obtenerTasa("USD", "EUR"))
                 .expectError(ExchangeRateUnavailableException.class)
                 .verify();
+
+        wireMock.verify(2, getRequestedFor(urlEqualTo("/api/exchange-rate?from=USD&to=EUR")));
+    }
+
+    @Test
+    void noReintentaTasaNoEncontradaPorqueEsErrorFuncional() {
+        wireMock.stubFor(get(urlEqualTo("/api/exchange-rate?from=JPY&to=EUR"))
+                .willReturn(aResponse()
+                        .withStatus(404)
+                        .withHeader("Content-Type", "application/json")
+                        .withBody("""
+                                {
+                                  "code": "EXCHANGE_RATE_NOT_FOUND",
+                                  "message": "Tasa no soportada"
+                                }
+                                """)));
+
+        StepVerifier.create(exchangeRateService.obtenerTasa("JPY", "EUR"))
+                .expectError(ExchangeRateUnavailableException.class)
+                .verify();
+
+        wireMock.verify(1, getRequestedFor(urlEqualTo("/api/exchange-rate?from=JPY&to=EUR")));
     }
 
     @Test
@@ -131,5 +155,7 @@ class ExchangeRateServiceTest {
         StepVerifier.create(exchangeRateService.obtenerTasa("USD", "EUR"))
                 .expectError(ExchangeRateUnavailableException.class)
                 .verify();
+
+        wireMock.verify(2, getRequestedFor(urlEqualTo("/api/exchange-rate?from=USD&to=EUR")));
     }
 }

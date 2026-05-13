@@ -9,9 +9,21 @@ import org.springframework.web.reactive.function.client.ExchangeFilterFunction;
 import org.springframework.web.reactive.function.client.WebClient;
 
 import com.novabank.gateway.tracing.CorrelationIdSupport;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.boot.web.reactive.function.client.WebClientCustomizer;
 
 @Configuration
 public class WebClientConfig {
+
+    private final java.util.List<WebClientCustomizer> customizers;
+
+    public WebClientConfig(ObjectProvider<WebClientCustomizer> customizers) {
+        this.customizers = customizers.orderedStream().toList();
+    }
+
+    public WebClientConfig() {
+        this.customizers = java.util.List.of();
+    }
 
     /**
      * Habilita la resolucion de nombres lb:// para que WebClient pueda llamar a
@@ -20,8 +32,10 @@ public class WebClientConfig {
     @Bean
     @LoadBalanced
     public WebClient.Builder loadBalancedWebClientBuilder() {
-        return WebClient.builder()
+        WebClient.Builder builder = WebClient.builder()
                 .filter(correlationIdFilter());
+        customizers.forEach(customizer -> customizer.customize(builder));
+        return builder;
     }
 
     private ExchangeFilterFunction correlationIdFilter() {

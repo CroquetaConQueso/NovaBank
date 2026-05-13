@@ -205,22 +205,34 @@ public class OperacionService {
             TransferenciaDivisaRequestDTO request,
             String operationId
     ) {
-        return exchangeRateService.obtenerTasa(request.monedaOrigen(), request.monedaDestino())
-                .map(tasa -> request.monto().multiply(tasa).setScale(2, RoundingMode.HALF_UP))
-                .doOnNext(montoConvertido -> log.info("monto convertido para transferencia en divisa importe={}", montoConvertido))
-                .flatMap(montoConvertido -> transferirCore(
+        return exchangeRateService.obtenerTasaConOrigen(request.monedaOrigen(), request.monedaDestino())
+                .flatMap(rate -> {
+                    BigDecimal montoConvertido = request.monto().multiply(rate.tasa()).setScale(2, RoundingMode.HALF_UP);
+                    log.info(
+                            "monto convertido para transferencia en divisa importe={} tasaCacheada={}",
+                            montoConvertido,
+                            rate.cacheada()
+                    );
+                    return transferirCore(
                         new TransferenciaRequestDTO(
                                 request.cuentaOrigenId(),
                                 request.cuentaDestinoId(),
                                 montoConvertido
                         ),
                         operationId
-                ))
-                .map(response -> new OperacionResponseDTO(
-                        response.tipoOperacion(),
-                        "Transferencia en divisa realizada correctamente",
-                        response.movimientos()
-                ));
+                    ).map(response -> new OperacionResponseDTO(
+                            response.tipoOperacion(),
+                            mensajeTransferenciaDivisa(rate.cacheada()),
+                            response.movimientos()
+                    ));
+                });
+    }
+
+    private String mensajeTransferenciaDivisa(boolean tasaCacheada) {
+        if (tasaCacheada) {
+            return "Transferencia en divisa realizada correctamente con tasa cacheada";
+        }
+        return "Transferencia en divisa realizada correctamente";
     }
 
     /**

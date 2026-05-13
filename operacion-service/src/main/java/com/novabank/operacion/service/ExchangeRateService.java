@@ -1,6 +1,7 @@
 package com.novabank.operacion.service;
 
 import com.novabank.operacion.dto.ExchangeRateResponseDTO;
+import com.novabank.operacion.dto.ExchangeRateResultDTO;
 import com.novabank.operacion.exception.ExchangeRateUnavailableException;
 import com.novabank.operacion.exception.ValidationException;
 import com.novabank.operacion.tracing.CorrelationIdSupport;
@@ -35,18 +36,21 @@ public class ExchangeRateService {
     private final Duration timeout;
     private final CircuitBreaker exchangeRateCircuitBreaker;
     private final Retry exchangeRateRetry;
+    private final ExchangeRateCache exchangeRateCache;
 
     public ExchangeRateService(
             WebClient.Builder webClientBuilder,
             @Value("${novabank.clients.exchange-rate-service.base-url:http://EXCHANGE-RATE-SERVICE}") String baseUrl,
-            @Value("${novabank.clients.exchange-rate-service.timeout:3s}") Duration timeout
+            @Value("${novabank.clients.exchange-rate-service.timeout:3s}") Duration timeout,
+            ExchangeRateCache exchangeRateCache
     ) {
         this(
                 webClientBuilder,
                 baseUrl,
                 timeout,
                 CircuitBreaker.of("exchangeRateCircuitBreaker", circuitBreakerConfig()),
-                Retry.of("exchangeRateRetry", retryConfig())
+                Retry.of("exchangeRateRetry", retryConfig()),
+                exchangeRateCache
         );
     }
 
@@ -55,19 +59,26 @@ public class ExchangeRateService {
             String baseUrl,
             Duration timeout,
             CircuitBreaker exchangeRateCircuitBreaker,
-            Retry exchangeRateRetry
+            Retry exchangeRateRetry,
+            ExchangeRateCache exchangeRateCache
     ) {
         this.webClient = webClientBuilder.baseUrl(baseUrl).build();
         this.timeout = timeout;
         this.exchangeRateCircuitBreaker = exchangeRateCircuitBreaker;
         this.exchangeRateRetry = exchangeRateRetry;
+        this.exchangeRateCache = exchangeRateCache;
     }
 
     public Mono<BigDecimal> obtenerTasa(String from, String to) {
+        return obtenerTasaConOrigen(from, to)
+                .map(ExchangeRateResultDTO::tasa);
+    }
+
+    public Mono<ExchangeRateResultDTO> obtenerTasaConOrigen(String from, String to) {
         String fromNormalizado = normalizarDivisa(from, "monedaOrigen");
         String toNormalizado = normalizarDivisa(to, "monedaDestino");
 
-        Mono<BigDecimal> llamadaRemota = webClient.get()
+        Mono<ExchangeRateResultDTO> llamadaRemota = webClient.get()
                 .uri(uriBuilder -> uriBuilder.path("/api/exchange-rate")
                         .queryParam("from", fromNormalizado)
                         .queryParam("to", toNormalizado)
@@ -96,6 +107,8 @@ public class ExchangeRateService {
                 })
                 .map(ExchangeRateResponseDTO::tasa)
                 .flatMap(this::validarTasa)
+                .doOnNext(tasa -> exchangeRateCache.guardar(fromNormalizado, toNormalizado, tasa))
+                .map(tasa -> new ExchangeRateResultDTO(tasa, false, java.time.Instant.now()))
                 .onErrorMap(WebClientRequestException.class, this::servicioNoDisponible)
                 .onErrorMap(TimeoutException.class, this::timeout)
                 .onErrorMap(ex -> !(ex instanceof ExchangeRateUnavailableException) && !(ex instanceof ValidationException),
@@ -107,7 +120,8 @@ public class ExchangeRateService {
                 .onErrorMap(
                         CallNotPermittedException.class,
                         error -> new ExchangeRateUnavailableException("exchange-rate-service no esta disponible", error)
-                );
+                )
+                .onErrorResume(error -> resolverConCacheSiEsTecnico(error, fromNormalizado, toNormalizado));
     }
 
     private String normalizarDivisa(String valor, String campo) {
@@ -155,6 +169,29 @@ public class ExchangeRateService {
 
     private ExchangeRateUnavailableException timeout(TimeoutException ex) {
         return new RetryableExchangeRateUnavailableException("exchange-rate-service no respondio a tiempo", ex);
+    }
+
+    private Mono<ExchangeRateResultDTO> resolverConCacheSiEsTecnico(
+            Throwable error,
+            String from,
+            String to
+    ) {
+        if (!esFalloTecnico(error)) {
+            return Mono.error(error);
+        }
+
+        return exchangeRateCache.obtener(from, to)
+                .map(cached -> {
+                    log.warn("usando tasa cacheada from={} to={}", from, to);
+                    return Mono.just(cached);
+                })
+                .orElseGet(() -> Mono.error(error));
+    }
+
+    private boolean esFalloTecnico(Throwable error) {
+        return error instanceof RetryableExchangeRateUnavailableException
+                || error.getCause() instanceof RetryableExchangeRateUnavailableException
+                || error.getCause() instanceof CallNotPermittedException;
     }
 
     private static CircuitBreakerConfig circuitBreakerConfig() {

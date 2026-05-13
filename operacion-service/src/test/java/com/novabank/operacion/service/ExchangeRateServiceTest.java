@@ -1,6 +1,7 @@
 package com.novabank.operacion.service;
 
 import com.github.tomakehurst.wiremock.junit5.WireMockExtension;
+import com.github.benmanes.caffeine.cache.Ticker;
 import com.novabank.operacion.exception.ExchangeRateUnavailableException;
 import com.novabank.operacion.config.WebClientConfig;
 import com.novabank.operacion.tracing.CorrelationIdSupport;
@@ -9,7 +10,9 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.RegisterExtension;
 import reactor.test.StepVerifier;
 
+import java.math.BigDecimal;
 import java.time.Duration;
+import java.util.concurrent.atomic.AtomicLong;
 
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.get;
@@ -27,13 +30,17 @@ class ExchangeRateServiceTest {
             .build();
 
     private ExchangeRateService exchangeRateService;
+    private FakeTicker ticker;
 
     @BeforeEach
     void setUp() {
+        wireMock.resetAll();
+        ticker = new FakeTicker();
         exchangeRateService = new ExchangeRateService(
                 new WebClientConfig().webClientBuilder(),
                 wireMock.getRuntimeInfo().getHttpBaseUrl(),
-                Duration.ofMillis(100)
+                Duration.ofMillis(500),
+                new ExchangeRateCache(ticker)
         );
     }
 
@@ -140,7 +147,7 @@ class ExchangeRateServiceTest {
     void fallaSiProveedorNoRespondeATiempo() {
         wireMock.stubFor(get(urlEqualTo("/api/exchange-rate?from=USD&to=EUR"))
                 .willReturn(aResponse()
-                        .withFixedDelay(250)
+                        .withFixedDelay(750)
                         .withStatus(200)
                         .withHeader("Content-Type", "application/json")
                         .withBody("""
@@ -157,5 +164,123 @@ class ExchangeRateServiceTest {
                 .verify();
 
         wireMock.verify(2, getRequestedFor(urlEqualTo("/api/exchange-rate?from=USD&to=EUR")));
+    }
+
+    @Test
+    void tasaRemotaValidaSeCacheaYFalloTecnicoPosteriorUsaCacheVigente() {
+        wireMock.stubFor(get(urlEqualTo("/api/exchange-rate?from=USD&to=EUR"))
+                .willReturn(okJson("""
+                        {
+                          "from": "USD",
+                          "to": "EUR",
+                          "tasa": 0.92,
+                          "timestamp": "2026-05-11T10:00:00Z"
+                        }
+                        """)));
+
+        StepVerifier.create(exchangeRateService.obtenerTasaConOrigen("USD", "EUR"))
+                .assertNext(result -> {
+                    assertThat(result.tasa()).isEqualByComparingTo("0.92");
+                    assertThat(result.cacheada()).isFalse();
+                })
+                .verifyComplete();
+
+        wireMock.resetAll();
+        wireMock.stubFor(get(urlEqualTo("/api/exchange-rate?from=USD&to=EUR"))
+                .willReturn(aResponse().withStatus(500)));
+
+        StepVerifier.create(exchangeRateService.obtenerTasaConOrigen("USD", "EUR"))
+                .assertNext(result -> {
+                    assertThat(result.tasa()).isEqualByComparingTo("0.92");
+                    assertThat(result.cacheada()).isTrue();
+                })
+                .verifyComplete();
+    }
+
+    @Test
+    void falloTecnicoSinCacheVigenteMantieneErrorSeguro() {
+        wireMock.stubFor(get(urlEqualTo("/api/exchange-rate?from=USD&to=EUR"))
+                .willReturn(aResponse().withStatus(500)));
+
+        StepVerifier.create(exchangeRateService.obtenerTasaConOrigen("USD", "EUR"))
+                .expectError(ExchangeRateUnavailableException.class)
+                .verify();
+    }
+
+    @Test
+    void cacheVencidaNoSeUsa() {
+        wireMock.stubFor(get(urlEqualTo("/api/exchange-rate?from=USD&to=EUR"))
+                .willReturn(okJson("""
+                        {
+                          "from": "USD",
+                          "to": "EUR",
+                          "tasa": 0.92,
+                          "timestamp": "2026-05-11T10:00:00Z"
+                        }
+                        """)));
+
+        StepVerifier.create(exchangeRateService.obtenerTasa("USD", "EUR"))
+                .assertNext(tasa -> assertThat(tasa).isEqualByComparingTo("0.92"))
+                .verifyComplete();
+
+        ticker.advance(Duration.ofMinutes(6));
+        wireMock.resetAll();
+        wireMock.stubFor(get(urlEqualTo("/api/exchange-rate?from=USD&to=EUR"))
+                .willReturn(aResponse().withStatus(500)));
+
+        StepVerifier.create(exchangeRateService.obtenerTasaConOrigen("USD", "EUR"))
+                .expectError(ExchangeRateUnavailableException.class)
+                .verify();
+    }
+
+    @Test
+    void tasaInvalidaNoSeCachea() {
+        wireMock.stubFor(get(urlEqualTo("/api/exchange-rate?from=USD&to=EUR"))
+                .willReturn(okJson("""
+                        {
+                          "from": "USD",
+                          "to": "EUR",
+                          "tasa": -1,
+                          "timestamp": "2026-05-11T10:00:00Z"
+                        }
+                        """)));
+
+        StepVerifier.create(exchangeRateService.obtenerTasaConOrigen("USD", "EUR"))
+                .expectError(ExchangeRateUnavailableException.class)
+                .verify();
+
+        wireMock.resetAll();
+        wireMock.stubFor(get(urlEqualTo("/api/exchange-rate?from=USD&to=EUR"))
+                .willReturn(aResponse().withStatus(500)));
+
+        StepVerifier.create(exchangeRateService.obtenerTasaConOrigen("USD", "EUR"))
+                .expectError(ExchangeRateUnavailableException.class)
+                .verify();
+    }
+
+    @Test
+    void exchangeRateCacheNormalizaClaveYRespetaTtl() {
+        ExchangeRateCache cache = new ExchangeRateCache(ticker);
+        cache.guardar(" usd ", " eur ", new BigDecimal("0.92"));
+
+        assertThat(cache.obtener("USD", "EUR")).isPresent();
+
+        ticker.advance(Duration.ofMinutes(6));
+
+        assertThat(cache.obtener("USD", "EUR")).isEmpty();
+    }
+
+    private static class FakeTicker implements Ticker {
+
+        private final AtomicLong nanos = new AtomicLong();
+
+        @Override
+        public long read() {
+            return nanos.get();
+        }
+
+        void advance(Duration duration) {
+            nanos.addAndGet(duration.toNanos());
+        }
     }
 }

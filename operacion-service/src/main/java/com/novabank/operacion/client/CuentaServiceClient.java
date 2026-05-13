@@ -15,6 +15,7 @@ import io.github.resilience4j.reactor.circuitbreaker.operator.CircuitBreakerOper
 import io.github.resilience4j.reactor.retry.RetryOperator;
 import io.github.resilience4j.retry.Retry;
 import io.github.resilience4j.retry.RetryConfig;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
@@ -31,6 +32,7 @@ public class CuentaServiceClient {
     private final CircuitBreaker cuentaServiceCircuitBreaker;
     private final Retry cuentaServiceRetry;
 
+    @Autowired
     public CuentaServiceClient(
             WebClient.Builder webClientBuilder,
             @Value("${novabank.clients.cuenta-service.base-url:http://CUENTA-SERVICE}") String baseUrl

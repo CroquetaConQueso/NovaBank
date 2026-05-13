@@ -14,6 +14,7 @@ import io.github.resilience4j.retry.Retry;
 import io.github.resilience4j.retry.RetryConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.stereotype.Service;
@@ -38,6 +39,7 @@ public class ExchangeRateService {
     private final Retry exchangeRateRetry;
     private final ExchangeRateCache exchangeRateCache;
 
+    @Autowired
     public ExchangeRateService(
             WebClient.Builder webClientBuilder,
             @Value("${novabank.clients.exchange-rate-service.base-url:http://EXCHANGE-RATE-SERVICE}") String baseUrl,

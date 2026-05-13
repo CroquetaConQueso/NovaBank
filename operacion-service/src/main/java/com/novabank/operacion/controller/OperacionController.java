@@ -15,6 +15,7 @@ import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -48,9 +49,10 @@ public class OperacionController {
             @ApiResponse(responseCode = "503", description = "cuenta-service no disponible")
     })
     public Mono<OperacionResponseDTO> depositar(
-            @Valid @RequestBody OperacionRequestDTO request
+            @Valid @RequestBody OperacionRequestDTO request,
+            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey
     ) {
-        return operacionService.depositar(request);
+        return operacionService.depositar(request, idempotencyKey);
     }
 
     @PostMapping("/retiro")
@@ -67,9 +69,10 @@ public class OperacionController {
             @ApiResponse(responseCode = "503", description = "cuenta-service no disponible")
     })
     public Mono<OperacionResponseDTO> retirar(
-            @Valid @RequestBody OperacionRequestDTO request
+            @Valid @RequestBody OperacionRequestDTO request,
+            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey
     ) {
-        return operacionService.retirar(request);
+        return operacionService.retirar(request, idempotencyKey);
     }
 
     @PostMapping("/transferencia")
@@ -86,9 +89,10 @@ public class OperacionController {
             @ApiResponse(responseCode = "503", description = "cuenta-service no disponible")
     })
     public Mono<OperacionResponseDTO> transferir(
-            @Valid @RequestBody TransferenciaRequestDTO request
+            @Valid @RequestBody TransferenciaRequestDTO request,
+            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey
     ) {
-        return operacionService.transferir(request);
+        return operacionService.transferir(request, idempotencyKey);
     }
 
     @PostMapping("/transferencias/divisa")
@@ -105,9 +109,10 @@ public class OperacionController {
             @ApiResponse(responseCode = "503", description = "Tipo de cambio no disponible o servicio remoto no disponible")
     })
     public Mono<OperacionResponseDTO> transferirEnDivisa(
-            @Valid @RequestBody TransferenciaDivisaRequestDTO request
+            @Valid @RequestBody TransferenciaDivisaRequestDTO request,
+            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey
     ) {
-        return operacionService.transferirEnDivisa(request);
+        return operacionService.transferirEnDivisa(request, idempotencyKey);
     }
 
     @GetMapping("/cuentas/{cuentaId}/movimientos")

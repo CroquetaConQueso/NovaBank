@@ -1,31 +1,41 @@
 package com.novabank.operacion.service;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.novabank.operacion.client.CuentaServiceClient;
 import com.novabank.operacion.dto.AplicarMovimientoRequestDTO;
 import com.novabank.operacion.dto.AplicarMovimientoResponseDTO;
 import com.novabank.operacion.dto.CuentaOperacionRequestDTO;
 import com.novabank.operacion.dto.CuentaResponseDTO;
+import com.novabank.operacion.dto.ExchangeRateResultDTO;
 import com.novabank.operacion.dto.OperacionRequestDTO;
+import com.novabank.operacion.dto.OperacionResponseDTO;
 import com.novabank.operacion.dto.TransferenciaDivisaRequestDTO;
 import com.novabank.operacion.dto.TransferenciaRequestDTO;
 import com.novabank.operacion.exception.ExchangeRateUnavailableException;
+import com.novabank.operacion.exception.PublicIdempotencyConflictException;
 import com.novabank.operacion.exception.RemoteResourceNotFoundException;
 import com.novabank.operacion.exception.RemoteServiceException;
 import com.novabank.operacion.exception.RemoteValidationException;
 import com.novabank.operacion.exception.ValidationException;
 import com.novabank.operacion.mapper.MovimientoMapper;
+import com.novabank.operacion.model.EstadoOperacionPublicaIdempotente;
 import com.novabank.operacion.model.Movimiento;
+import com.novabank.operacion.model.OperacionPublicaIdempotente;
 import com.novabank.operacion.model.TipoMovimiento;
 import com.novabank.operacion.repository.MovimientoRepository;
+import com.novabank.operacion.repository.OperacionPublicaIdempotenteRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicLong;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -33,6 +43,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -42,6 +53,8 @@ class OperacionServiceTest {
     private CuentaServiceClient cuentaServiceClient;
     private ExchangeRateService exchangeRateService;
     private MovimientoRepository movimientoRepository;
+    private OperacionPublicaIdempotenteRepository operacionPublicaIdempotenteRepository;
+    private ObjectMapper objectMapper;
     private OperacionService service;
 
     @BeforeEach
@@ -49,7 +62,19 @@ class OperacionServiceTest {
         cuentaServiceClient = mock(CuentaServiceClient.class);
         exchangeRateService = mock(ExchangeRateService.class);
         movimientoRepository = mock(MovimientoRepository.class);
-        service = new OperacionService(cuentaServiceClient, exchangeRateService, movimientoRepository, new MovimientoMapper());
+        operacionPublicaIdempotenteRepository = mock(OperacionPublicaIdempotenteRepository.class);
+        objectMapper = new ObjectMapper().findAndRegisterModules();
+        PublicIdempotencyService publicIdempotencyService = new PublicIdempotencyService(
+                operacionPublicaIdempotenteRepository,
+                objectMapper
+        );
+        service = new OperacionService(
+                cuentaServiceClient,
+                exchangeRateService,
+                movimientoRepository,
+                new MovimientoMapper(),
+                publicIdempotencyService
+        );
     }
 
     @Test
@@ -268,8 +293,8 @@ class OperacionServiceTest {
 
     @Test
     void transferenciaEnDivisaConsultaTasaYEjecutaTransferenciaConMontoConvertido() {
-        when(exchangeRateService.obtenerCotizacion("USD", "EUR"))
-                .thenReturn(Mono.just(new ExchangeRateQuote(new BigDecimal("0.92"), false)));
+        when(exchangeRateService.obtenerTasaConOrigen("USD", "EUR"))
+                .thenReturn(Mono.just(new ExchangeRateResultDTO(new BigDecimal("0.92"), false, Instant.now())));
         when(cuentaServiceClient.aplicarMovimiento(any(AplicarMovimientoRequestDTO.class)))
                 .thenReturn(Mono.just(new AplicarMovimientoResponseDTO(
                         "op-1",
@@ -300,41 +325,13 @@ class OperacionServiceTest {
                 })
                 .verifyComplete();
 
-        verify(exchangeRateService).obtenerCotizacion("USD", "EUR");
+        verify(exchangeRateService).obtenerTasaConOrigen("USD", "EUR");
         verify(cuentaServiceClient).aplicarMovimiento(any(AplicarMovimientoRequestDTO.class));
     }
 
     @Test
-    void transferenciaEnDivisaConTasaCacheadaInformaElUsoDeCache() {
-        when(exchangeRateService.obtenerCotizacion("USD", "EUR"))
-                .thenReturn(Mono.just(new ExchangeRateQuote(new BigDecimal("0.90"), true)));
-        when(cuentaServiceClient.aplicarMovimiento(any(AplicarMovimientoRequestDTO.class)))
-                .thenReturn(Mono.just(aplicarMovimientoResponse()));
-        AtomicLong ids = new AtomicLong(40L);
-        when(movimientoRepository.save(any(Movimiento.class))).thenAnswer(invocation -> {
-            Movimiento movimiento = invocation.getArgument(0);
-            movimiento.setId(ids.getAndIncrement());
-            movimiento.setFecha(LocalDateTime.now());
-            return Mono.just(movimiento);
-        });
-
-        StepVerifier.create(service.transferirEnDivisa(new TransferenciaDivisaRequestDTO(
-                        10L,
-                        11L,
-                        new BigDecimal("100.00"),
-                        "USD",
-                        "EUR"
-                )))
-                .assertNext(response -> {
-                    assertThat(response.mensaje()).contains("tasa cacheada");
-                    assertThat(response.movimientos().get(0).cantidad()).isEqualByComparingTo("90.00");
-                })
-                .verifyComplete();
-    }
-
-    @Test
     void transferenciaEnDivisaSiFallaTipoCambioNoLlamaCuentaServiceNiGuardaMovimiento() {
-        when(exchangeRateService.obtenerCotizacion("USD", "EUR"))
+        when(exchangeRateService.obtenerTasaConOrigen("USD", "EUR"))
                 .thenReturn(Mono.error(new ExchangeRateUnavailableException("No hay tasa fiable")));
 
         StepVerifier.create(service.transferirEnDivisa(new TransferenciaDivisaRequestDTO(
@@ -347,6 +344,173 @@ class OperacionServiceTest {
                 .expectError(ExchangeRateUnavailableException.class)
                 .verify();
 
+        verifyNoInteractions(cuentaServiceClient);
+        verify(movimientoRepository, never()).save(any(Movimiento.class));
+    }
+
+    @Test
+    void transferenciaEnDivisaConTasaCacheadaMarcaLaRespuesta() {
+        when(exchangeRateService.obtenerTasaConOrigen("USD", "EUR"))
+                .thenReturn(Mono.just(new ExchangeRateResultDTO(new BigDecimal("0.92"), true, Instant.now())));
+        when(cuentaServiceClient.aplicarMovimiento(any(AplicarMovimientoRequestDTO.class)))
+                .thenReturn(Mono.just(new AplicarMovimientoResponseDTO(
+                        "op-1",
+                        "COMPLETED",
+                        "Operacion aplicada",
+                        cuenta(10L, "ES91210000000000000001"),
+                        cuenta(11L, "ES91210000000000000002")
+                )));
+        when(movimientoRepository.save(any(Movimiento.class))).thenAnswer(invocation -> {
+            Movimiento movimiento = invocation.getArgument(0);
+            movimiento.setId(70L);
+            movimiento.setFecha(LocalDateTime.now());
+            return Mono.just(movimiento);
+        });
+
+        StepVerifier.create(service.transferirEnDivisa(new TransferenciaDivisaRequestDTO(
+                        10L,
+                        11L,
+                        new BigDecimal("100.00"),
+                        "USD",
+                        "EUR"
+                )))
+                .assertNext(response -> assertThat(response.mensaje()).contains("tasa cacheada"))
+                .verifyComplete();
+    }
+
+    @Test
+    void depositoConIdempotencyKeyNuevaEjecutaUnaVezYGuardaRespuesta() {
+        OperacionPublicaIdempotente processing = operacionPublica("deposito-1", "hash", "DEPOSITO");
+        when(operacionPublicaIdempotenteRepository.findByIdempotencyKey("deposito-1"))
+                .thenReturn(Mono.empty())
+                .thenReturn(Mono.just(processing));
+        when(operacionPublicaIdempotenteRepository.insertProcessingIfAbsent(eq("deposito-1"), any(), eq("DEPOSITO")))
+                .thenReturn(Mono.just(1));
+        when(operacionPublicaIdempotenteRepository.save(any(OperacionPublicaIdempotente.class)))
+                .thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
+        when(cuentaServiceClient.depositar(eq(10L), any(CuentaOperacionRequestDTO.class)))
+                .thenReturn(Mono.just(cuenta(10L, "ES91210000000000000001")));
+        when(movimientoRepository.save(any(Movimiento.class))).thenAnswer(invocation -> {
+            Movimiento movimiento = invocation.getArgument(0);
+            movimiento.setId(40L);
+            movimiento.setFecha(LocalDateTime.now());
+            return Mono.just(movimiento);
+        });
+
+        StepVerifier.create(service.depositar(new OperacionRequestDTO(10L, new BigDecimal("50.00")), "deposito-1"))
+                .assertNext(response -> assertThat(response.tipoOperacion()).isEqualTo("DEPOSITO"))
+                .verifyComplete();
+
+        verify(cuentaServiceClient, times(1)).depositar(eq(10L), any(CuentaOperacionRequestDTO.class));
+        verify(movimientoRepository, times(1)).save(any(Movimiento.class));
+        ArgumentCaptor<OperacionPublicaIdempotente> captor = ArgumentCaptor.forClass(OperacionPublicaIdempotente.class);
+        verify(operacionPublicaIdempotenteRepository).save(captor.capture());
+        assertThat(captor.getValue().getEstado()).isEqualTo(EstadoOperacionPublicaIdempotente.COMPLETED);
+        assertThat(captor.getValue().getResponseJson()).contains("DEPOSITO");
+    }
+
+    @Test
+    void depositoRepetidoConMismaClaveDevuelveRespuestaSinDuplicarSaldoNiMovimiento() throws Exception {
+        OperacionResponseDTO response = new OperacionResponseDTO(
+                "DEPOSITO",
+                "Deposito realizado correctamente",
+                List.of(new com.novabank.operacion.dto.MovimientoResponseDTO(
+                        40L,
+                        10L,
+                        "ES91210000000000000001",
+                        "DEPOSITO",
+                        new BigDecimal("50.00"),
+                        LocalDateTime.now()
+                ))
+        );
+        String requestHash = new PublicIdempotencyService(operacionPublicaIdempotenteRepository, objectMapper)
+                .hash("DEPOSITO|10|50");
+        when(operacionPublicaIdempotenteRepository.findByIdempotencyKey("deposito-1"))
+                .thenReturn(Mono.just(operacionCompletada("deposito-1", requestHash, "DEPOSITO", response)));
+
+        StepVerifier.create(service.depositar(new OperacionRequestDTO(10L, new BigDecimal("50.00")), "deposito-1"))
+                .assertNext(repeated -> {
+                    assertThat(repeated.tipoOperacion()).isEqualTo("DEPOSITO");
+                    assertThat(repeated.movimientos()).hasSize(1);
+                    assertThat(repeated.movimientos().get(0).id()).isEqualTo(40L);
+                })
+                .verifyComplete();
+
+        verifyNoInteractions(cuentaServiceClient);
+        verify(movimientoRepository, never()).save(any(Movimiento.class));
+    }
+
+    @Test
+    void depositoRepetidoConMismaClaveYBodyDistintoDevuelveConflicto() {
+        when(operacionPublicaIdempotenteRepository.findByIdempotencyKey("deposito-1"))
+                .thenReturn(Mono.just(operacionCompletada(
+                        "deposito-1",
+                        "hash-distinto",
+                        "DEPOSITO",
+                        new OperacionResponseDTO("DEPOSITO", "ok", List.of())
+                )));
+
+        StepVerifier.create(service.depositar(new OperacionRequestDTO(10L, new BigDecimal("50.00")), "deposito-1"))
+                .expectError(PublicIdempotencyConflictException.class)
+                .verify();
+
+        verifyNoInteractions(cuentaServiceClient);
+        verify(movimientoRepository, never()).save(any(Movimiento.class));
+    }
+
+    @Test
+    void transferenciaConIdempotencyKeyUsaOperationIdEstableEnCuentaService() {
+        when(operacionPublicaIdempotenteRepository.findByIdempotencyKey("transferencia-1"))
+                .thenReturn(Mono.empty())
+                .thenReturn(Mono.just(operacionPublica("transferencia-1", "hash", "TRANSFERENCIA")));
+        when(operacionPublicaIdempotenteRepository.insertProcessingIfAbsent(eq("transferencia-1"), any(), eq("TRANSFERENCIA")))
+                .thenReturn(Mono.just(1));
+        when(operacionPublicaIdempotenteRepository.save(any(OperacionPublicaIdempotente.class)))
+                .thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
+        when(cuentaServiceClient.aplicarMovimiento(any(AplicarMovimientoRequestDTO.class)))
+                .thenReturn(Mono.just(aplicarMovimientoResponse()));
+        when(movimientoRepository.save(any(Movimiento.class))).thenAnswer(invocation -> {
+            Movimiento movimiento = invocation.getArgument(0);
+            movimiento.setId(50L);
+            movimiento.setFecha(LocalDateTime.now());
+            return Mono.just(movimiento);
+        });
+
+        StepVerifier.create(service.transferir(
+                        new TransferenciaRequestDTO(10L, 11L, new BigDecimal("25.00")),
+                        "transferencia-1"
+                ))
+                .assertNext(response -> assertThat(response.movimientos()).hasSize(2))
+                .verifyComplete();
+
+        ArgumentCaptor<AplicarMovimientoRequestDTO> captor = ArgumentCaptor.forClass(AplicarMovimientoRequestDTO.class);
+        verify(cuentaServiceClient).aplicarMovimiento(captor.capture());
+        assertThat(captor.getValue().operationId()).startsWith("public-");
+    }
+
+    @Test
+    void transferenciaEnDivisaRepetidaNoConsultaTasaNiTocaCuentaService() {
+        OperacionResponseDTO response = new OperacionResponseDTO(
+                "TRANSFERENCIA",
+                "Transferencia en divisa realizada correctamente con tasa cacheada",
+                List.of()
+        );
+        String requestHash = new PublicIdempotencyService(operacionPublicaIdempotenteRepository, objectMapper)
+                .hash("TRANSFERENCIA_DIVISA|10|11|100|USD|EUR");
+        when(operacionPublicaIdempotenteRepository.findByIdempotencyKey("divisa-1"))
+                .thenReturn(Mono.just(operacionCompletada("divisa-1", requestHash, "TRANSFERENCIA_DIVISA", response)));
+
+        StepVerifier.create(service.transferirEnDivisa(new TransferenciaDivisaRequestDTO(
+                        10L,
+                        11L,
+                        new BigDecimal("100.00"),
+                        "USD",
+                        "EUR"
+                ), "divisa-1"))
+                .assertNext(repeated -> assertThat(repeated.mensaje()).contains("tasa cacheada"))
+                .verifyComplete();
+
+        verifyNoInteractions(exchangeRateService);
         verifyNoInteractions(cuentaServiceClient);
         verify(movimientoRepository, never()).save(any(Movimiento.class));
     }
@@ -380,5 +544,43 @@ class OperacionServiceTest {
         movimiento.setCantidad(new BigDecimal(cantidad));
         movimiento.setFecha(fecha);
         return movimiento;
+    }
+
+    private OperacionPublicaIdempotente operacionPublica(String key, String requestHash, String tipoOperacion) {
+        return OperacionPublicaIdempotente.builder()
+                .id(1L)
+                .idempotencyKey(key)
+                .requestHash(requestHash)
+                .tipoOperacion(tipoOperacion)
+                .estado(EstadoOperacionPublicaIdempotente.PROCESSING)
+                .fechaCreacion(LocalDateTime.now())
+                .fechaActualizacion(LocalDateTime.now())
+                .build();
+    }
+
+    private OperacionPublicaIdempotente operacionCompletada(
+            String key,
+            String requestHash,
+            String tipoOperacion,
+            OperacionResponseDTO response
+    ) {
+        return OperacionPublicaIdempotente.builder()
+                .id(1L)
+                .idempotencyKey(key)
+                .requestHash(requestHash)
+                .tipoOperacion(tipoOperacion)
+                .estado(EstadoOperacionPublicaIdempotente.COMPLETED)
+                .responseJson(serializar(response))
+                .fechaCreacion(LocalDateTime.now())
+                .fechaActualizacion(LocalDateTime.now())
+                .build();
+    }
+
+    private String serializar(OperacionResponseDTO response) {
+        try {
+            return objectMapper.writeValueAsString(response);
+        } catch (Exception ex) {
+            throw new IllegalStateException(ex);
+        }
     }
 }

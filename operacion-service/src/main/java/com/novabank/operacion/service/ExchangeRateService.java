@@ -1,8 +1,7 @@
 package com.novabank.operacion.service;
 
-import com.github.benmanes.caffeine.cache.Cache;
-import com.github.benmanes.caffeine.cache.Caffeine;
 import com.novabank.operacion.dto.ExchangeRateResponseDTO;
+import com.novabank.operacion.dto.ExchangeRateResultDTO;
 import com.novabank.operacion.exception.ExchangeRateUnavailableException;
 import com.novabank.operacion.exception.ValidationException;
 import com.novabank.operacion.tracing.CorrelationIdSupport;
@@ -15,6 +14,7 @@ import io.github.resilience4j.retry.Retry;
 import io.github.resilience4j.retry.RetryConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.stereotype.Service;
@@ -37,12 +37,14 @@ public class ExchangeRateService {
     private final Duration timeout;
     private final CircuitBreaker exchangeRateCircuitBreaker;
     private final Retry exchangeRateRetry;
-    private final Cache<ExchangeRatePair, BigDecimal> cache;
+    private final ExchangeRateCache exchangeRateCache;
 
+    @Autowired
     public ExchangeRateService(
             WebClient.Builder webClientBuilder,
             @Value("${novabank.clients.exchange-rate-service.base-url:http://EXCHANGE-RATE-SERVICE}") String baseUrl,
-            @Value("${novabank.clients.exchange-rate-service.timeout:3s}") Duration timeout
+            @Value("${novabank.clients.exchange-rate-service.timeout:3s}") Duration timeout,
+            ExchangeRateCache exchangeRateCache
     ) {
         this(
                 webClientBuilder,
@@ -50,28 +52,7 @@ public class ExchangeRateService {
                 timeout,
                 CircuitBreaker.of("exchangeRateCircuitBreaker", circuitBreakerConfig()),
                 Retry.of("exchangeRateRetry", retryConfig()),
-                Caffeine.newBuilder()
-                        .expireAfterWrite(Duration.ofMinutes(5))
-                        .build()
-        );
-    }
-
-    ExchangeRateService(
-            WebClient.Builder webClientBuilder,
-            String baseUrl,
-            Duration timeout,
-            CircuitBreaker exchangeRateCircuitBreaker,
-            Retry exchangeRateRetry
-    ) {
-        this(
-                webClientBuilder,
-                baseUrl,
-                timeout,
-                exchangeRateCircuitBreaker,
-                exchangeRateRetry,
-                Caffeine.newBuilder()
-                        .expireAfterWrite(Duration.ofMinutes(5))
-                        .build()
+                exchangeRateCache
         );
     }
 
@@ -81,26 +62,25 @@ public class ExchangeRateService {
             Duration timeout,
             CircuitBreaker exchangeRateCircuitBreaker,
             Retry exchangeRateRetry,
-            Cache<ExchangeRatePair, BigDecimal> cache
+            ExchangeRateCache exchangeRateCache
     ) {
         this.webClient = webClientBuilder.baseUrl(baseUrl).build();
         this.timeout = timeout;
         this.exchangeRateCircuitBreaker = exchangeRateCircuitBreaker;
         this.exchangeRateRetry = exchangeRateRetry;
-        this.cache = cache;
+        this.exchangeRateCache = exchangeRateCache;
     }
 
     public Mono<BigDecimal> obtenerTasa(String from, String to) {
-        return obtenerCotizacion(from, to)
-                .map(ExchangeRateQuote::tasa);
+        return obtenerTasaConOrigen(from, to)
+                .map(ExchangeRateResultDTO::tasa);
     }
 
-    public Mono<ExchangeRateQuote> obtenerCotizacion(String from, String to) {
+    public Mono<ExchangeRateResultDTO> obtenerTasaConOrigen(String from, String to) {
         String fromNormalizado = normalizarDivisa(from, "monedaOrigen");
         String toNormalizado = normalizarDivisa(to, "monedaDestino");
-        ExchangeRatePair cacheKey = new ExchangeRatePair(fromNormalizado, toNormalizado);
 
-        Mono<BigDecimal> llamadaRemota = webClient.get()
+        Mono<ExchangeRateResultDTO> llamadaRemota = webClient.get()
                 .uri(uriBuilder -> uriBuilder.path("/api/exchange-rate")
                         .queryParam("from", fromNormalizado)
                         .queryParam("to", toNormalizado)
@@ -129,6 +109,8 @@ public class ExchangeRateService {
                 })
                 .map(ExchangeRateResponseDTO::tasa)
                 .flatMap(this::validarTasa)
+                .doOnNext(tasa -> exchangeRateCache.guardar(fromNormalizado, toNormalizado, tasa))
+                .map(tasa -> new ExchangeRateResultDTO(tasa, false, java.time.Instant.now()))
                 .onErrorMap(WebClientRequestException.class, this::servicioNoDisponible)
                 .onErrorMap(TimeoutException.class, this::timeout)
                 .onErrorMap(ex -> !(ex instanceof ExchangeRateUnavailableException) && !(ex instanceof ValidationException),
@@ -137,9 +119,11 @@ public class ExchangeRateService {
         return llamadaRemota
                 .transformDeferred(RetryOperator.of(exchangeRateRetry))
                 .transformDeferred(CircuitBreakerOperator.of(exchangeRateCircuitBreaker))
-                .doOnNext(tasa -> cache.put(cacheKey, tasa))
-                .map(tasa -> new ExchangeRateQuote(tasa, false))
-                .onErrorResume(error -> usarCacheSiErrorTecnico(cacheKey, error));
+                .onErrorMap(
+                        CallNotPermittedException.class,
+                        error -> new ExchangeRateUnavailableException("exchange-rate-service no esta disponible", error)
+                )
+                .onErrorResume(error -> resolverConCacheSiEsTecnico(error, fromNormalizado, toNormalizado));
     }
 
     private String normalizarDivisa(String valor, String campo) {
@@ -156,30 +140,6 @@ public class ExchangeRateService {
         }
 
         return Mono.just(tasa);
-    }
-
-    private Mono<ExchangeRateQuote> usarCacheSiErrorTecnico(ExchangeRatePair cacheKey, Throwable error) {
-        if (!esErrorTecnico(error)) {
-            return Mono.error(error);
-        }
-
-        BigDecimal tasaCacheada = cache.getIfPresent(cacheKey);
-        if (tasaCacheada != null && tasaCacheada.compareTo(BigDecimal.ZERO) > 0) {
-            log.warn(
-                    "usando tasa cacheada from={} to={} causa={}",
-                    cacheKey.from(),
-                    cacheKey.to(),
-                    error.getClass().getSimpleName()
-            );
-            return Mono.just(new ExchangeRateQuote(tasaCacheada, true));
-        }
-
-        return Mono.error(new ExchangeRateUnavailableException("No se pudo obtener una tasa de cambio fiable", error));
-    }
-
-    private boolean esErrorTecnico(Throwable error) {
-        return error instanceof RetryableExchangeRateUnavailableException
-                || error instanceof CallNotPermittedException;
     }
 
     private Mono<? extends Throwable> mapearError(ClientResponse response) {
@@ -213,6 +173,30 @@ public class ExchangeRateService {
         return new RetryableExchangeRateUnavailableException("exchange-rate-service no respondio a tiempo", ex);
     }
 
+    private Mono<ExchangeRateResultDTO> resolverConCacheSiEsTecnico(
+            Throwable error,
+            String from,
+            String to
+    ) {
+        // Reutiliza una tasa reciente solo ante fallos tecnicos del proveedor.
+        if (!esFalloTecnico(error)) {
+            return Mono.error(error);
+        }
+
+        return exchangeRateCache.obtener(from, to)
+                .map(cached -> {
+                    log.warn("usando tasa cacheada from={} to={}", from, to);
+                    return Mono.just(cached);
+                })
+                .orElseGet(() -> Mono.error(error));
+    }
+
+    private boolean esFalloTecnico(Throwable error) {
+        return error instanceof RetryableExchangeRateUnavailableException
+                || error.getCause() instanceof RetryableExchangeRateUnavailableException
+                || error.getCause() instanceof CallNotPermittedException;
+    }
+
     private static CircuitBreakerConfig circuitBreakerConfig() {
         return CircuitBreakerConfig.custom()
                 .failureRateThreshold(50)
@@ -243,8 +227,5 @@ public class ExchangeRateService {
         RetryableExchangeRateUnavailableException(String message, Throwable cause) {
             super(message, cause);
         }
-    }
-
-    record ExchangeRatePair(String from, String to) {
     }
 }

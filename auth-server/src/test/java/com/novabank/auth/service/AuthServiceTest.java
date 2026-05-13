@@ -11,6 +11,7 @@ import com.novabank.auth.model.Usuario;
 import com.novabank.auth.repository.UsuarioRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import reactor.core.publisher.Mono;
@@ -60,6 +61,20 @@ class AuthServiceTest {
 
         StepVerifier.create(authService.registrar(new RegisterRequestDTO("ana", "password123")))
                 .expectError(DuplicateUserException.class)
+                .verify();
+    }
+
+    @Test
+    void registrarConvierteViolacionUniqueConcurrenteEnDuplicadoControlado() {
+        when(usuarioRepository.existsByUsername("ana")).thenReturn(Mono.just(false));
+        when(usuarioRepository.save(any(Usuario.class)))
+                .thenReturn(Mono.error(new DataIntegrityViolationException("unique constraint")));
+
+        StepVerifier.create(authService.registrar(new RegisterRequestDTO("ana", "password123")))
+                .expectErrorSatisfies(error -> {
+                    assertThat(error).isInstanceOf(DuplicateUserException.class);
+                    assertThat(error).hasMessage("Ya existe un usuario con alguno de los datos unicos indicados");
+                })
                 .verify();
     }
 

@@ -32,6 +32,11 @@ public class GlobalExceptionHandler {
         return response(HttpStatus.CONFLICT, "REMOTE_CONFLICT", ex.getMessage());
     }
 
+    @ExceptionHandler(PublicIdempotencyConflictException.class)
+    public Mono<ResponseEntity<ErrorResponseDTO>> handlePublicIdempotencyConflict(PublicIdempotencyConflictException ex) {
+        return response(HttpStatus.CONFLICT, "PUBLIC_IDEMPOTENCY_CONFLICT", ex.getMessage());
+    }
+
     @ExceptionHandler(RemoteServiceException.class)
     public Mono<ResponseEntity<ErrorResponseDTO>> handleRemoteService(RemoteServiceException ex) {
         return response(HttpStatus.SERVICE_UNAVAILABLE, "CUENTA_SERVICE_UNAVAILABLE", ex.getMessage());

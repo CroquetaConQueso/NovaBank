@@ -1,8 +1,5 @@
 package com.novabank.gateway.config;
 
-import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.web.reactive.function.client.WebClientCustomizer;
 import org.springframework.cloud.client.loadbalancer.LoadBalanced;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -12,19 +9,20 @@ import org.springframework.web.reactive.function.client.ExchangeFilterFunction;
 import org.springframework.web.reactive.function.client.WebClient;
 
 import com.novabank.gateway.tracing.CorrelationIdSupport;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.boot.web.reactive.function.client.WebClientCustomizer;
 
 @Configuration
 public class WebClientConfig {
 
-    private final ObjectProvider<WebClientCustomizer> webClientCustomizers;
+    private final java.util.List<WebClientCustomizer> customizers;
 
-    public WebClientConfig() {
-        this.webClientCustomizers = null;
+    public WebClientConfig(ObjectProvider<WebClientCustomizer> customizers) {
+        this.customizers = customizers.orderedStream().toList();
     }
 
-    @Autowired
-    public WebClientConfig(ObjectProvider<WebClientCustomizer> webClientCustomizers) {
-        this.webClientCustomizers = webClientCustomizers;
+    public WebClientConfig() {
+        this.customizers = java.util.List.of();
     }
 
     /**
@@ -36,9 +34,7 @@ public class WebClientConfig {
     public WebClient.Builder loadBalancedWebClientBuilder() {
         WebClient.Builder builder = WebClient.builder()
                 .filter(correlationIdFilter());
-        if (webClientCustomizers != null) {
-            webClientCustomizers.orderedStream().forEach(customizer -> customizer.customize(builder));
-        }
+        customizers.forEach(customizer -> customizer.customize(builder));
         return builder;
     }
 

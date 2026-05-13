@@ -16,22 +16,15 @@ public class MovimientoEventService {
 
     private final Sinks.Many<MovimientoEventDTO> sink = Sinks.many()
             .multicast()
-            .directBestEffort();
+            .onBackpressureBuffer();
     private final AtomicLong eventosDescartados = new AtomicLong();
 
     /**
-     * Bus en memoria para SSE. Prioriza la estabilidad del emisor: un
-     * consumidor lento puede perder eventos y no hay replay tras reinicios.
+     * Bus SSE en memoria: no persiste eventos y descarta si un consumidor lento
+     * no puede seguir el ritmo.
      */
     public void publicar(MovimientoEventDTO evento) {
-        Sinks.EmitResult resultado = sink.tryEmitNext(evento);
-        if (resultado.isFailure()) {
-            long total = eventosDescartados.incrementAndGet();
-            log.warn("evento SSE descartado resultado={} cuentaId={} totalDescartados={}",
-                    resultado,
-                    evento != null ? evento.cuentaId() : null,
-                    total);
-        }
+        sink.tryEmitNext(evento);
     }
 
     public Flux<MovimientoEventDTO> streamDeCuenta(Long cuentaId) {
@@ -42,16 +35,21 @@ public class MovimientoEventService {
 
             return sink.asFlux()
                     .filter(evento -> cuentaId.equals(evento.cuentaId()))
-                    .onBackpressureDrop(evento -> {
-                        long total = eventosDescartados.incrementAndGet();
-                        log.warn("evento SSE descartado por backpressure cuentaId={} totalDescartados={}",
-                                evento.cuentaId(),
-                                total);
-                    });
+                    .onBackpressureDrop(this::registrarDescarte);
         });
     }
 
     long eventosDescartados() {
         return eventosDescartados.get();
+    }
+
+    private void registrarDescarte(MovimientoEventDTO evento) {
+        long total = eventosDescartados.incrementAndGet();
+        log.warn(
+                "evento SSE descartado por backpressure cuentaId={} operationId={} descartados={}",
+                evento.cuentaId(),
+                evento.operationId(),
+                total
+        );
     }
 }

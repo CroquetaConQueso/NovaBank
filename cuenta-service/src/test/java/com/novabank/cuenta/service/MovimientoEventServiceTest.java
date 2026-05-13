@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import reactor.test.StepVerifier;
 
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.time.LocalDateTime;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -43,13 +44,14 @@ class MovimientoEventServiceTest {
     }
 
     @Test
-    void consumidorSinDemandaDescartaEventoSinBloquearEmisor() {
+    void consumidorSinDemandaDescartaEventoPorBackpressure() {
         StepVerifier.create(movimientoEventService.streamDeCuenta(1L), 0)
                 .then(() -> movimientoEventService.publicar(evento(1L, "DEPOSITO")))
+                .thenAwait(Duration.ofMillis(50))
                 .thenCancel()
                 .verify();
 
-        assertThat(movimientoEventService.eventosDescartados()).isGreaterThan(0);
+        assertThat(movimientoEventService.eventosDescartados()).isEqualTo(1);
     }
 
     private MovimientoEventDTO evento(Long cuentaId, String tipo) {

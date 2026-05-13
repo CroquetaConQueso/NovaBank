@@ -1,6 +1,6 @@
-# Documentacion Del Modulo 4
+# Documentacion Interna - NovaBank Modulo 5
 
-Esta carpeta contiene material de apoyo para ejecutar, probar y revisar NovaBank Digital Services en su version de microservicios sincronicos.
+Esta carpeta contiene material de apoyo para ejecutar, probar y revisar NovaBank en su estado final del Modulo 5.
 
 ## Contenido
 
@@ -9,6 +9,7 @@ docs/
 |-- README.md
 |-- sql/
 |   |-- README.md
+|   |-- 00-novabank-modulo5-completo.sql
 |   |-- 01-novabank-auth.sql
 |   |-- 02-novabank-clientes.sql
 |   |-- 03-novabank-cuentas.sql
@@ -18,26 +19,28 @@ docs/
 
 ## SQL
 
-Los scripts de `docs/sql` preparan las cuatro bases PostgreSQL usadas por los servicios:
+La carpeta `docs/sql` contiene los scripts para preparar las bases PostgreSQL usadas por los servicios reactivos:
 
 - `novabank_auth`
 - `novabank_clientes`
 - `novabank_cuentas`
 - `novabank_operaciones`
 
-La guia de ejecucion esta en [docs/sql/README.md](sql/README.md).
+El script recomendado para preparar todo el entorno local es:
+
+```powershell
+psql -U postgres -f docs/sql/00-novabank-modulo5-completo.sql
+```
+
+La guia completa esta en [docs/sql/README.md](sql/README.md).
 
 ## Postman
 
-La carpeta `docs/postman` contiene la coleccion de apoyo para validar el flujo funcional mediante el Gateway.
-
-El valor recomendado para la variable de entorno o coleccion es:
+La carpeta `docs/postman` conserva la coleccion disponible en el repositorio para pruebas manuales. El flujo recomendado debe pasar por el Gateway:
 
 ```text
 baseUrl = http://localhost:8080
 ```
-
-El flujo principal debe pasar por `api-gateway`, no por los puertos internos de los servicios.
 
 ## Swagger
 
@@ -47,5 +50,6 @@ Swagger se revisa por microservicio:
 - `cliente-service`: `http://localhost:8081/swagger-ui/index.html`
 - `cuenta-service`: `http://localhost:8082/swagger-ui/index.html`
 - `operacion-service`: `http://localhost:8083/swagger-ui/index.html`
+- `exchange-rate-mock-service`: `http://localhost:8084/swagger-ui/index.html`
 
-El Gateway no agrega Swagger en esta entrega.
+El Gateway no agrega Swagger en esta version.

@@ -40,17 +40,20 @@ public class OperacionService {
     private final ExchangeRateService exchangeRateService;
     private final MovimientoRepository movimientoRepository;
     private final MovimientoMapper movimientoMapper;
+    private final PublicIdempotencyService publicIdempotencyService;
 
     public OperacionService(
             CuentaServiceClient cuentaServiceClient,
             ExchangeRateService exchangeRateService,
             MovimientoRepository movimientoRepository,
-            MovimientoMapper movimientoMapper
+            MovimientoMapper movimientoMapper,
+            PublicIdempotencyService publicIdempotencyService
     ) {
         this.cuentaServiceClient = cuentaServiceClient;
         this.exchangeRateService = exchangeRateService;
         this.movimientoRepository = movimientoRepository;
         this.movimientoMapper = movimientoMapper;
+        this.publicIdempotencyService = publicIdempotencyService;
     }
 
     /**
@@ -59,6 +62,20 @@ public class OperacionService {
      */
     @Transactional
     public Mono<OperacionResponseDTO> depositar(OperacionRequestDTO request) {
+        return depositarCore(request);
+    }
+
+    @Transactional
+    public Mono<OperacionResponseDTO> depositar(OperacionRequestDTO request, String idempotencyKey) {
+        return publicIdempotencyService.execute(
+                idempotencyKey,
+                "DEPOSITO",
+                hashDeposito(request),
+                () -> depositarCore(request)
+        );
+    }
+
+    private Mono<OperacionResponseDTO> depositarCore(OperacionRequestDTO request) {
         return cuentaServiceClient.depositar(
                         request.cuentaId(),
                         new CuentaOperacionRequestDTO(request.cantidad())
@@ -79,6 +96,20 @@ public class OperacionService {
      */
     @Transactional
     public Mono<OperacionResponseDTO> retirar(OperacionRequestDTO request) {
+        return retirarCore(request);
+    }
+
+    @Transactional
+    public Mono<OperacionResponseDTO> retirar(OperacionRequestDTO request, String idempotencyKey) {
+        return publicIdempotencyService.execute(
+                idempotencyKey,
+                "RETIRO",
+                hashRetiro(request),
+                () -> retirarCore(request)
+        );
+    }
+
+    private Mono<OperacionResponseDTO> retirarCore(OperacionRequestDTO request) {
         return cuentaServiceClient.retirar(
                         request.cuentaId(),
                         new CuentaOperacionRequestDTO(request.cantidad())
@@ -99,8 +130,25 @@ public class OperacionService {
      */
     @Transactional
     public Mono<OperacionResponseDTO> transferir(TransferenciaRequestDTO request) {
+        return transferirCore(request, UUID.randomUUID().toString());
+    }
+
+    @Transactional
+    public Mono<OperacionResponseDTO> transferir(TransferenciaRequestDTO request, String idempotencyKey) {
+        String normalizedKey = publicIdempotencyService.normalizarKey(idempotencyKey);
+        String operationId = normalizedKey == null ? UUID.randomUUID().toString() : operationIdDesdeIdempotencyKey(normalizedKey);
+
+        return publicIdempotencyService.execute(
+                normalizedKey,
+                "TRANSFERENCIA",
+                hashTransferencia(request),
+                () -> transferirCore(request, operationId)
+        );
+    }
+
+    private Mono<OperacionResponseDTO> transferirCore(TransferenciaRequestDTO request, String operationId) {
         return cuentaServiceClient.aplicarMovimiento(new AplicarMovimientoRequestDTO(
-                        UUID.randomUUID().toString(),
+                        operationId,
                         request.cuentaOrigenId(),
                         request.cuentaDestinoId(),
                         request.cantidad(),
@@ -137,14 +185,37 @@ public class OperacionService {
      */
     @Transactional
     public Mono<OperacionResponseDTO> transferirEnDivisa(TransferenciaDivisaRequestDTO request) {
+        return transferirEnDivisaCore(request, UUID.randomUUID().toString());
+    }
+
+    @Transactional
+    public Mono<OperacionResponseDTO> transferirEnDivisa(TransferenciaDivisaRequestDTO request, String idempotencyKey) {
+        String normalizedKey = publicIdempotencyService.normalizarKey(idempotencyKey);
+        String operationId = normalizedKey == null ? UUID.randomUUID().toString() : operationIdDesdeIdempotencyKey(normalizedKey);
+
+        return publicIdempotencyService.execute(
+                normalizedKey,
+                "TRANSFERENCIA_DIVISA",
+                hashTransferenciaDivisa(request),
+                () -> transferirEnDivisaCore(request, operationId)
+        );
+    }
+
+    private Mono<OperacionResponseDTO> transferirEnDivisaCore(
+            TransferenciaDivisaRequestDTO request,
+            String operationId
+    ) {
         return exchangeRateService.obtenerTasa(request.monedaOrigen(), request.monedaDestino())
                 .map(tasa -> request.monto().multiply(tasa).setScale(2, RoundingMode.HALF_UP))
                 .doOnNext(montoConvertido -> log.info("monto convertido para transferencia en divisa importe={}", montoConvertido))
-                .flatMap(montoConvertido -> transferir(new TransferenciaRequestDTO(
-                        request.cuentaOrigenId(),
-                        request.cuentaDestinoId(),
-                        montoConvertido
-                )))
+                .flatMap(montoConvertido -> transferirCore(
+                        new TransferenciaRequestDTO(
+                                request.cuentaOrigenId(),
+                                request.cuentaDestinoId(),
+                                montoConvertido
+                        ),
+                        operationId
+                ))
                 .map(response -> new OperacionResponseDTO(
                         response.tipoOperacion(),
                         "Transferencia en divisa realizada correctamente",
@@ -213,6 +284,54 @@ public class OperacionService {
         if (cuentaId == null || cuentaId <= 0) {
             throw new ValidationException("El id de la cuenta debe ser positivo");
         }
+    }
+
+    private String hashDeposito(OperacionRequestDTO request) {
+        return publicIdempotencyService.hash(String.join("|",
+                "DEPOSITO",
+                String.valueOf(request.cuentaId()),
+                normalizarImporte(request.cantidad())
+        ));
+    }
+
+    private String hashRetiro(OperacionRequestDTO request) {
+        return publicIdempotencyService.hash(String.join("|",
+                "RETIRO",
+                String.valueOf(request.cuentaId()),
+                normalizarImporte(request.cantidad())
+        ));
+    }
+
+    private String hashTransferencia(TransferenciaRequestDTO request) {
+        return publicIdempotencyService.hash(String.join("|",
+                "TRANSFERENCIA",
+                String.valueOf(request.cuentaOrigenId()),
+                String.valueOf(request.cuentaDestinoId()),
+                normalizarImporte(request.cantidad())
+        ));
+    }
+
+    private String hashTransferenciaDivisa(TransferenciaDivisaRequestDTO request) {
+        return publicIdempotencyService.hash(String.join("|",
+                "TRANSFERENCIA_DIVISA",
+                String.valueOf(request.cuentaOrigenId()),
+                String.valueOf(request.cuentaDestinoId()),
+                normalizarImporte(request.monto()),
+                normalizarMoneda(request.monedaOrigen()),
+                normalizarMoneda(request.monedaDestino())
+        ));
+    }
+
+    private String operationIdDesdeIdempotencyKey(String idempotencyKey) {
+        return "public-" + publicIdempotencyService.hash("operation|" + idempotencyKey);
+    }
+
+    private String normalizarImporte(BigDecimal importe) {
+        return importe == null ? "" : importe.stripTrailingZeros().toPlainString();
+    }
+
+    private String normalizarMoneda(String moneda) {
+        return moneda == null ? "" : moneda.trim().toUpperCase();
     }
 
     private void logOperacion(Signal<MovimientoResponseDTO> signal, String tipo) {

@@ -14,3 +14,20 @@ CREATE INDEX IF NOT EXISTS idx_movimientos_cuenta_id
 
 CREATE INDEX IF NOT EXISTS idx_movimientos_fecha
     ON movimientos (fecha);
+
+CREATE TABLE IF NOT EXISTS operaciones_publicas_idempotentes (
+    id BIGSERIAL PRIMARY KEY,
+    idempotency_key VARCHAR(150) NOT NULL,
+    request_hash VARCHAR(64) NOT NULL,
+    tipo_operacion VARCHAR(50) NOT NULL,
+    estado VARCHAR(20) NOT NULL,
+    response_json TEXT,
+    fecha_creacion TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    fecha_actualizacion TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uk_operaciones_publicas_idempotentes_key UNIQUE (idempotency_key),
+    CONSTRAINT chk_operaciones_publicas_idempotentes_estado
+        CHECK (estado IN ('PROCESSING', 'COMPLETED', 'FAILED'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_operaciones_publicas_idempotentes_estado
+    ON operaciones_publicas_idempotentes (estado);

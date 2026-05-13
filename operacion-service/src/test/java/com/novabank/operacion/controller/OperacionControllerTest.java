@@ -7,6 +7,7 @@ import com.novabank.operacion.dto.TransferenciaDivisaRequestDTO;
 import com.novabank.operacion.dto.TransferenciaRequestDTO;
 import com.novabank.operacion.exception.ExchangeRateUnavailableException;
 import com.novabank.operacion.exception.GlobalExceptionHandler;
+import com.novabank.operacion.exception.PublicIdempotencyConflictException;
 import com.novabank.operacion.exception.RemoteResourceNotFoundException;
 import com.novabank.operacion.exception.RemoteServiceException;
 import com.novabank.operacion.exception.RemoteValidationException;
@@ -29,6 +30,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.nullable;
 import static org.mockito.Mockito.when;
 
 @WebFluxTest(OperacionController.class)
@@ -44,7 +46,7 @@ class OperacionControllerTest {
 
     @Test
     void depositoDevuelveOperacionRealizada() {
-        when(operacionService.depositar(any(OperacionRequestDTO.class)))
+        when(operacionService.depositar(any(OperacionRequestDTO.class), nullable(String.class)))
                 .thenReturn(Mono.just(response("DEPOSITO")));
 
         webTestClient.post()
@@ -60,7 +62,7 @@ class OperacionControllerTest {
 
     @Test
     void retiroSinCabecerasEspecialesDevuelveOperacionRealizada() {
-        when(operacionService.retirar(any(OperacionRequestDTO.class)))
+        when(operacionService.retirar(any(OperacionRequestDTO.class), nullable(String.class)))
                 .thenReturn(Mono.just(response("RETIRO")));
 
         webTestClient.post()
@@ -75,7 +77,7 @@ class OperacionControllerTest {
 
     @Test
     void transferenciaUsaRutaEsperada() {
-        when(operacionService.transferir(any(TransferenciaRequestDTO.class)))
+        when(operacionService.transferir(any(TransferenciaRequestDTO.class), nullable(String.class)))
                 .thenReturn(Mono.just(response("TRANSFERENCIA")));
 
         webTestClient.post()
@@ -90,7 +92,7 @@ class OperacionControllerTest {
 
     @Test
     void transferenciaEnDivisaUsaRutaEsperada() {
-        when(operacionService.transferirEnDivisa(any(TransferenciaDivisaRequestDTO.class)))
+        when(operacionService.transferirEnDivisa(any(TransferenciaDivisaRequestDTO.class), nullable(String.class)))
                 .thenReturn(Mono.just(response("TRANSFERENCIA")));
 
         webTestClient.post()
@@ -111,7 +113,7 @@ class OperacionControllerTest {
 
     @Test
     void transferenciaEnDivisaSinTipoCambioDevuelve503() {
-        when(operacionService.transferirEnDivisa(any(TransferenciaDivisaRequestDTO.class)))
+        when(operacionService.transferirEnDivisa(any(TransferenciaDivisaRequestDTO.class), nullable(String.class)))
                 .thenReturn(Mono.error(new ExchangeRateUnavailableException("No hay tasa fiable")));
 
         webTestClient.post()
@@ -145,7 +147,7 @@ class OperacionControllerTest {
 
     @Test
     void cuentaServiceNoDisponibleDevuelve503Controlado() {
-        when(operacionService.depositar(any(OperacionRequestDTO.class)))
+        when(operacionService.depositar(any(OperacionRequestDTO.class), nullable(String.class)))
                 .thenReturn(Mono.error(new RemoteServiceException("cuenta-service no esta disponible")));
 
         webTestClient.post()
@@ -292,7 +294,7 @@ class OperacionControllerTest {
 
     @Test
     void depositoConCuentaNoEncontradaDevuelve404() {
-        when(operacionService.depositar(any(OperacionRequestDTO.class)))
+        when(operacionService.depositar(any(OperacionRequestDTO.class), nullable(String.class)))
                 .thenReturn(Mono.error(new RemoteResourceNotFoundException("Cuenta no encontrada")));
 
         webTestClient.post()
@@ -307,7 +309,7 @@ class OperacionControllerTest {
 
     @Test
     void retiroConSaldoInsuficienteRemotoDevuelve422() {
-        when(operacionService.retirar(any(OperacionRequestDTO.class)))
+        when(operacionService.retirar(any(OperacionRequestDTO.class), nullable(String.class)))
                 .thenReturn(Mono.error(new RemoteValidationException("Saldo insuficiente")));
 
         webTestClient.post()
@@ -318,6 +320,40 @@ class OperacionControllerTest {
                 .expectStatus().isEqualTo(422)
                 .expectBody()
                 .jsonPath("$.code").isEqualTo("REMOTE_VALIDATION_ERROR");
+    }
+
+    @Test
+    void depositoAceptaIdempotencyKey() {
+        when(operacionService.depositar(any(OperacionRequestDTO.class), nullable(String.class)))
+                .thenReturn(Mono.just(response("DEPOSITO")));
+
+        webTestClient.post()
+                .uri("/api/operaciones/deposito")
+                .header("Idempotency-Key", "deposito-1")
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(new OperacionRequestDTO(10L, new BigDecimal("50.00")))
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody()
+                .jsonPath("$.tipoOperacion").isEqualTo("DEPOSITO");
+    }
+
+    @Test
+    void conflictoDeIdempotenciaDevuelve409() {
+        when(operacionService.transferir(any(TransferenciaRequestDTO.class), nullable(String.class)))
+                .thenReturn(Mono.error(new PublicIdempotencyConflictException(
+                        "La clave de idempotencia ya existe con una peticion diferente"
+                )));
+
+        webTestClient.post()
+                .uri("/api/operaciones/transferencia")
+                .header("Idempotency-Key", "transferencia-1")
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(new TransferenciaRequestDTO(10L, 11L, new BigDecimal("50.00")))
+                .exchange()
+                .expectStatus().isEqualTo(409)
+                .expectBody()
+                .jsonPath("$.code").isEqualTo("PUBLIC_IDEMPOTENCY_CONFLICT");
     }
 
     private OperacionResponseDTO response(String tipoOperacion) {

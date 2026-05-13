@@ -20,8 +20,8 @@ public class MovimientoEventService {
     private final AtomicLong eventosDescartados = new AtomicLong();
 
     /**
-     * Bus en memoria para SSE. Los eventos no sobreviven a reinicios del
-     * servicio y solo se entregan a suscriptores activos.
+     * Bus SSE en memoria: no persiste eventos y descarta si un consumidor lento
+     * no puede seguir el ritmo.
      */
     public void publicar(MovimientoEventDTO evento) {
         sink.tryEmitNext(evento);

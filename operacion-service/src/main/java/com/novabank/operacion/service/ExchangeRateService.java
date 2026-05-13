@@ -176,6 +176,7 @@ public class ExchangeRateService {
             String from,
             String to
     ) {
+        // Reutiliza una tasa reciente solo ante fallos tecnicos del proveedor.
         if (!esFalloTecnico(error)) {
             return Mono.error(error);
         }

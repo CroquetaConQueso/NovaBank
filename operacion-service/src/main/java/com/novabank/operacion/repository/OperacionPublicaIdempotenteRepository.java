@@ -12,6 +12,9 @@ public interface OperacionPublicaIdempotenteRepository
 
     Mono<OperacionPublicaIdempotente> findByIdempotencyKey(String idempotencyKey);
 
+    /**
+     * Registra la clave publica sin fallar ante carreras de insercion.
+     */
     @Modifying
     @Query("""
             INSERT INTO operaciones_publicas_idempotentes

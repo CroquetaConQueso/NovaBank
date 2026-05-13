@@ -37,6 +37,10 @@ public class PublicIdempotencyService {
             String requestHash,
             Supplier<Mono<OperacionResponseDTO>> operation
     ) {
+        /*
+         * Sin clave publica se mantiene compatibilidad; con clave se evita
+         * ejecutar dos veces la misma operacion financiera.
+         */
         String key = normalizarKey(idempotencyKey);
         if (key == null) {
             return Mono.defer(operation);

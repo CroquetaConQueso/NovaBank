@@ -11,6 +11,9 @@ public interface OperacionIdempotenteRepository extends ReactiveCrudRepository<O
 
     Mono<OperacionIdempotente> findByOperationId(String operationId);
 
+    /**
+     * Evita que dos peticiones concurrentes creen la misma operacion interna.
+     */
     @Modifying
     @Query("""
             INSERT INTO operaciones_idempotentes

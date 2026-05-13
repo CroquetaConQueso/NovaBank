@@ -14,23 +14,32 @@ CREATE TABLE IF NOT EXISTS movimientos (
     cuenta_id BIGINT NOT NULL,
     numero_cuenta VARCHAR(34) NOT NULL,
     tipo VARCHAR(50) NOT NULL,
-    cantidad NUMERIC(15, 2) NOT NULL,
+    cantidad NUMERIC(15,2) NOT NULL,
     fecha TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT chk_movimientos_tipo CHECK (
-        tipo IN (
-            'DEPOSITO',
-            'RETIRO',
-            'TRANSFERENCIA_SALIENTE',
-            'TRANSFERENCIA_ENTRANTE'
-        )
-    )
+    CONSTRAINT chk_movimientos_tipo
+        CHECK (tipo IN ('DEPOSITO', 'RETIRO', 'TRANSFERENCIA_SALIENTE', 'TRANSFERENCIA_ENTRANTE'))
 );
 
-CREATE INDEX IF NOT EXISTS idx_movimientos_cuenta_id_fecha
-    ON movimientos (cuenta_id, fecha DESC);
+CREATE INDEX IF NOT EXISTS idx_movimientos_cuenta_id
+    ON movimientos (cuenta_id);
 
 CREATE INDEX IF NOT EXISTS idx_movimientos_fecha
     ON movimientos (fecha);
 
-CREATE INDEX IF NOT EXISTS idx_movimientos_tipo
-    ON movimientos (tipo);
+-- Idempotencia publica mediante header Idempotency-Key.
+CREATE TABLE IF NOT EXISTS operaciones_publicas_idempotentes (
+    id BIGSERIAL PRIMARY KEY,
+    idempotency_key VARCHAR(150) NOT NULL,
+    request_hash VARCHAR(64) NOT NULL,
+    tipo_operacion VARCHAR(50) NOT NULL,
+    estado VARCHAR(20) NOT NULL,
+    response_json TEXT,
+    fecha_creacion TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    fecha_actualizacion TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uk_operaciones_publicas_idempotentes_key UNIQUE (idempotency_key),
+    CONSTRAINT chk_operaciones_publicas_idempotentes_estado
+        CHECK (estado IN ('PROCESSING', 'COMPLETED', 'FAILED'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_operaciones_publicas_idempotentes_estado
+    ON operaciones_publicas_idempotentes (estado);

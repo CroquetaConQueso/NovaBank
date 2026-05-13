@@ -7,6 +7,7 @@ import com.novabank.operacion.dto.TransferenciaDivisaRequestDTO;
 import com.novabank.operacion.dto.TransferenciaRequestDTO;
 import com.novabank.operacion.service.OperacionService;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -46,10 +47,12 @@ public class OperacionController {
             @ApiResponse(responseCode = "400", description = "Datos invalidos o peticion mal formada"),
             @ApiResponse(responseCode = "401", description = "Token ausente o invalido al acceder mediante Gateway"),
             @ApiResponse(responseCode = "404", description = "Cuenta no encontrada"),
+            @ApiResponse(responseCode = "409", description = "Conflicto de idempotencia publica"),
             @ApiResponse(responseCode = "503", description = "cuenta-service no disponible")
     })
     public Mono<OperacionResponseDTO> depositar(
             @Valid @RequestBody OperacionRequestDTO request,
+            @Parameter(description = "Clave opcional para repetir la misma peticion sin duplicar efectos", example = "deposito-001")
             @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey
     ) {
         return operacionService.depositar(request, idempotencyKey);
@@ -65,11 +68,13 @@ public class OperacionController {
             @ApiResponse(responseCode = "400", description = "Datos invalidos o peticion mal formada"),
             @ApiResponse(responseCode = "401", description = "Token ausente o invalido al acceder mediante Gateway"),
             @ApiResponse(responseCode = "404", description = "Cuenta no encontrada"),
+            @ApiResponse(responseCode = "409", description = "Conflicto de idempotencia publica"),
             @ApiResponse(responseCode = "422", description = "Saldo insuficiente"),
             @ApiResponse(responseCode = "503", description = "cuenta-service no disponible")
     })
     public Mono<OperacionResponseDTO> retirar(
             @Valid @RequestBody OperacionRequestDTO request,
+            @Parameter(description = "Clave opcional para repetir la misma peticion sin duplicar efectos", example = "retiro-001")
             @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey
     ) {
         return operacionService.retirar(request, idempotencyKey);
@@ -85,11 +90,13 @@ public class OperacionController {
             @ApiResponse(responseCode = "400", description = "Datos invalidos o peticion mal formada"),
             @ApiResponse(responseCode = "401", description = "Token ausente o invalido al acceder mediante Gateway"),
             @ApiResponse(responseCode = "404", description = "Cuenta origen o destino no encontrada"),
+            @ApiResponse(responseCode = "409", description = "Conflicto de idempotencia publica"),
             @ApiResponse(responseCode = "422", description = "Saldo insuficiente"),
             @ApiResponse(responseCode = "503", description = "cuenta-service no disponible")
     })
     public Mono<OperacionResponseDTO> transferir(
             @Valid @RequestBody TransferenciaRequestDTO request,
+            @Parameter(description = "Clave opcional para repetir la misma peticion sin duplicar efectos", example = "transferencia-001")
             @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey
     ) {
         return operacionService.transferir(request, idempotencyKey);
@@ -98,18 +105,20 @@ public class OperacionController {
     @PostMapping("/transferencias/divisa")
     @Operation(
             summary = "Realizar transferencia en divisa",
-            description = "Consulta una tasa de cambio fiable antes de solicitar a cuenta-service la actualizacion de saldos."
+            description = "Consulta una tasa remota, reutiliza una tasa cacheada vigente si el proveedor falla tecnicamente y devuelve 503 si no hay tasa fiable."
     )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Transferencia en divisa realizada correctamente"),
             @ApiResponse(responseCode = "400", description = "Datos invalidos o peticion mal formada"),
             @ApiResponse(responseCode = "401", description = "Token ausente o invalido al acceder mediante Gateway"),
             @ApiResponse(responseCode = "404", description = "Cuenta origen o destino no encontrada"),
+            @ApiResponse(responseCode = "409", description = "Conflicto de idempotencia publica"),
             @ApiResponse(responseCode = "422", description = "Saldo insuficiente"),
-            @ApiResponse(responseCode = "503", description = "Tipo de cambio no disponible o servicio remoto no disponible")
+            @ApiResponse(responseCode = "503", description = "Sin tasa remota ni cacheada vigente, o servicio remoto no disponible")
     })
     public Mono<OperacionResponseDTO> transferirEnDivisa(
             @Valid @RequestBody TransferenciaDivisaRequestDTO request,
+            @Parameter(description = "Clave opcional para repetir la misma peticion sin duplicar efectos", example = "divisa-001")
             @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey
     ) {
         return operacionService.transferirEnDivisa(request, idempotencyKey);

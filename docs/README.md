@@ -36,7 +36,7 @@ La guia completa esta en [docs/sql/README.md](sql/README.md).
 
 ## Postman
 
-La carpeta `docs/postman` conserva la coleccion disponible en el repositorio para pruebas manuales. El flujo recomendado debe pasar por el Gateway:
+La carpeta `docs/postman` contiene `NovaBank-Modulo-5.postman_collection.json` para pruebas manuales. El flujo recomendado debe pasar por el Gateway:
 
 ```text
 baseUrl = http://localhost:8080

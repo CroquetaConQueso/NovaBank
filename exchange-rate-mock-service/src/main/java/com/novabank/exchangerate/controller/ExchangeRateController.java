@@ -3,6 +3,7 @@ package com.novabank.exchangerate.controller;
 import com.novabank.exchangerate.dto.ExchangeRateResponseDTO;
 import com.novabank.exchangerate.service.ExchangeRateService;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -16,7 +17,7 @@ import java.util.Locale;
 
 @RestController
 @RequestMapping("/api/exchange-rate")
-@Tag(name = "Tipos de cambio", description = "Proveedor mock reactivo de tasas de cambio")
+@Tag(name = "Tipos de cambio", description = "Mock reactivo de proveedor externo de tasas de cambio")
 public class ExchangeRateController {
 
     private final ExchangeRateService exchangeRateService;
@@ -26,7 +27,10 @@ public class ExchangeRateController {
     }
 
     @GetMapping
-    @Operation(summary = "Consulta una tasa de cambio predefinida")
+    @Operation(
+            summary = "Consultar tasa de cambio mock",
+            description = "Devuelve una tasa predefinida para pares soportados por el proveedor externo simulado."
+    )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Tasa encontrada"),
             @ApiResponse(responseCode = "400", description = "Parametros invalidos"),
@@ -34,7 +38,9 @@ public class ExchangeRateController {
             @ApiResponse(responseCode = "500", description = "Error inesperado")
     })
     public Mono<ExchangeRateResponseDTO> obtenerTasa(
+            @Parameter(description = "Moneda origen en formato ISO 4217", example = "USD")
             @RequestParam String from,
+            @Parameter(description = "Moneda destino en formato ISO 4217", example = "EUR")
             @RequestParam String to
     ) {
         String fromNormalizado = normalizarDivisa(from, "from");

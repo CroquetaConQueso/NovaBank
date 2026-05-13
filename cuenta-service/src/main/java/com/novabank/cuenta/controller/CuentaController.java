@@ -105,7 +105,7 @@ public class CuentaController {
     @GetMapping(value = "/{id}/movimientos/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     @Operation(
             summary = "Suscribirse a movimientos de una cuenta",
-            description = "Devuelve un stream SSE en memoria con los movimientos aplicados sobre una cuenta."
+            description = "Devuelve un stream reactivo Server-Sent Events. Ante consumidores lentos puede descartar eventos por backpressure."
     )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Stream SSE abierto correctamente"),

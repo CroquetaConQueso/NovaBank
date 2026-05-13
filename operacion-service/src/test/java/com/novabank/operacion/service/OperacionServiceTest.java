@@ -6,6 +6,7 @@ import com.novabank.operacion.dto.AplicarMovimientoRequestDTO;
 import com.novabank.operacion.dto.AplicarMovimientoResponseDTO;
 import com.novabank.operacion.dto.CuentaOperacionRequestDTO;
 import com.novabank.operacion.dto.CuentaResponseDTO;
+import com.novabank.operacion.dto.ExchangeRateResultDTO;
 import com.novabank.operacion.dto.OperacionRequestDTO;
 import com.novabank.operacion.dto.OperacionResponseDTO;
 import com.novabank.operacion.dto.TransferenciaDivisaRequestDTO;
@@ -31,6 +32,7 @@ import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -291,7 +293,8 @@ class OperacionServiceTest {
 
     @Test
     void transferenciaEnDivisaConsultaTasaYEjecutaTransferenciaConMontoConvertido() {
-        when(exchangeRateService.obtenerTasa("USD", "EUR")).thenReturn(Mono.just(new BigDecimal("0.92")));
+        when(exchangeRateService.obtenerTasaConOrigen("USD", "EUR"))
+                .thenReturn(Mono.just(new ExchangeRateResultDTO(new BigDecimal("0.92"), false, Instant.now())));
         when(cuentaServiceClient.aplicarMovimiento(any(AplicarMovimientoRequestDTO.class)))
                 .thenReturn(Mono.just(new AplicarMovimientoResponseDTO(
                         "op-1",
@@ -322,13 +325,13 @@ class OperacionServiceTest {
                 })
                 .verifyComplete();
 
-        verify(exchangeRateService).obtenerTasa("USD", "EUR");
+        verify(exchangeRateService).obtenerTasaConOrigen("USD", "EUR");
         verify(cuentaServiceClient).aplicarMovimiento(any(AplicarMovimientoRequestDTO.class));
     }
 
     @Test
     void transferenciaEnDivisaSiFallaTipoCambioNoLlamaCuentaServiceNiGuardaMovimiento() {
-        when(exchangeRateService.obtenerTasa("USD", "EUR"))
+        when(exchangeRateService.obtenerTasaConOrigen("USD", "EUR"))
                 .thenReturn(Mono.error(new ExchangeRateUnavailableException("No hay tasa fiable")));
 
         StepVerifier.create(service.transferirEnDivisa(new TransferenciaDivisaRequestDTO(
@@ -343,6 +346,36 @@ class OperacionServiceTest {
 
         verifyNoInteractions(cuentaServiceClient);
         verify(movimientoRepository, never()).save(any(Movimiento.class));
+    }
+
+    @Test
+    void transferenciaEnDivisaConTasaCacheadaMarcaLaRespuesta() {
+        when(exchangeRateService.obtenerTasaConOrigen("USD", "EUR"))
+                .thenReturn(Mono.just(new ExchangeRateResultDTO(new BigDecimal("0.92"), true, Instant.now())));
+        when(cuentaServiceClient.aplicarMovimiento(any(AplicarMovimientoRequestDTO.class)))
+                .thenReturn(Mono.just(new AplicarMovimientoResponseDTO(
+                        "op-1",
+                        "COMPLETED",
+                        "Operacion aplicada",
+                        cuenta(10L, "ES91210000000000000001"),
+                        cuenta(11L, "ES91210000000000000002")
+                )));
+        when(movimientoRepository.save(any(Movimiento.class))).thenAnswer(invocation -> {
+            Movimiento movimiento = invocation.getArgument(0);
+            movimiento.setId(70L);
+            movimiento.setFecha(LocalDateTime.now());
+            return Mono.just(movimiento);
+        });
+
+        StepVerifier.create(service.transferirEnDivisa(new TransferenciaDivisaRequestDTO(
+                        10L,
+                        11L,
+                        new BigDecimal("100.00"),
+                        "USD",
+                        "EUR"
+                )))
+                .assertNext(response -> assertThat(response.mensaje()).contains("tasa cacheada"))
+                .verifyComplete();
     }
 
     @Test
@@ -459,7 +492,7 @@ class OperacionServiceTest {
     void transferenciaEnDivisaRepetidaNoConsultaTasaNiTocaCuentaService() {
         OperacionResponseDTO response = new OperacionResponseDTO(
                 "TRANSFERENCIA",
-                "Transferencia en divisa realizada correctamente",
+                "Transferencia en divisa realizada correctamente con tasa cacheada",
                 List.of()
         );
         String requestHash = new PublicIdempotencyService(operacionPublicaIdempotenteRepository, objectMapper)
@@ -474,7 +507,7 @@ class OperacionServiceTest {
                         "USD",
                         "EUR"
                 ), "divisa-1"))
-                .assertNext(repeated -> assertThat(repeated.mensaje()).isEqualTo("Transferencia en divisa realizada correctamente"))
+                .assertNext(repeated -> assertThat(repeated.mensaje()).contains("tasa cacheada"))
                 .verifyComplete();
 
         verifyNoInteractions(exchangeRateService);

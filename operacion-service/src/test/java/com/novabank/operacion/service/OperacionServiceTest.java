@@ -1,6 +1,7 @@
 package com.novabank.operacion.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.novabank.events.operacion.OperacionSolicitadaEvent;
 import com.novabank.operacion.client.CuentaServiceClient;
 import com.novabank.operacion.dto.AplicarMovimientoRequestDTO;
 import com.novabank.operacion.dto.AplicarMovimientoResponseDTO;
@@ -11,6 +12,7 @@ import com.novabank.operacion.dto.OperacionRequestDTO;
 import com.novabank.operacion.dto.OperacionResponseDTO;
 import com.novabank.operacion.dto.TransferenciaDivisaRequestDTO;
 import com.novabank.operacion.dto.TransferenciaRequestDTO;
+import com.novabank.operacion.event.OperacionEventPublisher;
 import com.novabank.operacion.exception.ExchangeRateUnavailableException;
 import com.novabank.operacion.exception.PublicIdempotencyConflictException;
 import com.novabank.operacion.exception.RemoteResourceNotFoundException;
@@ -36,6 +38,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.atomic.AtomicLong;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -54,6 +57,7 @@ class OperacionServiceTest {
     private ExchangeRateService exchangeRateService;
     private MovimientoRepository movimientoRepository;
     private OperacionPublicaIdempotenteRepository operacionPublicaIdempotenteRepository;
+    private OperacionEventPublisher operacionEventPublisher;
     private ObjectMapper objectMapper;
     private OperacionService service;
 
@@ -63,6 +67,7 @@ class OperacionServiceTest {
         exchangeRateService = mock(ExchangeRateService.class);
         movimientoRepository = mock(MovimientoRepository.class);
         operacionPublicaIdempotenteRepository = mock(OperacionPublicaIdempotenteRepository.class);
+        operacionEventPublisher = mock(OperacionEventPublisher.class);
         objectMapper = new ObjectMapper().findAndRegisterModules();
         PublicIdempotencyService publicIdempotencyService = new PublicIdempotencyService(
                 operacionPublicaIdempotenteRepository,
@@ -73,8 +78,70 @@ class OperacionServiceTest {
                 exchangeRateService,
                 movimientoRepository,
                 new MovimientoMapper(),
-                publicIdempotencyService
+                publicIdempotencyService,
+                operacionEventPublisher
         );
+    }
+
+    @Test
+    void solicitarDepositoPublicaOperacionSolicitadaYDevuelveRespuestaAceptada() {
+        when(operacionEventPublisher.publicarOperacionSolicitada(any(OperacionSolicitadaEvent.class), eq(10L)))
+                .thenReturn(Mono.empty());
+
+        StepVerifier.create(service.solicitarDeposito(new OperacionRequestDTO(10L, new BigDecimal("50.00")), null)
+                        .contextWrite(context -> context.put(
+                                com.novabank.operacion.tracing.CorrelationIdSupport.CONTEXT_KEY,
+                                "22222222-2222-2222-2222-222222222222"
+                        )))
+                .assertNext(response -> {
+                    assertThat(response.operationId()).isNotNull();
+                    assertThat(response.estado()).isEqualTo("SOLICITADA");
+                    assertThat(response.tipoOperacion()).isEqualTo("DEPOSITO");
+                    assertThat(response.cuentaId()).isEqualTo(10L);
+                    assertThat(response.importe()).isEqualByComparingTo("50.00");
+                })
+                .verifyComplete();
+
+        ArgumentCaptor<OperacionSolicitadaEvent> captor = ArgumentCaptor.forClass(OperacionSolicitadaEvent.class);
+        verify(operacionEventPublisher).publicarOperacionSolicitada(captor.capture(), eq(10L));
+        OperacionSolicitadaEvent event = captor.getValue();
+        assertThat(event.eventId()).isNotNull();
+        assertThat(event.correlationId()).isEqualTo(UUID.fromString("22222222-2222-2222-2222-222222222222"));
+        assertThat(event.operationId()).isNotNull();
+        assertThat(event.tipoOperacion()).isEqualTo("DEPOSITO");
+        assertThat(event.cuentaOrigenId()).isNull();
+        assertThat(event.cuentaDestinoId()).isEqualTo(10L);
+        assertThat(event.importe()).isEqualByComparingTo("50.00");
+        assertThat(event.moneda()).isEqualTo("EUR");
+        verifyNoInteractions(cuentaServiceClient);
+        verify(movimientoRepository, never()).save(any(Movimiento.class));
+    }
+
+    @Test
+    void solicitarRetiradaPublicaOperacionSolicitadaYDevuelveRespuestaAceptada() {
+        when(operacionEventPublisher.publicarOperacionSolicitada(any(OperacionSolicitadaEvent.class), eq(10L)))
+                .thenReturn(Mono.empty());
+
+        StepVerifier.create(service.solicitarRetirada(new OperacionRequestDTO(10L, new BigDecimal("25.00")), null))
+                .assertNext(response -> {
+                    assertThat(response.operationId()).isNotNull();
+                    assertThat(response.estado()).isEqualTo("SOLICITADA");
+                    assertThat(response.tipoOperacion()).isEqualTo("RETIRADA");
+                    assertThat(response.cuentaId()).isEqualTo(10L);
+                    assertThat(response.importe()).isEqualByComparingTo("25.00");
+                })
+                .verifyComplete();
+
+        ArgumentCaptor<OperacionSolicitadaEvent> captor = ArgumentCaptor.forClass(OperacionSolicitadaEvent.class);
+        verify(operacionEventPublisher).publicarOperacionSolicitada(captor.capture(), eq(10L));
+        OperacionSolicitadaEvent event = captor.getValue();
+        assertThat(event.tipoOperacion()).isEqualTo("RETIRADA");
+        assertThat(event.cuentaOrigenId()).isEqualTo(10L);
+        assertThat(event.cuentaDestinoId()).isNull();
+        assertThat(event.importe()).isEqualByComparingTo("25.00");
+        assertThat(event.moneda()).isEqualTo("EUR");
+        verifyNoInteractions(cuentaServiceClient);
+        verify(movimientoRepository, never()).save(any(Movimiento.class));
     }
 
     @Test

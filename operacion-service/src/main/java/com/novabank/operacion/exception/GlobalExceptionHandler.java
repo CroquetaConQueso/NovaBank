@@ -47,6 +47,11 @@ public class GlobalExceptionHandler {
         return response(HttpStatus.SERVICE_UNAVAILABLE, "EXCHANGE_RATE_UNAVAILABLE", ex.getMessage());
     }
 
+    @ExceptionHandler(EventoNoPublicadoException.class)
+    public Mono<ResponseEntity<ErrorResponseDTO>> handleEventoNoPublicado(EventoNoPublicadoException ex) {
+        return response(HttpStatus.SERVICE_UNAVAILABLE, "KAFKA_EVENT_NOT_PUBLISHED", ex.getMessage());
+    }
+
     @ExceptionHandler({
             IllegalArgumentException.class,
             ValidationException.class

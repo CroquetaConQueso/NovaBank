@@ -1,16 +1,15 @@
 package com.novabank.operacion.controller;
 
 import com.novabank.operacion.dto.MovimientoResponseDTO;
+import com.novabank.operacion.dto.OperacionAceptadaResponseDTO;
 import com.novabank.operacion.dto.OperacionRequestDTO;
 import com.novabank.operacion.dto.OperacionResponseDTO;
 import com.novabank.operacion.dto.TransferenciaDivisaRequestDTO;
 import com.novabank.operacion.dto.TransferenciaRequestDTO;
+import com.novabank.operacion.exception.EventoNoPublicadoException;
 import com.novabank.operacion.exception.ExchangeRateUnavailableException;
 import com.novabank.operacion.exception.GlobalExceptionHandler;
 import com.novabank.operacion.exception.PublicIdempotencyConflictException;
-import com.novabank.operacion.exception.RemoteResourceNotFoundException;
-import com.novabank.operacion.exception.RemoteServiceException;
-import com.novabank.operacion.exception.RemoteValidationException;
 import com.novabank.operacion.exception.ValidationException;
 import com.novabank.operacion.service.OperacionService;
 import org.junit.jupiter.api.Test;
@@ -28,6 +27,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.nullable;
@@ -45,34 +45,37 @@ class OperacionControllerTest {
     private OperacionService operacionService;
 
     @Test
-    void depositoDevuelveOperacionRealizada() {
-        when(operacionService.depositar(any(OperacionRequestDTO.class), nullable(String.class)))
-                .thenReturn(Mono.just(response("DEPOSITO")));
+    void depositoDevuelveOperacionAceptada() {
+        when(operacionService.solicitarDeposito(any(OperacionRequestDTO.class), nullable(String.class)))
+                .thenReturn(Mono.just(aceptada("DEPOSITO", 10L)));
 
         webTestClient.post()
                 .uri("/api/operaciones/deposito")
                 .contentType(MediaType.APPLICATION_JSON)
                 .bodyValue(new OperacionRequestDTO(10L, new BigDecimal("50.00")))
                 .exchange()
-                .expectStatus().isOk()
+                .expectStatus().isAccepted()
                 .expectBody()
                 .jsonPath("$.tipoOperacion").isEqualTo("DEPOSITO")
-                .jsonPath("$.mensaje").isEqualTo("Operacion realizada correctamente");
+                .jsonPath("$.estado").isEqualTo("SOLICITADA")
+                .jsonPath("$.operationId").exists()
+                .jsonPath("$.cuentaId").isEqualTo(10);
     }
 
     @Test
-    void retiroSinCabecerasEspecialesDevuelveOperacionRealizada() {
-        when(operacionService.retirar(any(OperacionRequestDTO.class), nullable(String.class)))
-                .thenReturn(Mono.just(response("RETIRO")));
+    void retiroSinCabecerasEspecialesDevuelveOperacionAceptada() {
+        when(operacionService.solicitarRetirada(any(OperacionRequestDTO.class), nullable(String.class)))
+                .thenReturn(Mono.just(aceptada("RETIRADA", 10L)));
 
         webTestClient.post()
                 .uri("/api/operaciones/retiro")
                 .contentType(MediaType.APPLICATION_JSON)
                 .bodyValue(new OperacionRequestDTO(10L, new BigDecimal("50.00")))
                 .exchange()
-                .expectStatus().isOk()
+                .expectStatus().isAccepted()
                 .expectBody()
-                .jsonPath("$.tipoOperacion").isEqualTo("RETIRO");
+                .jsonPath("$.tipoOperacion").isEqualTo("RETIRADA")
+                .jsonPath("$.estado").isEqualTo("SOLICITADA");
     }
 
     @Test
@@ -146,9 +149,9 @@ class OperacionControllerTest {
     }
 
     @Test
-    void cuentaServiceNoDisponibleDevuelve503Controlado() {
-        when(operacionService.depositar(any(OperacionRequestDTO.class), nullable(String.class)))
-                .thenReturn(Mono.error(new RemoteServiceException("cuenta-service no esta disponible")));
+    void depositoConPublicacionFallidaDevuelve503Controlado() {
+        when(operacionService.solicitarDeposito(any(OperacionRequestDTO.class), nullable(String.class)))
+                .thenReturn(Mono.error(new EventoNoPublicadoException("No se pudo publicar OperacionSolicitadaEvent")));
 
         webTestClient.post()
                 .uri("/api/operaciones/deposito")
@@ -157,7 +160,7 @@ class OperacionControllerTest {
                 .exchange()
                 .expectStatus().isEqualTo(503)
                 .expectBody()
-                .jsonPath("$.code").isEqualTo("CUENTA_SERVICE_UNAVAILABLE")
+                .jsonPath("$.code").isEqualTo("KAFKA_EVENT_NOT_PUBLISHED")
                 .jsonPath("$.service").isEqualTo("operacion-service");
     }
 
@@ -293,39 +296,41 @@ class OperacionControllerTest {
     }
 
     @Test
-    void depositoConCuentaNoEncontradaDevuelve404() {
-        when(operacionService.depositar(any(OperacionRequestDTO.class), nullable(String.class)))
-                .thenReturn(Mono.error(new RemoteResourceNotFoundException("Cuenta no encontrada")));
+    void depositoAsincronoNoValidaCuentaEnOperacionService() {
+        when(operacionService.solicitarDeposito(any(OperacionRequestDTO.class), nullable(String.class)))
+                .thenReturn(Mono.just(aceptada("DEPOSITO", 99L)));
 
         webTestClient.post()
                 .uri("/api/operaciones/deposito")
                 .contentType(MediaType.APPLICATION_JSON)
                 .bodyValue(new OperacionRequestDTO(99L, new BigDecimal("10.00")))
                 .exchange()
-                .expectStatus().isNotFound()
+                .expectStatus().isAccepted()
                 .expectBody()
-                .jsonPath("$.code").isEqualTo("RESOURCE_NOT_FOUND");
+                .jsonPath("$.cuentaId").isEqualTo(99)
+                .jsonPath("$.estado").isEqualTo("SOLICITADA");
     }
 
     @Test
-    void retiroConSaldoInsuficienteRemotoDevuelve422() {
-        when(operacionService.retirar(any(OperacionRequestDTO.class), nullable(String.class)))
-                .thenReturn(Mono.error(new RemoteValidationException("Saldo insuficiente")));
+    void retiroAsincronoDevuelveAceptadoSinValidarSaldoEnOperacionService() {
+        when(operacionService.solicitarRetirada(any(OperacionRequestDTO.class), nullable(String.class)))
+                .thenReturn(Mono.just(aceptada("RETIRADA", 10L)));
 
         webTestClient.post()
                 .uri("/api/operaciones/retiro")
                 .contentType(MediaType.APPLICATION_JSON)
                 .bodyValue(new OperacionRequestDTO(10L, new BigDecimal("100.00")))
                 .exchange()
-                .expectStatus().isEqualTo(422)
+                .expectStatus().isAccepted()
                 .expectBody()
-                .jsonPath("$.code").isEqualTo("REMOTE_VALIDATION_ERROR");
+                .jsonPath("$.tipoOperacion").isEqualTo("RETIRADA")
+                .jsonPath("$.estado").isEqualTo("SOLICITADA");
     }
 
     @Test
     void depositoAceptaIdempotencyKey() {
-        when(operacionService.depositar(any(OperacionRequestDTO.class), nullable(String.class)))
-                .thenReturn(Mono.just(response("DEPOSITO")));
+        when(operacionService.solicitarDeposito(any(OperacionRequestDTO.class), nullable(String.class)))
+                .thenReturn(Mono.just(aceptada("DEPOSITO", 10L)));
 
         webTestClient.post()
                 .uri("/api/operaciones/deposito")
@@ -333,9 +338,10 @@ class OperacionControllerTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .bodyValue(new OperacionRequestDTO(10L, new BigDecimal("50.00")))
                 .exchange()
-                .expectStatus().isOk()
+                .expectStatus().isAccepted()
                 .expectBody()
-                .jsonPath("$.tipoOperacion").isEqualTo("DEPOSITO");
+                .jsonPath("$.tipoOperacion").isEqualTo("DEPOSITO")
+                .jsonPath("$.estado").isEqualTo("SOLICITADA");
     }
 
     @Test
@@ -361,6 +367,17 @@ class OperacionControllerTest {
                 tipoOperacion,
                 "Operacion realizada correctamente",
                 List.of(movimiento(tipoOperacion))
+        );
+    }
+
+    private OperacionAceptadaResponseDTO aceptada(String tipoOperacion, Long cuentaId) {
+        return new OperacionAceptadaResponseDTO(
+                UUID.fromString("33333333-3333-3333-3333-333333333333"),
+                "SOLICITADA",
+                tipoOperacion + " solicitada para procesamiento asincrono",
+                tipoOperacion,
+                cuentaId,
+                new BigDecimal("50.00")
         );
     }
 

@@ -5,10 +5,13 @@ import com.novabank.operacion.dto.AplicarMovimientoRequestDTO;
 import com.novabank.operacion.dto.CuentaOperacionRequestDTO;
 import com.novabank.operacion.dto.CuentaResponseDTO;
 import com.novabank.operacion.dto.MovimientoResponseDTO;
+import com.novabank.operacion.dto.OperacionAceptadaResponseDTO;
 import com.novabank.operacion.dto.OperacionRequestDTO;
 import com.novabank.operacion.dto.OperacionResponseDTO;
 import com.novabank.operacion.dto.TransferenciaDivisaRequestDTO;
 import com.novabank.operacion.dto.TransferenciaRequestDTO;
+import com.novabank.events.operacion.OperacionSolicitadaEvent;
+import com.novabank.operacion.event.OperacionEventPublisher;
 import com.novabank.operacion.exception.RemoteResourceNotFoundException;
 import com.novabank.operacion.exception.ValidationException;
 import com.novabank.operacion.mapper.MovimientoMapper;
@@ -26,6 +29,7 @@ import reactor.core.publisher.Signal;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.List;
@@ -41,19 +45,36 @@ public class OperacionService {
     private final MovimientoRepository movimientoRepository;
     private final MovimientoMapper movimientoMapper;
     private final PublicIdempotencyService publicIdempotencyService;
+    private final OperacionEventPublisher operacionEventPublisher;
 
     public OperacionService(
             CuentaServiceClient cuentaServiceClient,
             ExchangeRateService exchangeRateService,
             MovimientoRepository movimientoRepository,
             MovimientoMapper movimientoMapper,
-            PublicIdempotencyService publicIdempotencyService
+            PublicIdempotencyService publicIdempotencyService,
+            OperacionEventPublisher operacionEventPublisher
     ) {
         this.cuentaServiceClient = cuentaServiceClient;
         this.exchangeRateService = exchangeRateService;
         this.movimientoRepository = movimientoRepository;
         this.movimientoMapper = movimientoMapper;
         this.publicIdempotencyService = publicIdempotencyService;
+        this.operacionEventPublisher = operacionEventPublisher;
+    }
+
+    public Mono<OperacionAceptadaResponseDTO> solicitarDeposito(
+            OperacionRequestDTO request,
+            String idempotencyKey
+    ) {
+        return solicitarOperacionSimple(request, idempotencyKey, "DEPOSITO", null, request.cuentaId(), request.cuentaId());
+    }
+
+    public Mono<OperacionAceptadaResponseDTO> solicitarRetirada(
+            OperacionRequestDTO request,
+            String idempotencyKey
+    ) {
+        return solicitarOperacionSimple(request, idempotencyKey, "RETIRADA", request.cuentaId(), null, request.cuentaId());
     }
 
     /**
@@ -88,6 +109,50 @@ public class OperacionService {
                         "Deposito realizado correctamente",
                         List.of(movimiento)
                 ));
+    }
+
+    private Mono<OperacionAceptadaResponseDTO> solicitarOperacionSimple(
+            OperacionRequestDTO request,
+            String idempotencyKey,
+            String tipoOperacion,
+            Long cuentaOrigenId,
+            Long cuentaDestinoId,
+            Long kafkaKey
+    ) {
+        return Mono.deferContextual(contextView -> {
+            UUID operationId = UUID.randomUUID();
+            UUID correlationId = resolveCorrelationId(CorrelationIdSupport.fromContext(contextView));
+            OperacionSolicitadaEvent event = new OperacionSolicitadaEvent(
+                    UUID.randomUUID(),
+                    correlationId,
+                    Instant.now(),
+                    operationId,
+                    tipoOperacion,
+                    cuentaOrigenId,
+                    cuentaDestinoId,
+                    request.cantidad(),
+                    "EUR"
+            );
+
+            log.info(
+                    "operacion asincrona recibida tipoOperacion={} cuentaId={} importe={} operationId={} idempotencyKey={}",
+                    tipoOperacion,
+                    request.cuentaId(),
+                    request.cantidad(),
+                    operationId,
+                    idempotencyKey == null || idempotencyKey.isBlank() ? "no-informada" : "informada"
+            );
+
+            return operacionEventPublisher.publicarOperacionSolicitada(event, kafkaKey)
+                    .thenReturn(new OperacionAceptadaResponseDTO(
+                            operationId,
+                            "SOLICITADA",
+                            tipoOperacion + " solicitada para procesamiento asincrono",
+                            tipoOperacion,
+                            request.cuentaId(),
+                            request.cantidad()
+                    ));
+        });
     }
 
     /**
@@ -344,6 +409,18 @@ public class OperacionService {
 
     private String normalizarMoneda(String moneda) {
         return moneda == null ? "" : moneda.trim().toUpperCase();
+    }
+
+    private UUID resolveCorrelationId(String correlationId) {
+        if (correlationId == null || correlationId.isBlank()) {
+            return UUID.randomUUID();
+        }
+
+        try {
+            return UUID.fromString(correlationId);
+        } catch (IllegalArgumentException ignored) {
+            return UUID.randomUUID();
+        }
     }
 
     private void logOperacion(Signal<MovimientoResponseDTO> signal, String tipo) {

@@ -429,6 +429,96 @@ Tambien se pueden revisar los topics y mensajes desde Kafka UI:
 http://localhost:8090
 ```
 
+## Publicacion Asincrona De Operaciones Desde operacion-service
+
+`operacion-service` publica solicitudes de operaciones simples en Kafka. Los endpoints de deposito y retiro pasan a ser asincronos: validan la peticion HTTP, publican `OperacionSolicitadaEvent` en `novabank.operaciones.solicitadas` y responden `202 Accepted` con un identificador de operacion.
+
+Flujo actual:
+
+```text
+POST /api/operaciones/deposito
+POST /api/operaciones/retiro
+    -> operacion-service publica OperacionSolicitadaEvent
+    -> cuenta-service consume la solicitud
+    -> cuenta-service publica OperacionCompletadaEvent u OperacionFallidaEvent
+```
+
+Binding de salida en `operacion-service`:
+
+| Binding | Topic |
+| --- | --- |
+| `operacionSolicitada-out-0` | `novabank.operaciones.solicitadas` |
+
+Respuesta HTTP esperada:
+
+```http
+HTTP/1.1 202 Accepted
+```
+
+Ejemplo de respuesta:
+
+```json
+{"operationId":"33333333-3333-3333-3333-333333333333","estado":"SOLICITADA","mensaje":"DEPOSITO solicitada para procesamiento asincrono","tipoOperacion":"DEPOSITO","cuentaId":1,"importe":25.00}
+```
+
+Request de deposito:
+
+```powershell
+Invoke-RestMethod -Method Post `
+  -Uri http://localhost:8083/api/operaciones/deposito `
+  -ContentType "application/json" `
+  -Headers @{ "X-Correlation-Id" = "22222222-2222-2222-2222-222222222222" } `
+  -Body '{"cuentaId":1,"cantidad":25.00}'
+```
+
+Evento esperado en `novabank.operaciones.solicitadas`:
+
+```json
+{"eventId":"<uuid>","correlationId":"22222222-2222-2222-2222-222222222222","occurredAt":"<instant>","operationId":"<uuid>","tipoOperacion":"DEPOSITO","cuentaOrigenId":null,"cuentaDestinoId":1,"importe":25.00,"moneda":"EUR"}
+```
+
+Request de retiro:
+
+```powershell
+Invoke-RestMethod -Method Post `
+  -Uri http://localhost:8083/api/operaciones/retiro `
+  -ContentType "application/json" `
+  -Headers @{ "X-Correlation-Id" = "55555555-5555-5555-5555-555555555555" } `
+  -Body '{"cuentaId":1,"cantidad":9999.00}'
+```
+
+Evento esperado en `novabank.operaciones.solicitadas`:
+
+```json
+{"eventId":"<uuid>","correlationId":"55555555-5555-5555-5555-555555555555","occurredAt":"<instant>","operationId":"<uuid>","tipoOperacion":"RETIRADA","cuentaOrigenId":1,"cuentaDestinoId":null,"importe":9999.00,"moneda":"EUR"}
+```
+
+Para comprobar el flujo completo:
+
+```powershell
+docker compose up -d
+mvn -pl cuenta-service spring-boot:run
+mvn -pl operacion-service spring-boot:run
+```
+
+Despues de hacer los POST, revisar en Kafka UI:
+
+```text
+http://localhost:8090
+```
+
+Topics esperados:
+
+- `novabank.operaciones.solicitadas`: eventos publicados por `operacion-service`.
+- `novabank.operaciones.completadas`: resultado de deposito correcto procesado por `cuenta-service`.
+- `novabank.operaciones.fallidas`: resultado de retiro fallido, por ejemplo por saldo insuficiente.
+
+Notas pendientes del Modulo 6:
+
+- La SAGA orquestada y la consulta de estado de operacion se implementaran en el siguiente bloque.
+- La idempotencia publica de las operaciones asincronas se consolidara cuando exista estado persistido de operacion/SAGA.
+- Transferencias ordinarias y transferencias en divisa conservan por ahora el flujo sincronico existente.
+
 ## Bases De Datos Y SQL
 
 El proyecto usa cuatro bases PostgreSQL, una por servicio propietario de datos:

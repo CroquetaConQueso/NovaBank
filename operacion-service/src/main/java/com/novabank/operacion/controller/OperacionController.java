@@ -1,6 +1,7 @@
 package com.novabank.operacion.controller;
 
 import com.novabank.operacion.dto.MovimientoResponseDTO;
+import com.novabank.operacion.dto.OperacionAceptadaResponseDTO;
 import com.novabank.operacion.dto.OperacionRequestDTO;
 import com.novabank.operacion.dto.OperacionResponseDTO;
 import com.novabank.operacion.dto.TransferenciaDivisaRequestDTO;
@@ -12,6 +13,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -39,40 +41,39 @@ public class OperacionController {
     @PostMapping("/deposito")
     @Operation(
             summary = "Realizar deposito",
-            description = "Solicita a cuenta-service el cambio de saldo y registra el movimiento en operacion-service."
+            description = "Publica una solicitud asincrona para que cuenta-service aplique el deposito."
     )
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "Deposito realizado correctamente"),
+            @ApiResponse(responseCode = "202", description = "Deposito solicitado correctamente"),
             @ApiResponse(responseCode = "400", description = "Datos invalidos o peticion mal formada"),
             @ApiResponse(responseCode = "401", description = "Token ausente o invalido al acceder mediante Gateway"),
-            @ApiResponse(responseCode = "404", description = "Cuenta no encontrada"),
-            @ApiResponse(responseCode = "503", description = "cuenta-service no disponible")
+            @ApiResponse(responseCode = "503", description = "Kafka no disponible o evento no publicado")
     })
-    public Mono<OperacionResponseDTO> depositar(
+    public Mono<ResponseEntity<OperacionAceptadaResponseDTO>> depositar(
             @Valid @RequestBody OperacionRequestDTO request,
             @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey
     ) {
-        return operacionService.depositar(request, idempotencyKey);
+        return operacionService.solicitarDeposito(request, idempotencyKey)
+                .map(response -> ResponseEntity.accepted().body(response));
     }
 
     @PostMapping("/retiro")
     @Operation(
             summary = "Realizar retiro",
-            description = "Solicita a cuenta-service la validacion de saldo y registra el movimiento en operacion-service."
+            description = "Publica una solicitud asincrona para que cuenta-service aplique el retiro."
     )
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "Retiro realizado correctamente"),
+            @ApiResponse(responseCode = "202", description = "Retiro solicitado correctamente"),
             @ApiResponse(responseCode = "400", description = "Datos invalidos o peticion mal formada"),
             @ApiResponse(responseCode = "401", description = "Token ausente o invalido al acceder mediante Gateway"),
-            @ApiResponse(responseCode = "404", description = "Cuenta no encontrada"),
-            @ApiResponse(responseCode = "422", description = "Saldo insuficiente"),
-            @ApiResponse(responseCode = "503", description = "cuenta-service no disponible")
+            @ApiResponse(responseCode = "503", description = "Kafka no disponible o evento no publicado")
     })
-    public Mono<OperacionResponseDTO> retirar(
+    public Mono<ResponseEntity<OperacionAceptadaResponseDTO>> retirar(
             @Valid @RequestBody OperacionRequestDTO request,
             @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey
     ) {
-        return operacionService.retirar(request, idempotencyKey);
+        return operacionService.solicitarRetirada(request, idempotencyKey)
+                .map(response -> ResponseEntity.accepted().body(response));
     }
 
     @PostMapping("/transferencia")

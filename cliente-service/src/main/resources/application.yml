@@ -7,6 +7,10 @@ spring:
     bootstrap-servers: localhost:9092
   cloud:
     stream:
+      bindings:
+        clienteRegistrado-out-0:
+          destination: novabank.clientes.registrados
+          content-type: application/json
       kafka:
         binder:
           brokers: localhost:9092

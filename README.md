@@ -340,6 +340,95 @@ Comprobar en logs de `notificacion-service`:
 Notificacion de bienvenida preparada para clienteId=<id>, nombre=Ana, email=ana.garcia@example.com
 ```
 
+## Procesamiento Kafka De Operaciones En cuenta-service
+
+`cuenta-service` incorpora el primer consumidor Kafka financiero del Modulo 6. Consume `OperacionSolicitadaEvent` desde `novabank.operaciones.solicitadas`, grupo `cuenta-service`, y aplica por ahora operaciones simples reutilizando la logica reactiva existente:
+
+- `DEPOSITO`: usa `cuentaDestinoId` y publica `OperacionCompletadaEvent`.
+- `RETIRO` o `RETIRADA`: usa `cuentaOrigenId`; si la cuenta no existe, no hay saldo suficiente o la solicitud es invalida, publica `OperacionFallidaEvent`.
+
+No se cambian controladores, respuestas HTTP, SAGA, SSE ni Kafka Streams. El consumidor se declara como `procesarOperacion` y delega en `CuentaService`. Los eventos de resultado se publican con `StreamBridge` en estos bindings:
+
+| Binding | Topic |
+| --- | --- |
+| `procesarOperacion-in-0` | `novabank.operaciones.solicitadas` |
+| `operacionCompletada-out-0` | `novabank.operaciones.completadas` |
+| `operacionFallida-out-0` | `novabank.operaciones.fallidas` |
+
+La configuracion local de `cuenta-service` usa Kafka en `localhost:9092`. Si Config Server sobrescribe propiedades desde un repositorio externo, ese repositorio debe incluir valores equivalentes:
+
+```yaml
+spring:
+  kafka:
+    bootstrap-servers: localhost:9092
+  cloud:
+    function:
+      definition: procesarOperacion
+    stream:
+      bindings:
+        procesarOperacion-in-0:
+          destination: novabank.operaciones.solicitadas
+          group: cuenta-service
+          content-type: application/json
+        operacionCompletada-out-0:
+          destination: novabank.operaciones.completadas
+          content-type: application/json
+        operacionFallida-out-0:
+          destination: novabank.operaciones.fallidas
+          content-type: application/json
+      kafka:
+        binder:
+          brokers: localhost:9092
+```
+
+Arrancar infraestructura y `cuenta-service`:
+
+```powershell
+docker compose up -d
+mvn -pl cuenta-service spring-boot:run
+```
+
+Publicar un deposito manualmente:
+
+```powershell
+docker compose exec -i kafka /opt/kafka/bin/kafka-console-producer.sh --bootstrap-server kafka:9092 --topic novabank.operaciones.solicitadas
+```
+
+JSON de deposito:
+
+```json
+{"eventId":"11111111-1111-1111-1111-111111111111","correlationId":"22222222-2222-2222-2222-222222222222","occurredAt":"2026-06-03T10:15:30Z","operationId":"33333333-3333-3333-3333-333333333333","tipoOperacion":"DEPOSITO","cuentaOrigenId":null,"cuentaDestinoId":1,"importe":25.00,"moneda":"EUR"}
+```
+
+Resultado esperado: mensaje en `novabank.operaciones.completadas` con el mismo `operationId`, `correlationId`, `tipoOperacion`, `importe` y `moneda`.
+
+JSON de retirada fallida por saldo insuficiente:
+
+```json
+{"eventId":"44444444-4444-4444-4444-444444444444","correlationId":"55555555-5555-5555-5555-555555555555","occurredAt":"2026-06-03T10:16:30Z","operationId":"66666666-6666-6666-6666-666666666666","tipoOperacion":"RETIRADA","cuentaOrigenId":1,"cuentaDestinoId":null,"importe":9999.00,"moneda":"EUR"}
+```
+
+Resultado esperado: mensaje en `novabank.operaciones.fallidas` con `codigoError` como `SALDO_INSUFICIENTE` si la cuenta existe pero no tiene saldo suficiente. Si la cuenta no existe, el codigo esperado es `CUENTA_NO_ENCONTRADA`.
+
+Comprobar topics desde Kafka:
+
+```powershell
+docker compose exec kafka /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --list
+```
+
+Consumir resultados desde consola:
+
+```powershell
+docker compose exec kafka /opt/kafka/bin/kafka-console-consumer.sh --bootstrap-server kafka:9092 --topic novabank.operaciones.completadas --from-beginning --timeout-ms 10000
+docker compose exec kafka /opt/kafka/bin/kafka-console-consumer.sh --bootstrap-server kafka:9092 --topic novabank.operaciones.fallidas --from-beginning --timeout-ms 10000
+```
+
+Tambien se pueden revisar los topics y mensajes desde Kafka UI:
+
+```text
+http://localhost:8090
+```
+
 ## Bases De Datos Y SQL
 
 El proyecto usa cuatro bases PostgreSQL, una por servicio propietario de datos:

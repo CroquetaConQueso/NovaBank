@@ -6,7 +6,20 @@ spring:
   kafka:
     bootstrap-servers: localhost:9092
   cloud:
+    function:
+      definition: procesarOperacion
     stream:
+      bindings:
+        procesarOperacion-in-0:
+          destination: novabank.operaciones.solicitadas
+          group: cuenta-service
+          content-type: application/json
+        operacionCompletada-out-0:
+          destination: novabank.operaciones.completadas
+          content-type: application/json
+        operacionFallida-out-0:
+          destination: novabank.operaciones.fallidas
+          content-type: application/json
       kafka:
         binder:
           brokers: localhost:9092

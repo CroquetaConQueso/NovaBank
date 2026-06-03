@@ -83,6 +83,7 @@ Los servicios de negocio se comunican mediante WebClient con resolucion por Eure
 ```text
 NovaBank/
 |-- pom.xml
+|-- docker-compose.yml
 |-- eureka-server/
 |-- config-server/
 |-- api-gateway/
@@ -126,6 +127,49 @@ NovaBank/
 - PostgreSQL para ejecucion local.
 - Git.
 - Docker Desktop o runtime compatible para ejecutar Testcontainers.
+
+## Infraestructura Local Con Docker Compose
+
+El entorno local incluye Apache Kafka `apache/kafka:3.7.0` en modo KRaft, sin Zookeeper, y Kafka UI para inspeccion del cluster. Kafka no crea topics automaticamente.
+
+Levantar la infraestructura desde la raiz del proyecto:
+
+```powershell
+docker compose up -d
+```
+
+Comprobar el estado de los contenedores:
+
+```powershell
+docker compose ps
+```
+
+Comprobar Kafka listando topics desde el contenedor:
+
+```powershell
+docker compose exec kafka /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --list
+```
+
+Kafka UI queda disponible en:
+
+```text
+http://localhost:8090
+```
+
+La UI y otros contenedores se conectan al broker usando el listener interno de Docker Compose: `kafka:9092`. Los clientes locales desde el host deben usar `localhost:9092`, publicado contra el listener externo del contenedor.
+
+Ver logs:
+
+```powershell
+docker compose logs -f kafka
+docker compose logs -f kafka-ui
+```
+
+Apagar el entorno:
+
+```powershell
+docker compose down
+```
 
 ## Bases De Datos Y SQL
 

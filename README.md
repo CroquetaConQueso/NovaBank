@@ -346,14 +346,16 @@ Notificacion de bienvenida preparada para clienteId=<id>, nombre=Ana, email=ana.
 
 - `DEPOSITO`: usa `cuentaDestinoId` y publica `OperacionCompletadaEvent`.
 - `RETIRO` o `RETIRADA`: usa `cuentaOrigenId`; si la cuenta no existe, no hay saldo suficiente o la solicitud es invalida, publica `OperacionFallidaEvent`.
+- `TRANSFERENCIA`: usa `cuentaOrigenId` y `cuentaDestinoId`; publica dos movimientos registrados, uno por cada cuenta afectada.
 
-No se cambian controladores, respuestas HTTP, SAGA, SSE ni Kafka Streams. El consumidor se declara como `procesarOperacion` y delega en `CuentaService`. Los eventos de resultado se publican con `StreamBridge` en estos bindings:
+No se cambian controladores ni respuestas HTTP. El consumidor se declara como `procesarOperacion` y delega en `CuentaService`. Los eventos se publican con `StreamBridge` en estos bindings:
 
 | Binding | Topic |
 | --- | --- |
 | `procesarOperacion-in-0` | `novabank.operaciones.solicitadas` |
 | `operacionCompletada-out-0` | `novabank.operaciones.completadas` |
 | `operacionFallida-out-0` | `novabank.operaciones.fallidas` |
+| `movimientoRegistrado-out-0` | `novabank.movimientos.registrados` |
 
 La configuracion local de `cuenta-service` usa Kafka en `localhost:9092`. Si Config Server sobrescribe propiedades desde un repositorio externo, ese repositorio debe incluir valores equivalentes:
 
@@ -363,12 +365,16 @@ spring:
     bootstrap-servers: localhost:9092
   cloud:
     function:
-      definition: procesarOperacion
+      definition: procesarOperacion;alimentarBusSse
     stream:
       bindings:
         procesarOperacion-in-0:
           destination: novabank.operaciones.solicitadas
           group: cuenta-service
+          content-type: application/json
+        alimentarBusSse-in-0:
+          destination: novabank.movimientos.registrados
+          group: cuenta-service-sse
           content-type: application/json
         operacionCompletada-out-0:
           destination: novabank.operaciones.completadas
@@ -376,10 +382,55 @@ spring:
         operacionFallida-out-0:
           destination: novabank.operaciones.fallidas
           content-type: application/json
+        movimientoRegistrado-out-0:
+          destination: novabank.movimientos.registrados
+          content-type: application/json
       kafka:
         binder:
           brokers: localhost:9092
 ```
+
+## SSE De Movimientos Alimentado Desde Kafka
+
+El endpoint publico de SSE se mantiene igual:
+
+```text
+GET /api/cuentas/{id}/movimientos/stream
+```
+
+Sigue devolviendo `text/event-stream` y conserva el filtrado local por `cuentaId`. El cambio del Modulo 6 es la fuente del bus: `cuenta-service` ya no alimenta el `Sinks.Many` directamente desde la logica de negocio. Ahora publica `MovimientoRegistradoEvent` en `novabank.movimientos.registrados` despues de aplicar correctamente cada movimiento, y un consumer separado (`alimentarBusSse`, grupo `cuenta-service-sse`) consume ese topic para alimentar el fan-out local SSE.
+
+Flujo actual:
+
+```text
+cuenta-service aplica movimiento
+  -> publica MovimientoRegistradoEvent en novabank.movimientos.registrados
+  -> cuenta-service consume el topic con group cuenta-service-sse
+  -> MovimientoEventService / Sinks.Many emite a conexiones SSE activas
+```
+
+`Sinks.Many` se mantiene porque resuelve el fan-out local hacia clientes conectados. Kafka aporta persistencia del evento y desacopla el stream SSE de la logica de negocio. No se implementan todavia alertas de saldo bajo ni Kafka Streams.
+
+Validacion local:
+
+```powershell
+docker compose up -d
+mvn -pl cuenta-service spring-boot:run
+curl -N http://localhost:8082/api/cuentas/1/movimientos/stream
+```
+
+En otra terminal, provocar un movimiento mediante `operacion-service` o publicar un `OperacionSolicitadaEvent` en `novabank.operaciones.solicitadas`. Despues comprobar:
+
+- Kafka UI en `http://localhost:8090`, topic `novabank.movimientos.registrados`.
+- La terminal SSE recibe el movimiento de la cuenta conectada.
+
+Ejemplo de `MovimientoRegistradoEvent`:
+
+```json
+{"eventId":"<uuid>","correlationId":"22222222-2222-2222-2222-222222222222","occurredAt":"<instant>","movimientoId":null,"cuentaId":1,"tipoMovimiento":"DEPOSITO","importe":25.00,"saldoResultante":125.00,"moneda":"EUR"}
+```
+
+Nota: el contrato actual de `MovimientoRegistradoEvent` no incluye `operationId`; se mantiene compatible para que `mvn -pl cuenta-service test` funcione sin requerir instalar previamente el modulo comun. Si se versiona el contrato de eventos en una iteracion posterior, `operationId` puede anadirse de forma explicita.
 
 Arrancar infraestructura y `cuenta-service`:
 

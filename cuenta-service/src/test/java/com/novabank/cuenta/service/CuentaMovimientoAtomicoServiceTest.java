@@ -1,6 +1,7 @@
 package com.novabank.cuenta.service;
 
 import com.novabank.cuenta.dto.AplicarMovimientoRequestDTO;
+import com.novabank.cuenta.event.MovimientoRegistradoEventPublisher;
 import com.novabank.cuenta.exception.IdempotencyConflictException;
 import com.novabank.cuenta.exception.InsufficientBalanceException;
 import com.novabank.cuenta.exception.ResourceNotFoundException;
@@ -43,11 +44,12 @@ class CuentaMovimientoAtomicoServiceTest extends PostgresTestContainerSupport {
     private OperacionIdempotenteRepository operacionIdempotenteRepository;
 
     @MockBean
-    private MovimientoEventService movimientoEventService;
+    private MovimientoRegistradoEventPublisher movimientoRegistradoEventPublisher;
 
     @BeforeEach
     void setUp() {
-        reset(movimientoEventService);
+        reset(movimientoRegistradoEventPublisher);
+        org.mockito.Mockito.when(movimientoRegistradoEventPublisher.publicar(any())).thenReturn(Mono.empty());
         operacionIdempotenteRepository.deleteAll()
                 .then(cuentaRepository.deleteAll())
                 .block();
@@ -124,7 +126,7 @@ class CuentaMovimientoAtomicoServiceTest extends PostgresTestContainerSupport {
                 .expectNextCount(1)
                 .verifyComplete();
 
-        verify(movimientoEventService, times(2)).publicar(any());
+        verify(movimientoRegistradoEventPublisher, times(2)).publicar(any());
     }
 
     @Test
@@ -145,7 +147,7 @@ class CuentaMovimientoAtomicoServiceTest extends PostgresTestContainerSupport {
                 .expectNextCount(1)
                 .verifyComplete();
 
-        verify(movimientoEventService, times(2)).publicar(any());
+        verify(movimientoRegistradoEventPublisher, times(2)).publicar(any());
     }
 
     @Test

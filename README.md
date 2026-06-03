@@ -171,6 +171,64 @@ Apagar el entorno:
 docker compose down
 ```
 
+## Base Tecnica De Eventos Del Modulo 6
+
+Se incorporan las dependencias base de Spring Cloud Stream reactivo solo en los servicios que podran producir o consumir eventos:
+
+- `cliente-service`
+- `cuenta-service`
+- `operacion-service`
+
+Dependencias añadidas:
+
+- `spring-cloud-stream`
+- `spring-cloud-stream-binder-kafka-reactive`
+- `novabank-events`, modulo comun interno con contratos de eventos.
+
+No se declara `spring-kafka` de forma directa: llega transitivamente a traves de `spring-cloud-stream-binder-kafka-reactive` y se usa para `NewTopic` y `TopicBuilder`.
+
+Los contratos iniciales estan en `novabank-events` bajo `com.novabank.events`:
+
+- `ClienteRegistradoEvent`
+- `OperacionSolicitadaEvent`
+- `OperacionCompletadaEvent`
+- `OperacionFallidaEvent`
+- `MovimientoRegistradoEvent`
+- `AlertaSaldoBajoEvent`
+
+Todos los eventos incluyen `eventId`, `correlationId` y `occurredAt`, y transportan solo datos simples del dominio.
+
+Topics previstos:
+
+| Topic | Particiones | Retencion local |
+| --- | ---: | --- |
+| `novabank.clientes.registrados` | 3 | 7 dias |
+| `novabank.operaciones.solicitadas` | 6 | 7 dias |
+| `novabank.operaciones.completadas` | 6 | 7 dias |
+| `novabank.operaciones.fallidas` | 6 | 30 dias |
+| `novabank.movimientos.registrados` | 6 | 7 dias |
+| `novabank.alertas.saldo-bajo` | 3 | 30 dias |
+
+Los nombres de topics estan centralizados en `NovaBankTopics`.
+
+La declaracion programatica de topics esta en `cliente-service`, clase `KafkaTopicsConfig`. Se ubica ahi de forma inicial porque `cliente-service` sera un productor de eventos del modulo y permite validar la creacion de topics sin introducir productores, consumidores ni cambios de flujo.
+
+Para validar la creacion de topics:
+
+```powershell
+docker compose up -d
+mvn -pl cliente-service spring-boot:run
+docker compose exec kafka /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --list
+```
+
+Tambien se pueden comprobar en Kafka UI:
+
+```text
+http://localhost:8090
+```
+
+La configuracion base local usa `localhost:9092` para `spring.kafka.bootstrap-servers` y `spring.cloud.stream.kafka.binder.brokers`. Si un repositorio externo de Config Server define estos mismos valores para los servicios, debe incluir la misma configuracion para no sobrescribir el entorno local.
+
 ## Bases De Datos Y SQL
 
 El proyecto usa cuatro bases PostgreSQL, una por servicio propietario de datos:

@@ -3,6 +3,13 @@ spring:
     name: operacion-service
   config:
     import: optional:configserver:http://localhost:8888
+  kafka:
+    bootstrap-servers: localhost:9092
+  cloud:
+    stream:
+      kafka:
+        binder:
+          brokers: localhost:9092
 
 eureka:
   client:

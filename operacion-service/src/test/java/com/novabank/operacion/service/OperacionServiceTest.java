@@ -201,29 +201,40 @@ class OperacionServiceTest {
     }
 
     @Test
-    void transferenciaCorrectaUsaEndpointInternoUnicoYGuardaDosMovimientos() {
-        when(cuentaServiceClient.aplicarMovimiento(any(AplicarMovimientoRequestDTO.class)))
-                .thenReturn(Mono.just(aplicarMovimientoResponse()));
-        AtomicLong ids = new AtomicLong(10L);
-        when(movimientoRepository.save(any(Movimiento.class))).thenAnswer(invocation -> {
-            Movimiento movimiento = invocation.getArgument(0);
-            movimiento.setId(ids.getAndIncrement());
-            movimiento.setFecha(LocalDateTime.now());
-            return Mono.just(movimiento);
-        });
+    void transferenciaOrdinariaPublicaOperacionSolicitadaYNoLlamaCuentaService() {
+        when(operacionAsincronaEstadoService.crearSolicitada(any(OperacionSolicitadaEvent.class), eq(10L)))
+                .thenReturn(Mono.just(new OperacionAsincrona()));
+        when(operacionEventPublisher.publicarOperacionSolicitada(any(OperacionSolicitadaEvent.class), eq(10L)))
+                .thenReturn(Mono.empty());
 
-        StepVerifier.create(service.transferir(new TransferenciaRequestDTO(10L, 11L, new BigDecimal("25.00"))))
+        StepVerifier.create(service.transferir(new TransferenciaRequestDTO(10L, 11L, new BigDecimal("25.00")))
+                        .contextWrite(context -> context.put(
+                                com.novabank.operacion.tracing.CorrelationIdSupport.CONTEXT_KEY,
+                                "22222222-2222-2222-2222-222222222222"
+                        )))
                 .assertNext(response -> {
+                    assertThat(response.operationId()).isNotNull();
+                    assertThat(response.estado()).isEqualTo("SOLICITADA");
                     assertThat(response.tipoOperacion()).isEqualTo("TRANSFERENCIA");
-                    assertThat(response.movimientos()).hasSize(2);
-                    assertThat(response.movimientos().get(0).tipo()).isEqualTo("TRANSFERENCIA_SALIENTE");
-                    assertThat(response.movimientos().get(1).tipo()).isEqualTo("TRANSFERENCIA_ENTRANTE");
+                    assertThat(response.cuentaOrigenId()).isEqualTo(10L);
+                    assertThat(response.cuentaDestinoId()).isEqualTo(11L);
+                    assertThat(response.importe()).isEqualByComparingTo("25.00");
+                    assertThat(response.moneda()).isEqualTo("EUR");
                 })
                 .verifyComplete();
 
-        verify(cuentaServiceClient).aplicarMovimiento(any(AplicarMovimientoRequestDTO.class));
-        verify(cuentaServiceClient, never()).retirar(any(), any());
-        verify(cuentaServiceClient, never()).depositar(any(), any());
+        ArgumentCaptor<OperacionSolicitadaEvent> captor = ArgumentCaptor.forClass(OperacionSolicitadaEvent.class);
+        verify(operacionEventPublisher).publicarOperacionSolicitada(captor.capture(), eq(10L));
+        OperacionSolicitadaEvent event = captor.getValue();
+        assertThat(event.correlationId()).isEqualTo(UUID.fromString("22222222-2222-2222-2222-222222222222"));
+        assertThat(event.tipoOperacion()).isEqualTo("TRANSFERENCIA");
+        assertThat(event.cuentaOrigenId()).isEqualTo(10L);
+        assertThat(event.cuentaDestinoId()).isEqualTo(11L);
+        assertThat(event.importe()).isEqualByComparingTo("25.00");
+        assertThat(event.moneda()).isEqualTo("EUR");
+        verify(operacionAsincronaEstadoService).crearSolicitada(event, 10L);
+        verifyNoInteractions(cuentaServiceClient);
+        verify(movimientoRepository, never()).save(any(Movimiento.class));
     }
 
     @Test
@@ -249,13 +260,25 @@ class OperacionServiceTest {
     }
 
     @Test
-    void cuentaServiceNoDisponibleEnTransferenciaPropagaServicioNoDisponible() {
-        when(cuentaServiceClient.aplicarMovimiento(any(AplicarMovimientoRequestDTO.class)))
-                .thenReturn(Mono.error(new RemoteServiceException("cuenta-service no esta disponible")));
+    void transferenciaOrdinariaConPublisherFallidoMarcaOperacionFallida() {
+        when(operacionAsincronaEstadoService.crearSolicitada(any(OperacionSolicitadaEvent.class), eq(10L)))
+                .thenReturn(Mono.just(new OperacionAsincrona()));
+        when(operacionEventPublisher.publicarOperacionSolicitada(any(OperacionSolicitadaEvent.class), eq(10L)))
+                .thenReturn(Mono.error(new IllegalStateException("Kafka no disponible")));
+        when(operacionAsincronaEstadoService.marcarFallidaPorPublicacion(
+                any(OperacionSolicitadaEvent.class),
+                any(Throwable.class)
+        )).thenReturn(Mono.empty());
 
         StepVerifier.create(service.transferir(new TransferenciaRequestDTO(10L, 11L, new BigDecimal("50.00"))))
-                .expectError(RemoteServiceException.class)
+                .expectError(IllegalStateException.class)
                 .verify();
+
+        verify(operacionAsincronaEstadoService).marcarFallidaPorPublicacion(
+                any(OperacionSolicitadaEvent.class),
+                any(Throwable.class)
+        );
+        verifyNoInteractions(cuentaServiceClient);
     }
 
     @Test
@@ -283,7 +306,9 @@ class OperacionServiceTest {
     }
 
     @Test
-    void transferenciaSinCuentaDestinoEnRespuestaRemotaNoGuardaMovimientos() {
+    void transferenciaEnDivisaSinCuentaDestinoEnRespuestaRemotaNoGuardaMovimientos() {
+        when(exchangeRateService.obtenerTasaConOrigen("USD", "EUR"))
+                .thenReturn(Mono.just(new ExchangeRateResultDTO(BigDecimal.ONE, false, Instant.now())));
         when(cuentaServiceClient.aplicarMovimiento(any(AplicarMovimientoRequestDTO.class)))
                 .thenReturn(Mono.just(new AplicarMovimientoResponseDTO(
                         "op-test",
@@ -293,7 +318,13 @@ class OperacionServiceTest {
                         null
                 )));
 
-        StepVerifier.create(service.transferir(new TransferenciaRequestDTO(10L, 11L, new BigDecimal("10.00"))))
+        StepVerifier.create(service.transferirEnDivisa(new TransferenciaDivisaRequestDTO(
+                        10L,
+                        11L,
+                        new BigDecimal("10.00"),
+                        "USD",
+                        "EUR"
+                )))
                 .expectError(RemoteResourceNotFoundException.class)
                 .verify();
 
@@ -535,33 +566,24 @@ class OperacionServiceTest {
     }
 
     @Test
-    void transferenciaConIdempotencyKeyUsaOperationIdEstableEnCuentaService() {
-        when(operacionPublicaIdempotenteRepository.findByIdempotencyKey("transferencia-1"))
-                .thenReturn(Mono.empty())
-                .thenReturn(Mono.just(operacionPublica("transferencia-1", "hash", "TRANSFERENCIA")));
-        when(operacionPublicaIdempotenteRepository.insertProcessingIfAbsent(eq("transferencia-1"), any(), eq("TRANSFERENCIA")))
-                .thenReturn(Mono.just(1));
-        when(operacionPublicaIdempotenteRepository.save(any(OperacionPublicaIdempotente.class)))
-                .thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
-        when(cuentaServiceClient.aplicarMovimiento(any(AplicarMovimientoRequestDTO.class)))
-                .thenReturn(Mono.just(aplicarMovimientoResponse()));
-        when(movimientoRepository.save(any(Movimiento.class))).thenAnswer(invocation -> {
-            Movimiento movimiento = invocation.getArgument(0);
-            movimiento.setId(50L);
-            movimiento.setFecha(LocalDateTime.now());
-            return Mono.just(movimiento);
-        });
+    void transferenciaOrdinariaConIdempotencyKeyMantieneFlujoAsincrono() {
+        when(operacionAsincronaEstadoService.crearSolicitada(any(OperacionSolicitadaEvent.class), eq(10L)))
+                .thenReturn(Mono.just(new OperacionAsincrona()));
+        when(operacionEventPublisher.publicarOperacionSolicitada(any(OperacionSolicitadaEvent.class), eq(10L)))
+                .thenReturn(Mono.empty());
 
         StepVerifier.create(service.transferir(
                         new TransferenciaRequestDTO(10L, 11L, new BigDecimal("25.00")),
                         "transferencia-1"
                 ))
-                .assertNext(response -> assertThat(response.movimientos()).hasSize(2))
+                .assertNext(response -> {
+                    assertThat(response.estado()).isEqualTo("SOLICITADA");
+                    assertThat(response.tipoOperacion()).isEqualTo("TRANSFERENCIA");
+                })
                 .verifyComplete();
 
-        ArgumentCaptor<AplicarMovimientoRequestDTO> captor = ArgumentCaptor.forClass(AplicarMovimientoRequestDTO.class);
-        verify(cuentaServiceClient).aplicarMovimiento(captor.capture());
-        assertThat(captor.getValue().operationId()).startsWith("public-");
+        verify(operacionPublicaIdempotenteRepository, never()).findByIdempotencyKey(any());
+        verifyNoInteractions(cuentaServiceClient);
     }
 
     @Test

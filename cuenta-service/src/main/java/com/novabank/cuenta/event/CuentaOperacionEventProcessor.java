@@ -1,7 +1,7 @@
 package com.novabank.cuenta.event;
 
 import com.novabank.cuenta.dto.CuentaOperacionRequestDTO;
-import com.novabank.cuenta.dto.CuentaResponseDTO;
+import com.novabank.cuenta.dto.TransferenciaInternaRequestDTO;
 import com.novabank.cuenta.exception.InsufficientBalanceException;
 import com.novabank.cuenta.exception.ResourceNotFoundException;
 import com.novabank.cuenta.service.CuentaService;
@@ -41,7 +41,7 @@ public class CuentaOperacionEventProcessor {
         );
 
         return aplicarOperacion(event)
-                .flatMap(cuenta -> publisher.publicarCompletada(event))
+                .then(Mono.defer(() -> publisher.publicarCompletada(event)))
                 .doOnSuccess(ignored -> log.info(
                         "OperacionSolicitadaEvent procesado correctamente operationId={}",
                         event.operationId()
@@ -49,16 +49,21 @@ public class CuentaOperacionEventProcessor {
                 .onErrorResume(error -> publicarFallo(event, error));
     }
 
-    private Mono<CuentaResponseDTO> aplicarOperacion(OperacionSolicitadaEvent event) {
+    private Mono<Void> aplicarOperacion(OperacionSolicitadaEvent event) {
         return Mono.defer(() -> switch (tipoNormalizado(event.tipoOperacion())) {
             case "DEPOSITO" -> cuentaService.depositar(
                     cuentaDestinoObligatoria(event),
                     new CuentaOperacionRequestDTO(event.importe())
-            );
+            ).then();
             case "RETIRO", "RETIRADA" -> cuentaService.retirar(
                     cuentaOrigenObligatoria(event),
                     new CuentaOperacionRequestDTO(event.importe())
-            );
+            ).then();
+            case "TRANSFERENCIA" -> cuentaService.transferir(new TransferenciaInternaRequestDTO(
+                    cuentaOrigenObligatoria(event),
+                    cuentaDestinoTransferenciaObligatoria(event),
+                    event.importe()
+            )).then();
             default -> Mono.error(new IllegalArgumentException(
                     "Tipo de operacion no soportado: " + event.tipoOperacion()
             ));
@@ -95,6 +100,13 @@ public class CuentaOperacionEventProcessor {
             throw new IllegalArgumentException("La cuenta origen es obligatoria para retiradas");
         }
         return event.cuentaOrigenId();
+    }
+
+    private Long cuentaDestinoTransferenciaObligatoria(OperacionSolicitadaEvent event) {
+        if (event.cuentaDestinoId() == null) {
+            throw new IllegalArgumentException("La cuenta destino es obligatoria para transferencias");
+        }
+        return event.cuentaDestinoId();
     }
 
     private String resolverCodigoError(Throwable error) {

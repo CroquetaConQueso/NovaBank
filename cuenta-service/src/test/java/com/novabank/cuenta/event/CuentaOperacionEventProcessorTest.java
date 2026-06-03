@@ -2,6 +2,7 @@ package com.novabank.cuenta.event;
 
 import com.novabank.cuenta.dto.CuentaOperacionRequestDTO;
 import com.novabank.cuenta.dto.CuentaResponseDTO;
+import com.novabank.cuenta.dto.TransferenciaInternaRequestDTO;
 import com.novabank.cuenta.exception.InsufficientBalanceException;
 import com.novabank.cuenta.exception.ResourceNotFoundException;
 import com.novabank.cuenta.service.CuentaService;
@@ -12,6 +13,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.messaging.support.MessageBuilder;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
@@ -90,6 +92,65 @@ class CuentaOperacionEventProcessorTest {
                 .verifyComplete();
 
         verify(cuentaService).depositar(eq(99L), any(CuentaOperacionRequestDTO.class));
+        verify(publisher).publicarFallida(eq(event), eq("CUENTA_NO_ENCONTRADA"), startsWith("No existe ninguna cuenta"));
+        verify(publisher, never()).publicarCompletada(event);
+    }
+
+    @Test
+    void procesarTransferenciaValidaPublicaOperacionCompletada() {
+        CuentaOperacionEventProcessor processor = new CuentaOperacionEventProcessor(cuentaService, publisher);
+        OperacionSolicitadaEvent event = operacion("TRANSFERENCIA", 10L, 11L, "25.00");
+        CuentaResponseDTO origen = new CuentaResponseDTO(10L, "ES00000000000000000010", 1L, new BigDecimal("75.00"), LocalDateTime.now());
+        CuentaResponseDTO destino = new CuentaResponseDTO(11L, "ES00000000000000000011", 2L, new BigDecimal("125.00"), LocalDateTime.now());
+
+        when(cuentaService.transferir(any(TransferenciaInternaRequestDTO.class))).thenReturn(Flux.just(origen, destino));
+        when(publisher.publicarCompletada(event)).thenReturn(Mono.empty());
+
+        StepVerifier.create(processor.procesar(MessageBuilder.withPayload(event).build()))
+                .verifyComplete();
+
+        ArgumentCaptor<TransferenciaInternaRequestDTO> requestCaptor =
+                ArgumentCaptor.forClass(TransferenciaInternaRequestDTO.class);
+        verify(cuentaService).transferir(requestCaptor.capture());
+        assertThat(requestCaptor.getValue().cuentaOrigenId()).isEqualTo(10L);
+        assertThat(requestCaptor.getValue().cuentaDestinoId()).isEqualTo(11L);
+        assertThat(requestCaptor.getValue().cantidad()).isEqualByComparingTo("25.00");
+        verify(publisher).publicarCompletada(event);
+        verify(publisher, never()).publicarFallida(eq(event), any(), any());
+    }
+
+    @Test
+    void procesarTransferenciaConSaldoInsuficientePublicaOperacionFallida() {
+        CuentaOperacionEventProcessor processor = new CuentaOperacionEventProcessor(cuentaService, publisher);
+        OperacionSolicitadaEvent event = operacion("TRANSFERENCIA", 10L, 11L, "999.00");
+
+        when(cuentaService.transferir(any(TransferenciaInternaRequestDTO.class)))
+                .thenReturn(Flux.error(new InsufficientBalanceException("Saldo insuficiente")));
+        when(publisher.publicarFallida(eq(event), eq("SALDO_INSUFICIENTE"), startsWith("Saldo insuficiente")))
+                .thenReturn(Mono.empty());
+
+        StepVerifier.create(processor.procesar(MessageBuilder.withPayload(event).build()))
+                .verifyComplete();
+
+        verify(cuentaService).transferir(any(TransferenciaInternaRequestDTO.class));
+        verify(publisher).publicarFallida(eq(event), eq("SALDO_INSUFICIENTE"), startsWith("Saldo insuficiente"));
+        verify(publisher, never()).publicarCompletada(event);
+    }
+
+    @Test
+    void procesarTransferenciaConCuentaInexistentePublicaOperacionFallida() {
+        CuentaOperacionEventProcessor processor = new CuentaOperacionEventProcessor(cuentaService, publisher);
+        OperacionSolicitadaEvent event = operacion("TRANSFERENCIA", 10L, 99L, "25.00");
+
+        when(cuentaService.transferir(any(TransferenciaInternaRequestDTO.class)))
+                .thenReturn(Flux.error(new ResourceNotFoundException("No existe ninguna cuenta con id 99")));
+        when(publisher.publicarFallida(eq(event), eq("CUENTA_NO_ENCONTRADA"), startsWith("No existe ninguna cuenta")))
+                .thenReturn(Mono.empty());
+
+        StepVerifier.create(processor.procesar(MessageBuilder.withPayload(event).build()))
+                .verifyComplete();
+
+        verify(cuentaService).transferir(any(TransferenciaInternaRequestDTO.class));
         verify(publisher).publicarFallida(eq(event), eq("CUENTA_NO_ENCONTRADA"), startsWith("No existe ninguna cuenta"));
         verify(publisher, never()).publicarCompletada(event);
     }

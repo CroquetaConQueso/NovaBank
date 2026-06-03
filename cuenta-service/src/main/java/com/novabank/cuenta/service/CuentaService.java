@@ -7,6 +7,7 @@ import com.novabank.cuenta.dto.CuentaResponseDTO;
 import com.novabank.cuenta.dto.MovimientoEventDTO;
 import com.novabank.cuenta.dto.SaldoResponseDTO;
 import com.novabank.cuenta.dto.TransferenciaInternaRequestDTO;
+import com.novabank.cuenta.event.MovimientoRegistradoEventPublisher;
 import com.novabank.cuenta.exception.InsufficientBalanceException;
 import com.novabank.cuenta.exception.ResourceNotFoundException;
 import com.novabank.cuenta.exception.ValidationException;
@@ -38,20 +39,20 @@ public class CuentaService {
     private final ClienteServiceClient clienteServiceClient;
     private final GeneradorNumeroCuentaStrategy generadorNumeroCuentaStrategy;
     private final CuentaMapper cuentaMapper;
-    private final MovimientoEventService movimientoEventService;
+    private final MovimientoRegistradoEventPublisher movimientoRegistradoEventPublisher;
 
     public CuentaService(
             CuentaRepository cuentaRepository,
             ClienteServiceClient clienteServiceClient,
             GeneradorNumeroCuentaStrategy generadorNumeroCuentaStrategy,
             CuentaMapper cuentaMapper,
-            MovimientoEventService movimientoEventService
+            MovimientoRegistradoEventPublisher movimientoRegistradoEventPublisher
     ) {
         this.cuentaRepository = cuentaRepository;
         this.clienteServiceClient = clienteServiceClient;
         this.generadorNumeroCuentaStrategy = generadorNumeroCuentaStrategy;
         this.cuentaMapper = cuentaMapper;
-        this.movimientoEventService = movimientoEventService;
+        this.movimientoRegistradoEventPublisher = movimientoRegistradoEventPublisher;
     }
 
     @Transactional
@@ -123,7 +124,8 @@ public class CuentaService {
                     })
                     .flatMap(cuentaRepository::save)
                     .doOnEach(signal -> logMovimiento(signal, "DEPOSITO", cantidad))
-                    .doOnNext(cuenta -> publicarEvento(cuenta, "DEPOSITO", cantidad, "Deposito interno", null))
+                    .flatMap(cuenta -> publicarEvento(cuenta, "DEPOSITO", cantidad, "Deposito interno", null)
+                            .thenReturn(cuenta))
                     .map(cuentaMapper::toResponse);
         });
     }
@@ -145,7 +147,8 @@ public class CuentaService {
                     })
                     .flatMap(cuentaRepository::save)
                     .doOnEach(signal -> logMovimiento(signal, "RETIRO", cantidad))
-                    .doOnNext(cuenta -> publicarEvento(cuenta, "RETIRO", cantidad, "Retiro interno", null))
+                    .flatMap(cuenta -> publicarEvento(cuenta, "RETIRO", cantidad, "Retiro interno", null)
+                            .thenReturn(cuenta))
                     .map(cuentaMapper::toResponse);
         });
     }
@@ -175,7 +178,8 @@ public class CuentaService {
                             .flatMap(cuentas -> aplicarTransferencia(cuentas, origenId, destinoId, cantidad));
                 })
                 .flatMapMany(cuentas -> cuentaRepository.saveAll(cuentas)
-                        .doOnNext(cuenta -> publicarEventoTransferencia(cuenta, origenDestinoTipo(cuenta, request), request.cantidad()))
+                        .concatMap(cuenta -> publicarEventoTransferencia(cuenta, origenDestinoTipo(cuenta, request), request.cantidad())
+                                .thenReturn(cuenta))
                         .map(cuentaMapper::toResponse));
     }
 
@@ -213,18 +217,18 @@ public class CuentaService {
         return "TRANSFERENCIA_ENTRANTE";
     }
 
-    private void publicarEventoTransferencia(Cuenta cuenta, String tipo, BigDecimal cantidad) {
-        publicarEvento(cuenta, tipo, cantidad, "Transferencia interna", null);
+    private Mono<Void> publicarEventoTransferencia(Cuenta cuenta, String tipo, BigDecimal cantidad) {
+        return publicarEvento(cuenta, tipo, cantidad, "Transferencia interna", null);
     }
 
-    private void publicarEvento(
+    private Mono<Void> publicarEvento(
             Cuenta cuenta,
             String tipo,
             BigDecimal monto,
             String descripcion,
             String operationId
     ) {
-        movimientoEventService.publicar(new MovimientoEventDTO(
+        MovimientoEventDTO evento = new MovimientoEventDTO(
                 cuenta.getId(),
                 null,
                 tipo,
@@ -233,7 +237,19 @@ public class CuentaService {
                 descripcion,
                 LocalDateTime.now(),
                 operationId
-        ));
+        );
+
+        return movimientoRegistradoEventPublisher.publicar(evento)
+                .onErrorResume(error -> {
+                    log.error(
+                            "No se pudo publicar MovimientoRegistradoEvent cuentaId={} tipo={} operationId={}",
+                            evento.cuentaId(),
+                            evento.tipo(),
+                            evento.operationId(),
+                            error
+                    );
+                    return Mono.empty();
+                });
     }
 
     private Cuenta buscarEnMapa(Map<Long, Cuenta> cuentas, Long id) {

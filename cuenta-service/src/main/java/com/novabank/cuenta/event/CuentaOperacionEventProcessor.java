@@ -5,6 +5,7 @@ import com.novabank.cuenta.dto.TransferenciaInternaRequestDTO;
 import com.novabank.cuenta.exception.InsufficientBalanceException;
 import com.novabank.cuenta.exception.ResourceNotFoundException;
 import com.novabank.cuenta.service.CuentaService;
+import com.novabank.cuenta.tracing.CorrelationIdSupport;
 import com.novabank.events.operacion.OperacionSolicitadaEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -41,6 +42,15 @@ public class CuentaOperacionEventProcessor {
         );
 
         return aplicarOperacion(event)
+                .contextWrite(context -> {
+                    if (event.operationId() != null) {
+                        context = context.put(CorrelationIdSupport.OPERATION_ID_CONTEXT_KEY, event.operationId().toString());
+                    }
+                    if (event.correlationId() != null) {
+                        context = context.put(CorrelationIdSupport.CONTEXT_KEY, event.correlationId().toString());
+                    }
+                    return context;
+                })
                 .then(Mono.defer(() -> publisher.publicarCompletada(event)))
                 .doOnSuccess(ignored -> log.info(
                         "OperacionSolicitadaEvent procesado correctamente operationId={}",

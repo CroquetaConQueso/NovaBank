@@ -9,6 +9,7 @@ public final class CorrelationIdSupport {
 
     public static final String HEADER_NAME = "X-Correlation-Id";
     public static final String CONTEXT_KEY = "correlationId";
+    public static final String OPERATION_ID_CONTEXT_KEY = "operationId";
 
     private CorrelationIdSupport() {
     }

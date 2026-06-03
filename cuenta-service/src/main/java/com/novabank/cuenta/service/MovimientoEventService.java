@@ -16,12 +16,12 @@ public class MovimientoEventService {
 
     private final Sinks.Many<MovimientoEventDTO> sink = Sinks.many()
             .multicast()
-            .onBackpressureBuffer();
+            .onBackpressureBuffer(256, false);
     private final AtomicLong eventosDescartados = new AtomicLong();
 
     /**
-     * Bus SSE en memoria: no persiste eventos y descarta si un consumidor lento
-     * no puede seguir el ritmo.
+     * Fan-out local para conexiones SSE activas. Los eventos llegan desde el
+     * consumer Kafka de movimientos registrados.
      */
     public void publicar(MovimientoEventDTO evento) {
         sink.tryEmitNext(evento);

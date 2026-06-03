@@ -1,6 +1,7 @@
 package com.novabank.cuenta.service;
 
 import com.novabank.cuenta.dto.AplicarMovimientoRequestDTO;
+import com.novabank.cuenta.event.MovimientoRegistradoEventPublisher;
 import com.novabank.cuenta.exception.IdempotencyConflictException;
 import com.novabank.cuenta.mapper.CuentaMapper;
 import com.novabank.cuenta.model.Cuenta;
@@ -31,19 +32,19 @@ class CuentaMovimientoAtomicoConcurrencyTest {
 
     private CuentaRepository cuentaRepository;
     private OperacionIdempotenteRepository operacionIdempotenteRepository;
-    private MovimientoEventService movimientoEventService;
+    private MovimientoRegistradoEventPublisher movimientoRegistradoEventPublisher;
     private CuentaMovimientoAtomicoService service;
 
     @BeforeEach
     void setUp() {
         cuentaRepository = mock(CuentaRepository.class);
         operacionIdempotenteRepository = mock(OperacionIdempotenteRepository.class);
-        movimientoEventService = mock(MovimientoEventService.class);
+        movimientoRegistradoEventPublisher = mock(MovimientoRegistradoEventPublisher.class);
         service = new CuentaMovimientoAtomicoService(
                 cuentaRepository,
                 operacionIdempotenteRepository,
                 new CuentaMapper(),
-                movimientoEventService
+                movimientoRegistradoEventPublisher
         );
     }
 
@@ -71,7 +72,7 @@ class CuentaMovimientoAtomicoConcurrencyTest {
                 })
                 .verifyComplete();
 
-        verify(movimientoEventService, never()).publicar(org.mockito.ArgumentMatchers.any());
+        verify(movimientoRegistradoEventPublisher, never()).publicar(org.mockito.ArgumentMatchers.any());
     }
 
     @Test

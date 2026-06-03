@@ -2,6 +2,7 @@ package com.novabank.cliente.service;
 
 import com.novabank.cliente.dto.ClienteRequestDTO;
 import com.novabank.cliente.dto.ClienteResponseDTO;
+import com.novabank.cliente.event.ClienteEventPublisher;
 import com.novabank.cliente.exception.DuplicateResourceException;
 import com.novabank.cliente.exception.ResourceNotFoundException;
 import com.novabank.cliente.exception.ValidationException;
@@ -27,10 +28,16 @@ public class ClienteService {
 
     private final ClienteRepository clienteRepository;
     private final ClienteMapper clienteMapper;
+    private final ClienteEventPublisher clienteEventPublisher;
 
-    public ClienteService(ClienteRepository clienteRepository, ClienteMapper clienteMapper) {
+    public ClienteService(
+            ClienteRepository clienteRepository,
+            ClienteMapper clienteMapper,
+            ClienteEventPublisher clienteEventPublisher
+    ) {
         this.clienteRepository = clienteRepository;
         this.clienteMapper = clienteMapper;
+        this.clienteEventPublisher = clienteEventPublisher;
     }
 
     /**
@@ -52,6 +59,8 @@ public class ClienteService {
                         return cliente;
                     }))
                     .flatMap(clienteRepository::save)
+                    .flatMap(cliente -> clienteEventPublisher.publicarClienteRegistrado(cliente)
+                            .thenReturn(cliente))
                     .map(clienteMapper::toResponse)
                     .doOnEach(signal -> logClienteCreado(signal));
         });

@@ -215,6 +215,8 @@ Los nombres de topics estan centralizados en `NovaBankTopics`.
 
 La declaracion programatica de topics esta en `cliente-service`, clase `KafkaTopicsConfig`. Se ubica ahi de forma inicial porque `cliente-service` sera un productor de eventos del modulo y permite validar la creacion de topics sin introducir productores, consumidores ni cambios de flujo.
 
+`cliente-service` publica `ClienteRegistradoEvent` despues de guardar correctamente un cliente. La publicacion usa Spring Cloud Stream con `StreamBridge`, binding `clienteRegistrado-out-0`, y destino `novabank.clientes.registrados`. Si el cliente no se guarda, no se publica evento. Si Kafka rechaza la publicacion, el alta devuelve un error controlado `EVENT_NOT_PUBLISHED` para priorizar la consistencia del caso practico.
+
 Para validar la creacion de topics:
 
 ```powershell
@@ -297,6 +299,46 @@ Notificacion de bienvenida preparada para clienteId=1001, nombre=Ana Garcia, ema
 ```
 
 Tambien se puede publicar el mismo JSON desde Kafka UI en `http://localhost:8090`, topic `novabank.clientes.registrados`.
+
+## Validacion Manual Del Evento Cliente Registrado
+
+Precondicion: `cliente-service` necesita la configuracion R2DBC/PostgreSQL local del Modulo 5 o las propiedades equivalentes desde Config Server externo.
+
+Arrancar Kafka y los servicios implicados:
+
+```powershell
+docker compose up -d
+mvn -pl notificacion-service spring-boot:run
+mvn -pl cliente-service spring-boot:run
+```
+
+Crear un cliente directamente contra `cliente-service`:
+
+```powershell
+Invoke-RestMethod -Method Post `
+  -Uri http://localhost:8081/api/clientes `
+  -ContentType "application/json" `
+  -Headers @{ "X-Correlation-Id" = "33333333-3333-3333-3333-333333333333" } `
+  -Body '{"nombre":"Ana","apellidos":"Garcia","dni":"12345678Z","email":"ana.garcia@example.com","telefono":"600111222"}'
+```
+
+Comprobar el evento en Kafka UI:
+
+```text
+http://localhost:8090
+```
+
+Topic esperado:
+
+```text
+novabank.clientes.registrados
+```
+
+Comprobar en logs de `notificacion-service`:
+
+```text
+Notificacion de bienvenida preparada para clienteId=<id>, nombre=Ana, email=ana.garcia@example.com
+```
 
 ## Bases De Datos Y SQL
 

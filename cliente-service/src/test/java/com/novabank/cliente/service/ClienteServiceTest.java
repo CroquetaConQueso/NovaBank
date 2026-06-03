@@ -1,6 +1,7 @@
 package com.novabank.cliente.service;
 
 import com.novabank.cliente.dto.ClienteRequestDTO;
+import com.novabank.cliente.event.ClienteEventPublisher;
 import com.novabank.cliente.exception.DuplicateResourceException;
 import com.novabank.cliente.exception.ResourceNotFoundException;
 import com.novabank.cliente.exception.ValidationException;
@@ -22,6 +23,8 @@ import java.time.LocalDateTime;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -33,6 +36,9 @@ class ClienteServiceTest {
 
     @Spy
     private ClienteMapper clienteMapper;
+
+    @Mock
+    private ClienteEventPublisher clienteEventPublisher;
 
     @InjectMocks
     private ClienteService clienteService;
@@ -56,6 +62,7 @@ class ClienteServiceTest {
             cliente.setFechaCreacion(LocalDateTime.now());
             return Mono.just(cliente);
         });
+        when(clienteEventPublisher.publicarClienteRegistrado(any(Cliente.class))).thenReturn(Mono.empty());
 
         StepVerifier.create(clienteService.crearCliente(request))
                 .assertNext(response -> {
@@ -72,6 +79,7 @@ class ClienteServiceTest {
         assertThat(guardado.getApellidos()).isEqualTo("Garcia");
         assertThat(guardado.getDni()).isEqualTo("12345678Z");
         assertThat(guardado.getEmail()).isEqualTo("ana@example.com");
+        verify(clienteEventPublisher).publicarClienteRegistrado(guardado);
     }
 
     @Test
@@ -124,6 +132,9 @@ class ClienteServiceTest {
                     assertThat(error).hasMessageContaining("DNI");
                 })
                 .verify();
+
+        verify(clienteRepository, never()).save(any(Cliente.class));
+        verifyNoInteractions(clienteEventPublisher);
     }
 
     @Test

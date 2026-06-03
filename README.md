@@ -77,6 +77,7 @@ Los servicios de negocio se comunican mediante WebClient con resolucion por Eure
 | `cuenta-service` | 8082 | Servicio reactivo | Cuentas, saldos, endpoint atomico, idempotencia interna y SSE. | `novabank_cuentas` |
 | `operacion-service` | 8083 | Servicio reactivo | Depositos, retiros, transferencias, divisas e historial. | `novabank_operaciones` |
 | `exchange-rate-mock-service` | 8084 | Mock reactivo | Tasas de cambio predefinidas para pruebas locales. | No aplica |
+| `notificacion-service` | 8085 | Servicio reactivo | Consumidor Kafka para notificaciones de bienvenida. | No aplica |
 
 ## Estructura Del Repositorio
 
@@ -92,6 +93,7 @@ NovaBank/
 |-- cuenta-service/
 |-- operacion-service/
 |-- exchange-rate-mock-service/
+|-- notificacion-service/
 |-- docs/
 |   |-- README.md
 |   |-- sql/
@@ -229,6 +231,73 @@ http://localhost:8090
 
 La configuracion base local usa `localhost:9092` para `spring.kafka.bootstrap-servers` y `spring.cloud.stream.kafka.binder.brokers`. Si un repositorio externo de Config Server define estos mismos valores para los servicios, debe incluir la misma configuracion para no sobrescribir el entorno local.
 
+## notificacion-service
+
+`notificacion-service` es el primer consumidor Kafka del Modulo 6. No expone controladores REST de negocio y no usa base de datos. Por ahora consume `ClienteRegistradoEvent` desde el topic `novabank.clientes.registrados` y registra en logs una notificacion de bienvenida con `clienteId`, `nombre` y `email`.
+
+Configuracion local principal:
+
+- Aplicacion: `notificacion-service`
+- Puerto: `8085`
+- Funcion Spring Cloud Stream: `notificarBienvenida`
+- Binding de entrada: `notificarBienvenida-in-0`
+- Topic: `novabank.clientes.registrados`
+- Grupo consumidor: `notificacion-service`
+- Broker local: `localhost:9092`
+- Content type: `application/json`
+
+Si Config Server carga configuracion desde un repositorio externo, ese repositorio debe incluir estas mismas propiedades para `notificacion-service`:
+
+```yaml
+server:
+  port: 8085
+
+spring:
+  application:
+    name: notificacion-service
+  kafka:
+    bootstrap-servers: localhost:9092
+  cloud:
+    function:
+      definition: notificarBienvenida
+    stream:
+      bindings:
+        notificarBienvenida-in-0:
+          destination: novabank.clientes.registrados
+          group: notificacion-service
+          content-type: application/json
+      kafka:
+        binder:
+          brokers: localhost:9092
+```
+
+Arrancar el consumidor:
+
+```powershell
+docker compose up -d
+mvn -pl notificacion-service spring-boot:run
+```
+
+Publicar manualmente un `ClienteRegistradoEvent` desde consola:
+
+```powershell
+docker compose exec -i kafka /opt/kafka/bin/kafka-console-producer.sh --bootstrap-server kafka:9092 --topic novabank.clientes.registrados
+```
+
+JSON de ejemplo:
+
+```json
+{"eventId":"11111111-1111-1111-1111-111111111111","correlationId":"22222222-2222-2222-2222-222222222222","occurredAt":"2026-06-03T10:15:30Z","clienteId":1001,"dni":"12345678Z","nombre":"Ana Garcia","email":"ana.garcia@example.com"}
+```
+
+El log esperado en `notificacion-service` contiene:
+
+```text
+Notificacion de bienvenida preparada para clienteId=1001, nombre=Ana Garcia, email=ana.garcia@example.com
+```
+
+Tambien se puede publicar el mismo JSON desde Kafka UI en `http://localhost:8090`, topic `novabank.clientes.registrados`.
+
 ## Bases De Datos Y SQL
 
 El proyecto usa cuatro bases PostgreSQL, una por servicio propietario de datos:
@@ -286,6 +355,7 @@ mvn -pl cliente-service spring-boot:run
 mvn -pl cuenta-service spring-boot:run
 mvn -pl exchange-rate-mock-service spring-boot:run
 mvn -pl operacion-service spring-boot:run
+mvn -pl notificacion-service spring-boot:run
 mvn -pl api-gateway spring-boot:run
 ```
 

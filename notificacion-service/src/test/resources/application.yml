@@ -1,0 +1,25 @@
+spring:
+  application:
+    name: notificacion-service
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.r2dbc.R2dbcAutoConfiguration
+      - org.springframework.boot.autoconfigure.data.r2dbc.R2dbcDataAutoConfiguration
+      - org.springframework.boot.autoconfigure.data.r2dbc.R2dbcRepositoriesAutoConfiguration
+  cloud:
+    config:
+      enabled: false
+    function:
+      definition: notificarBienvenida
+    stream:
+      bindings:
+        notificarBienvenida-in-0:
+          destination: novabank.clientes.registrados
+          group: notificacion-service
+          content-type: application/json
+  kafka:
+    bootstrap-servers: localhost:9092
+
+eureka:
+  client:
+    enabled: false

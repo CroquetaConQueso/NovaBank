@@ -22,6 +22,7 @@ import com.novabank.operacion.exception.ValidationException;
 import com.novabank.operacion.mapper.MovimientoMapper;
 import com.novabank.operacion.model.EstadoOperacionPublicaIdempotente;
 import com.novabank.operacion.model.Movimiento;
+import com.novabank.operacion.model.OperacionAsincrona;
 import com.novabank.operacion.model.OperacionPublicaIdempotente;
 import com.novabank.operacion.model.TipoMovimiento;
 import com.novabank.operacion.repository.MovimientoRepository;
@@ -58,6 +59,7 @@ class OperacionServiceTest {
     private MovimientoRepository movimientoRepository;
     private OperacionPublicaIdempotenteRepository operacionPublicaIdempotenteRepository;
     private OperacionEventPublisher operacionEventPublisher;
+    private OperacionAsincronaEstadoService operacionAsincronaEstadoService;
     private ObjectMapper objectMapper;
     private OperacionService service;
 
@@ -68,6 +70,7 @@ class OperacionServiceTest {
         movimientoRepository = mock(MovimientoRepository.class);
         operacionPublicaIdempotenteRepository = mock(OperacionPublicaIdempotenteRepository.class);
         operacionEventPublisher = mock(OperacionEventPublisher.class);
+        operacionAsincronaEstadoService = mock(OperacionAsincronaEstadoService.class);
         objectMapper = new ObjectMapper().findAndRegisterModules();
         PublicIdempotencyService publicIdempotencyService = new PublicIdempotencyService(
                 operacionPublicaIdempotenteRepository,
@@ -79,12 +82,15 @@ class OperacionServiceTest {
                 movimientoRepository,
                 new MovimientoMapper(),
                 publicIdempotencyService,
-                operacionEventPublisher
+                operacionEventPublisher,
+                operacionAsincronaEstadoService
         );
     }
 
     @Test
     void solicitarDepositoPublicaOperacionSolicitadaYDevuelveRespuestaAceptada() {
+        when(operacionAsincronaEstadoService.crearSolicitada(any(OperacionSolicitadaEvent.class), eq(10L)))
+                .thenReturn(Mono.just(new OperacionAsincrona()));
         when(operacionEventPublisher.publicarOperacionSolicitada(any(OperacionSolicitadaEvent.class), eq(10L)))
                 .thenReturn(Mono.empty());
 
@@ -113,12 +119,15 @@ class OperacionServiceTest {
         assertThat(event.cuentaDestinoId()).isEqualTo(10L);
         assertThat(event.importe()).isEqualByComparingTo("50.00");
         assertThat(event.moneda()).isEqualTo("EUR");
+        verify(operacionAsincronaEstadoService).crearSolicitada(event, 10L);
         verifyNoInteractions(cuentaServiceClient);
         verify(movimientoRepository, never()).save(any(Movimiento.class));
     }
 
     @Test
     void solicitarRetiradaPublicaOperacionSolicitadaYDevuelveRespuestaAceptada() {
+        when(operacionAsincronaEstadoService.crearSolicitada(any(OperacionSolicitadaEvent.class), eq(10L)))
+                .thenReturn(Mono.just(new OperacionAsincrona()));
         when(operacionEventPublisher.publicarOperacionSolicitada(any(OperacionSolicitadaEvent.class), eq(10L)))
                 .thenReturn(Mono.empty());
 

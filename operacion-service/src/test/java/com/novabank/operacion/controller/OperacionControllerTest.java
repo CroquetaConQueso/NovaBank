@@ -2,6 +2,7 @@ package com.novabank.operacion.controller;
 
 import com.novabank.operacion.dto.MovimientoResponseDTO;
 import com.novabank.operacion.dto.OperacionAceptadaResponseDTO;
+import com.novabank.operacion.dto.OperacionEstadoResponseDTO;
 import com.novabank.operacion.dto.OperacionRequestDTO;
 import com.novabank.operacion.dto.OperacionResponseDTO;
 import com.novabank.operacion.dto.TransferenciaDivisaRequestDTO;
@@ -9,6 +10,7 @@ import com.novabank.operacion.dto.TransferenciaRequestDTO;
 import com.novabank.operacion.exception.EventoNoPublicadoException;
 import com.novabank.operacion.exception.ExchangeRateUnavailableException;
 import com.novabank.operacion.exception.GlobalExceptionHandler;
+import com.novabank.operacion.exception.OperacionAsincronaNotFoundException;
 import com.novabank.operacion.exception.PublicIdempotencyConflictException;
 import com.novabank.operacion.exception.ValidationException;
 import com.novabank.operacion.service.OperacionService;
@@ -146,6 +148,36 @@ class OperacionControllerTest {
                 .expectStatus().isOk()
                 .expectBody()
                 .jsonPath("$[0].tipo").isEqualTo("DEPOSITO");
+    }
+
+    @Test
+    void consultarSagaDevuelveEstadoPersistido() {
+        UUID operationId = UUID.fromString("33333333-3333-3333-3333-333333333333");
+        when(operacionService.consultarOperacionAsincrona(operationId))
+                .thenReturn(Mono.just(estado(operationId, "COMPLETADA")));
+
+        webTestClient.get()
+                .uri("/api/operaciones/sagas/{operationId}", operationId)
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody()
+                .jsonPath("$.operationId").isEqualTo(operationId.toString())
+                .jsonPath("$.estado").isEqualTo("COMPLETADA")
+                .jsonPath("$.tipoOperacion").isEqualTo("DEPOSITO");
+    }
+
+    @Test
+    void consultarSagaInexistenteDevuelve404() {
+        UUID operationId = UUID.fromString("99999999-9999-9999-9999-999999999999");
+        when(operacionService.consultarOperacionAsincrona(operationId))
+                .thenReturn(Mono.error(new OperacionAsincronaNotFoundException("No existe operacion asincrona")));
+
+        webTestClient.get()
+                .uri("/api/operaciones/sagas/{operationId}", operationId)
+                .exchange()
+                .expectStatus().isNotFound()
+                .expectBody()
+                .jsonPath("$.code").isEqualTo("RESOURCE_NOT_FOUND");
     }
 
     @Test
@@ -378,6 +410,24 @@ class OperacionControllerTest {
                 tipoOperacion,
                 cuentaId,
                 new BigDecimal("50.00")
+        );
+    }
+
+    private OperacionEstadoResponseDTO estado(UUID operationId, String estado) {
+        LocalDateTime ahora = LocalDateTime.now();
+        return new OperacionEstadoResponseDTO(
+                operationId,
+                UUID.fromString("22222222-2222-2222-2222-222222222222"),
+                "DEPOSITO",
+                estado,
+                10L,
+                null,
+                10L,
+                new BigDecimal("50.00"),
+                "EUR",
+                null,
+                ahora,
+                ahora
         );
     }
 

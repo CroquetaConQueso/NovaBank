@@ -2,6 +2,7 @@ package com.novabank.operacion.controller;
 
 import com.novabank.operacion.dto.MovimientoResponseDTO;
 import com.novabank.operacion.dto.OperacionAceptadaResponseDTO;
+import com.novabank.operacion.dto.OperacionEstadoResponseDTO;
 import com.novabank.operacion.dto.OperacionRequestDTO;
 import com.novabank.operacion.dto.OperacionResponseDTO;
 import com.novabank.operacion.dto.TransferenciaDivisaRequestDTO;
@@ -26,6 +27,7 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.time.LocalDate;
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/operaciones")
@@ -132,5 +134,19 @@ public class OperacionController {
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fechaFin
     ) {
         return operacionService.listarMovimientos(cuentaId, fechaInicio, fechaFin);
+    }
+
+    @GetMapping("/sagas/{operationId}")
+    @Operation(
+            summary = "Consultar estado de operacion asincrona",
+            description = "Devuelve el estado persistido de una operacion asincrona del Modulo 6."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Estado obtenido correctamente"),
+            @ApiResponse(responseCode = "400", description = "OperationId invalido"),
+            @ApiResponse(responseCode = "404", description = "Operacion asincrona no encontrada")
+    })
+    public Mono<OperacionEstadoResponseDTO> consultarSaga(@PathVariable UUID operationId) {
+        return operacionService.consultarOperacionAsincrona(operationId);
     }
 }

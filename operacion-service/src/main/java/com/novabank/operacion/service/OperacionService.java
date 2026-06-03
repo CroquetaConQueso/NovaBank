@@ -6,6 +6,7 @@ import com.novabank.operacion.dto.CuentaOperacionRequestDTO;
 import com.novabank.operacion.dto.CuentaResponseDTO;
 import com.novabank.operacion.dto.MovimientoResponseDTO;
 import com.novabank.operacion.dto.OperacionAceptadaResponseDTO;
+import com.novabank.operacion.dto.OperacionEstadoResponseDTO;
 import com.novabank.operacion.dto.OperacionRequestDTO;
 import com.novabank.operacion.dto.OperacionResponseDTO;
 import com.novabank.operacion.dto.TransferenciaDivisaRequestDTO;
@@ -46,6 +47,7 @@ public class OperacionService {
     private final MovimientoMapper movimientoMapper;
     private final PublicIdempotencyService publicIdempotencyService;
     private final OperacionEventPublisher operacionEventPublisher;
+    private final OperacionAsincronaEstadoService operacionAsincronaEstadoService;
 
     public OperacionService(
             CuentaServiceClient cuentaServiceClient,
@@ -53,7 +55,8 @@ public class OperacionService {
             MovimientoRepository movimientoRepository,
             MovimientoMapper movimientoMapper,
             PublicIdempotencyService publicIdempotencyService,
-            OperacionEventPublisher operacionEventPublisher
+            OperacionEventPublisher operacionEventPublisher,
+            OperacionAsincronaEstadoService operacionAsincronaEstadoService
     ) {
         this.cuentaServiceClient = cuentaServiceClient;
         this.exchangeRateService = exchangeRateService;
@@ -61,6 +64,7 @@ public class OperacionService {
         this.movimientoMapper = movimientoMapper;
         this.publicIdempotencyService = publicIdempotencyService;
         this.operacionEventPublisher = operacionEventPublisher;
+        this.operacionAsincronaEstadoService = operacionAsincronaEstadoService;
     }
 
     public Mono<OperacionAceptadaResponseDTO> solicitarDeposito(
@@ -75,6 +79,10 @@ public class OperacionService {
             String idempotencyKey
     ) {
         return solicitarOperacionSimple(request, idempotencyKey, "RETIRADA", request.cuentaId(), null, request.cuentaId());
+    }
+
+    public Mono<OperacionEstadoResponseDTO> consultarOperacionAsincrona(UUID operationId) {
+        return operacionAsincronaEstadoService.consultar(operationId);
     }
 
     /**
@@ -143,7 +151,11 @@ public class OperacionService {
                     idempotencyKey == null || idempotencyKey.isBlank() ? "no-informada" : "informada"
             );
 
-            return operacionEventPublisher.publicarOperacionSolicitada(event, kafkaKey)
+            return operacionAsincronaEstadoService.crearSolicitada(event, request.cuentaId())
+                    .then(operacionEventPublisher.publicarOperacionSolicitada(event, kafkaKey))
+                    .onErrorResume(error -> operacionAsincronaEstadoService
+                            .marcarFallidaPorPublicacion(event, error)
+                            .then(Mono.error(error)))
                     .thenReturn(new OperacionAceptadaResponseDTO(
                             operationId,
                             "SOLICITADA",

@@ -6,10 +6,20 @@ spring:
   kafka:
     bootstrap-servers: localhost:9092
   cloud:
+    function:
+      definition: consumirOperacionCompletada;consumirOperacionFallida
     stream:
       bindings:
         operacionSolicitada-out-0:
           destination: novabank.operaciones.solicitadas
+          content-type: application/json
+        consumirOperacionCompletada-in-0:
+          destination: novabank.operaciones.completadas
+          group: operacion-service
+          content-type: application/json
+        consumirOperacionFallida-in-0:
+          destination: novabank.operaciones.fallidas
+          group: operacion-service
           content-type: application/json
       kafka:
         binder:

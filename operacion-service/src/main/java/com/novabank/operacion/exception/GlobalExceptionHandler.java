@@ -22,6 +22,11 @@ public class GlobalExceptionHandler {
         return response(HttpStatus.NOT_FOUND, "RESOURCE_NOT_FOUND", ex.getMessage());
     }
 
+    @ExceptionHandler(OperacionAsincronaNotFoundException.class)
+    public Mono<ResponseEntity<ErrorResponseDTO>> handleOperacionAsincronaNotFound(OperacionAsincronaNotFoundException ex) {
+        return response(HttpStatus.NOT_FOUND, "RESOURCE_NOT_FOUND", ex.getMessage());
+    }
+
     @ExceptionHandler(RemoteValidationException.class)
     public Mono<ResponseEntity<ErrorResponseDTO>> handleRemoteValidation(RemoteValidationException ex) {
         return response(HttpStatus.UNPROCESSABLE_ENTITY, "REMOTE_VALIDATION_ERROR", ex.getMessage());

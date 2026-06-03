@@ -513,10 +513,51 @@ Topics esperados:
 - `novabank.operaciones.completadas`: resultado de deposito correcto procesado por `cuenta-service`.
 - `novabank.operaciones.fallidas`: resultado de retiro fallido, por ejemplo por saldo insuficiente.
 
+## Estado Persistido De Operaciones Asincronas
+
+`operacion-service` persiste el estado inicial de cada deposito o retiro asincrono en la tabla `operaciones_asincronas` antes de publicar `OperacionSolicitadaEvent`. Despues consume los resultados publicados por `cuenta-service` y actualiza la misma operacion a `COMPLETADA` o `FALLIDA`.
+
+Bindings de entrada en `operacion-service`:
+
+| Binding | Topic | Grupo |
+| --- | --- | --- |
+| `consumirOperacionCompletada-in-0` | `novabank.operaciones.completadas` | `operacion-service` |
+| `consumirOperacionFallida-in-0` | `novabank.operaciones.fallidas` | `operacion-service` |
+
+Consultar el estado persistido:
+
+```powershell
+Invoke-RestMethod -Method Get `
+  -Uri http://localhost:8083/api/operaciones/sagas/<operationId>
+```
+
+Respuesta de deposito completado:
+
+```json
+{"operationId":"<uuid>","correlationId":"22222222-2222-2222-2222-222222222222","tipoOperacion":"DEPOSITO","estado":"COMPLETADA","cuentaId":1,"cuentaOrigenId":null,"cuentaDestinoId":1,"importe":25.00,"moneda":"EUR","motivoFallo":null,"creadaEn":"<local-date-time>","actualizadaEn":"<local-date-time>"}
+```
+
+Respuesta de retiro fallido:
+
+```json
+{"operationId":"<uuid>","correlationId":"55555555-5555-5555-5555-555555555555","tipoOperacion":"RETIRADA","estado":"FALLIDA","cuentaId":1,"cuentaOrigenId":1,"cuentaDestinoId":null,"importe":9999.00,"moneda":"EUR","motivoFallo":"<motivo>","creadaEn":"<local-date-time>","actualizadaEn":"<local-date-time>"}
+```
+
+Validacion minima del cierre asincrono:
+
+```powershell
+docker compose up -d
+mvn -pl cuenta-service spring-boot:run
+mvn -pl operacion-service spring-boot:run
+docker compose exec kafka /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --list
+```
+
+Tras ejecutar un deposito y un retiro, usar los `operationId` devueltos por los POST para consultar `GET /api/operaciones/sagas/{operationId}`. El deposito debe evolucionar de `SOLICITADA` a `COMPLETADA`; un retiro sin saldo suficiente debe evolucionar a `FALLIDA`.
+
 Notas pendientes del Modulo 6:
 
-- La SAGA orquestada y la consulta de estado de operacion se implementaran en el siguiente bloque.
-- La idempotencia publica de las operaciones asincronas se consolidara cuando exista estado persistido de operacion/SAGA.
+- La SAGA orquestada sigue pendiente; esta intervencion solo persiste y consulta estado asincrono.
+- La idempotencia publica de las operaciones asincronas queda pendiente de consolidacion sobre el estado persistido.
 - Transferencias ordinarias y transferencias en divisa conservan por ahora el flujo sincronico existente.
 
 ## Bases De Datos Y SQL

@@ -5,6 +5,7 @@ import com.novabank.operacion.dto.OperacionAceptadaResponseDTO;
 import com.novabank.operacion.dto.OperacionEstadoResponseDTO;
 import com.novabank.operacion.dto.OperacionRequestDTO;
 import com.novabank.operacion.dto.OperacionResponseDTO;
+import com.novabank.operacion.dto.TransferenciaAceptadaResponseDTO;
 import com.novabank.operacion.dto.TransferenciaDivisaRequestDTO;
 import com.novabank.operacion.dto.TransferenciaRequestDTO;
 import com.novabank.operacion.exception.EventoNoPublicadoException;
@@ -83,16 +84,21 @@ class OperacionControllerTest {
     @Test
     void transferenciaUsaRutaEsperada() {
         when(operacionService.transferir(any(TransferenciaRequestDTO.class), nullable(String.class)))
-                .thenReturn(Mono.just(response("TRANSFERENCIA")));
+                .thenReturn(Mono.just(transferenciaAceptada()));
 
         webTestClient.post()
                 .uri("/api/operaciones/transferencia")
                 .contentType(MediaType.APPLICATION_JSON)
                 .bodyValue(new TransferenciaRequestDTO(10L, 11L, new BigDecimal("50.00")))
                 .exchange()
-                .expectStatus().isOk()
+                .expectStatus().isAccepted()
                 .expectBody()
-                .jsonPath("$.tipoOperacion").isEqualTo("TRANSFERENCIA");
+                .jsonPath("$.operationId").exists()
+                .jsonPath("$.estado").isEqualTo("SOLICITADA")
+                .jsonPath("$.tipoOperacion").isEqualTo("TRANSFERENCIA")
+                .jsonPath("$.cuentaOrigenId").isEqualTo(10)
+                .jsonPath("$.cuentaDestinoId").isEqualTo(11)
+                .jsonPath("$.moneda").isEqualTo("EUR");
     }
 
     @Test
@@ -178,6 +184,25 @@ class OperacionControllerTest {
                 .expectStatus().isNotFound()
                 .expectBody()
                 .jsonPath("$.code").isEqualTo("RESOURCE_NOT_FOUND");
+    }
+
+    @Test
+    void consultarSagaTransferenciaDevuelveEstadoPersistido() {
+        UUID operationId = UUID.fromString("44444444-4444-4444-4444-444444444444");
+        when(operacionService.consultarOperacionAsincrona(operationId))
+                .thenReturn(Mono.just(estadoTransferencia(operationId, "FALLIDA")));
+
+        webTestClient.get()
+                .uri("/api/operaciones/sagas/{operationId}", operationId)
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody()
+                .jsonPath("$.operationId").isEqualTo(operationId.toString())
+                .jsonPath("$.tipoOperacion").isEqualTo("TRANSFERENCIA")
+                .jsonPath("$.estado").isEqualTo("FALLIDA")
+                .jsonPath("$.cuentaOrigenId").isEqualTo(10)
+                .jsonPath("$.cuentaDestinoId").isEqualTo(11)
+                .jsonPath("$.motivoFallo").isEqualTo("Saldo insuficiente");
     }
 
     @Test
@@ -413,6 +438,19 @@ class OperacionControllerTest {
         );
     }
 
+    private TransferenciaAceptadaResponseDTO transferenciaAceptada() {
+        return new TransferenciaAceptadaResponseDTO(
+                UUID.fromString("33333333-3333-3333-3333-333333333333"),
+                "SOLICITADA",
+                "TRANSFERENCIA solicitada para procesamiento asincrono",
+                "TRANSFERENCIA",
+                10L,
+                11L,
+                new BigDecimal("50.00"),
+                "EUR"
+        );
+    }
+
     private OperacionEstadoResponseDTO estado(UUID operationId, String estado) {
         LocalDateTime ahora = LocalDateTime.now();
         return new OperacionEstadoResponseDTO(
@@ -426,6 +464,24 @@ class OperacionControllerTest {
                 new BigDecimal("50.00"),
                 "EUR",
                 null,
+                ahora,
+                ahora
+        );
+    }
+
+    private OperacionEstadoResponseDTO estadoTransferencia(UUID operationId, String estado) {
+        LocalDateTime ahora = LocalDateTime.now();
+        return new OperacionEstadoResponseDTO(
+                operationId,
+                UUID.fromString("22222222-2222-2222-2222-222222222222"),
+                "TRANSFERENCIA",
+                estado,
+                10L,
+                10L,
+                11L,
+                new BigDecimal("50.00"),
+                "EUR",
+                "Saldo insuficiente",
                 ahora,
                 ahora
         );

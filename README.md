@@ -513,9 +513,66 @@ Topics esperados:
 - `novabank.operaciones.completadas`: resultado de deposito correcto procesado por `cuenta-service`.
 - `novabank.operaciones.fallidas`: resultado de retiro fallido, por ejemplo por saldo insuficiente.
 
+## Transferencia Ordinaria Asincrona
+
+`POST /api/operaciones/transferencia` migra al flujo Kafka/SAGA del Modulo 6. `operacion-service` genera un `operationId`, persiste la operacion como `SOLICITADA`, publica `OperacionSolicitadaEvent` con `tipoOperacion=TRANSFERENCIA` en `novabank.operaciones.solicitadas` y responde `202 Accepted`.
+
+`cuenta-service` consume la solicitud y reutiliza su transaccion local de transferencia para debitar la cuenta origen y acreditar la cuenta destino. Si la operacion termina correctamente publica `OperacionCompletadaEvent` en `novabank.operaciones.completadas`; si falla por saldo insuficiente, cuenta inexistente u otro error controlado publica `OperacionFallidaEvent` en `novabank.operaciones.fallidas`.
+
+Request de transferencia valida:
+
+```powershell
+$transferencia = Invoke-RestMethod -Method Post `
+  -Uri http://localhost:8083/api/operaciones/transferencia `
+  -ContentType "application/json" `
+  -Headers @{ "X-Correlation-Id" = "66666666-6666-6666-6666-666666666666" } `
+  -Body '{"cuentaOrigenId":1,"cuentaDestinoId":2,"cantidad":25.00}'
+```
+
+Respuesta inicial esperada:
+
+```http
+HTTP/1.1 202 Accepted
+```
+
+```json
+{"operationId":"<uuid>","estado":"SOLICITADA","mensaje":"TRANSFERENCIA solicitada para procesamiento asincrono","tipoOperacion":"TRANSFERENCIA","cuentaOrigenId":1,"cuentaDestinoId":2,"importe":25.00,"moneda":"EUR"}
+```
+
+Evento esperado en `novabank.operaciones.solicitadas`:
+
+```json
+{"eventId":"<uuid>","correlationId":"66666666-6666-6666-6666-666666666666","occurredAt":"<instant>","operationId":"<uuid>","tipoOperacion":"TRANSFERENCIA","cuentaOrigenId":1,"cuentaDestinoId":2,"importe":25.00,"moneda":"EUR"}
+```
+
+Request de transferencia fallida por saldo insuficiente:
+
+```powershell
+$fallida = Invoke-RestMethod -Method Post `
+  -Uri http://localhost:8083/api/operaciones/transferencia `
+  -ContentType "application/json" `
+  -Headers @{ "X-Correlation-Id" = "77777777-7777-7777-7777-777777777777" } `
+  -Body '{"cuentaOrigenId":1,"cuentaDestinoId":2,"cantidad":9999.00}'
+```
+
+Consultar el estado final:
+
+```powershell
+Invoke-RestMethod -Method Get `
+  -Uri "http://localhost:8083/api/operaciones/sagas/$($transferencia.operationId)"
+Invoke-RestMethod -Method Get `
+  -Uri "http://localhost:8083/api/operaciones/sagas/$($fallida.operationId)"
+```
+
+En Kafka UI revisar:
+
+- `novabank.operaciones.solicitadas`: solicitud `TRANSFERENCIA`.
+- `novabank.operaciones.completadas`: resultado de transferencia valida.
+- `novabank.operaciones.fallidas`: resultado de transferencia invalida.
+
 ## Estado Persistido De Operaciones Asincronas
 
-`operacion-service` persiste el estado inicial de cada deposito o retiro asincrono en la tabla `operaciones_asincronas` antes de publicar `OperacionSolicitadaEvent`. Despues consume los resultados publicados por `cuenta-service` y actualiza la misma operacion a `COMPLETADA` o `FALLIDA`.
+`operacion-service` persiste el estado inicial de cada deposito, retiro o transferencia ordinaria asincrona en la tabla `operaciones_asincronas` antes de publicar `OperacionSolicitadaEvent`. Despues consume los resultados publicados por `cuenta-service` y actualiza la misma operacion a `COMPLETADA` o `FALLIDA`.
 
 Bindings de entrada en `operacion-service`:
 
@@ -556,9 +613,10 @@ Tras ejecutar un deposito y un retiro, usar los `operationId` devueltos por los 
 
 Notas pendientes del Modulo 6:
 
-- La SAGA orquestada sigue pendiente; esta intervencion solo persiste y consulta estado asincrono.
+- La transferencia ordinaria ya usa el flujo Kafka/SAGA basico, sin compensacion avanzada.
 - La idempotencia publica de las operaciones asincronas queda pendiente de consolidacion sobre el estado persistido.
-- Transferencias ordinarias y transferencias en divisa conservan por ahora el flujo sincronico existente.
+- Transferencias en divisa conservan por ahora el flujo sincronico existente.
+- SSE, alertas de saldo bajo y Kafka Streams quedan pendientes.
 
 ## Bases De Datos Y SQL
 

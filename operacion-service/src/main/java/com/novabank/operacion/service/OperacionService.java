@@ -9,6 +9,7 @@ import com.novabank.operacion.dto.OperacionAceptadaResponseDTO;
 import com.novabank.operacion.dto.OperacionEstadoResponseDTO;
 import com.novabank.operacion.dto.OperacionRequestDTO;
 import com.novabank.operacion.dto.OperacionResponseDTO;
+import com.novabank.operacion.dto.TransferenciaAceptadaResponseDTO;
 import com.novabank.operacion.dto.TransferenciaDivisaRequestDTO;
 import com.novabank.operacion.dto.TransferenciaRequestDTO;
 import com.novabank.events.operacion.OperacionSolicitadaEvent;
@@ -201,28 +202,64 @@ public class OperacionService {
                 ));
     }
 
+    public Mono<TransferenciaAceptadaResponseDTO> transferir(TransferenciaRequestDTO request) {
+        return transferir(request, null);
+    }
+
+    public Mono<TransferenciaAceptadaResponseDTO> transferir(TransferenciaRequestDTO request, String idempotencyKey) {
+        return solicitarTransferencia(request, idempotencyKey);
+    }
+
+    private Mono<TransferenciaAceptadaResponseDTO> solicitarTransferencia(
+            TransferenciaRequestDTO request,
+            String idempotencyKey
+    ) {
+        return Mono.deferContextual(contextView -> {
+            UUID operationId = UUID.randomUUID();
+            UUID correlationId = resolveCorrelationId(CorrelationIdSupport.fromContext(contextView));
+            OperacionSolicitadaEvent event = new OperacionSolicitadaEvent(
+                    UUID.randomUUID(),
+                    correlationId,
+                    Instant.now(),
+                    operationId,
+                    "TRANSFERENCIA",
+                    request.cuentaOrigenId(),
+                    request.cuentaDestinoId(),
+                    request.cantidad(),
+                    "EUR"
+            );
+
+            log.info(
+                    "transferencia asincrona recibida cuentaOrigenId={} cuentaDestinoId={} importe={} operationId={} idempotencyKey={}",
+                    request.cuentaOrigenId(),
+                    request.cuentaDestinoId(),
+                    request.cantidad(),
+                    operationId,
+                    idempotencyKey == null || idempotencyKey.isBlank() ? "no-informada" : "pendiente-consolidacion"
+            );
+
+            return operacionAsincronaEstadoService.crearSolicitada(event, request.cuentaOrigenId())
+                    .then(operacionEventPublisher.publicarOperacionSolicitada(event, request.cuentaOrigenId()))
+                    .onErrorResume(error -> operacionAsincronaEstadoService
+                            .marcarFallidaPorPublicacion(event, error)
+                            .then(Mono.error(error)))
+                    .thenReturn(new TransferenciaAceptadaResponseDTO(
+                            operationId,
+                            "SOLICITADA",
+                            "TRANSFERENCIA solicitada para procesamiento asincrono",
+                            "TRANSFERENCIA",
+                            request.cuentaOrigenId(),
+                            request.cuentaDestinoId(),
+                            request.cantidad(),
+                            "EUR"
+                    ));
+        });
+    }
+
     /**
-     * Solicita a cuenta-service una transferencia atomica de saldos y persiste
-     * los dos movimientos que forman el historial de la operacion.
+     * Flujo sincronico conservado solo para transferencia en divisa hasta que
+     * ese caso se migre a la SAGA del Modulo 6.
      */
-    @Transactional
-    public Mono<OperacionResponseDTO> transferir(TransferenciaRequestDTO request) {
-        return transferirCore(request, UUID.randomUUID().toString());
-    }
-
-    @Transactional
-    public Mono<OperacionResponseDTO> transferir(TransferenciaRequestDTO request, String idempotencyKey) {
-        String normalizedKey = publicIdempotencyService.normalizarKey(idempotencyKey);
-        String operationId = normalizedKey == null ? UUID.randomUUID().toString() : operationIdDesdeIdempotencyKey(normalizedKey);
-
-        return publicIdempotencyService.execute(
-                normalizedKey,
-                "TRANSFERENCIA",
-                hashTransferencia(request),
-                () -> transferirCore(request, operationId)
-        );
-    }
-
     private Mono<OperacionResponseDTO> transferirCore(TransferenciaRequestDTO request, String operationId) {
         return cuentaServiceClient.aplicarMovimiento(new AplicarMovimientoRequestDTO(
                         operationId,

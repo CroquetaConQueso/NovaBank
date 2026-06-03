@@ -5,6 +5,7 @@ import com.novabank.operacion.dto.OperacionAceptadaResponseDTO;
 import com.novabank.operacion.dto.OperacionEstadoResponseDTO;
 import com.novabank.operacion.dto.OperacionRequestDTO;
 import com.novabank.operacion.dto.OperacionResponseDTO;
+import com.novabank.operacion.dto.TransferenciaAceptadaResponseDTO;
 import com.novabank.operacion.dto.TransferenciaDivisaRequestDTO;
 import com.novabank.operacion.dto.TransferenciaRequestDTO;
 import com.novabank.operacion.service.OperacionService;
@@ -81,21 +82,20 @@ public class OperacionController {
     @PostMapping("/transferencia")
     @Operation(
             summary = "Realizar transferencia",
-            description = "Solicita a cuenta-service la actualizacion de saldos y registra los movimientos de salida y entrada."
+            description = "Publica una solicitud asincrona para que cuenta-service aplique la transferencia ordinaria."
     )
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "Transferencia realizada correctamente"),
+            @ApiResponse(responseCode = "202", description = "Transferencia solicitada correctamente"),
             @ApiResponse(responseCode = "400", description = "Datos invalidos o peticion mal formada"),
             @ApiResponse(responseCode = "401", description = "Token ausente o invalido al acceder mediante Gateway"),
-            @ApiResponse(responseCode = "404", description = "Cuenta origen o destino no encontrada"),
-            @ApiResponse(responseCode = "422", description = "Saldo insuficiente"),
-            @ApiResponse(responseCode = "503", description = "cuenta-service no disponible")
+            @ApiResponse(responseCode = "503", description = "Kafka no disponible o evento no publicado")
     })
-    public Mono<OperacionResponseDTO> transferir(
+    public Mono<ResponseEntity<TransferenciaAceptadaResponseDTO>> transferir(
             @Valid @RequestBody TransferenciaRequestDTO request,
             @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey
     ) {
-        return operacionService.transferir(request, idempotencyKey);
+        return operacionService.transferir(request, idempotencyKey)
+                .map(response -> ResponseEntity.accepted().body(response));
     }
 
     @PostMapping("/transferencias/divisa")

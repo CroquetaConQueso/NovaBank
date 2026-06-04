@@ -409,7 +409,7 @@ cuenta-service aplica movimiento
   -> MovimientoEventService / Sinks.Many emite a conexiones SSE activas
 ```
 
-`Sinks.Many` se mantiene porque resuelve el fan-out local hacia clientes conectados. Kafka aporta persistencia del evento y desacopla el stream SSE de la logica de negocio. No se implementan todavia alertas de saldo bajo ni Kafka Streams.
+`Sinks.Many` se mantiene porque resuelve el fan-out local hacia clientes conectados. Kafka aporta persistencia del evento y desacopla el stream SSE de la logica de negocio. No se implementa todavia Kafka Streams.
 
 Validacion local:
 
@@ -431,6 +431,56 @@ Ejemplo de `MovimientoRegistradoEvent`:
 ```
 
 Nota: el contrato actual de `MovimientoRegistradoEvent` no incluye `operationId`; se mantiene compatible para que `mvn -pl cuenta-service test` funcione sin requerir instalar previamente el modulo comun. Si se versiona el contrato de eventos en una iteracion posterior, `operationId` puede anadirse de forma explicita.
+
+## Alertas De Saldo Bajo
+
+`cuenta-service` evalua el saldo resultante despues de cada movimiento confirmado. Si `saldoResultante` es menor que `novabank.alertas.saldo-bajo.umbral`, publica un `AlertaSaldoBajoEvent` en `novabank.alertas.saldo-bajo` mediante Spring Cloud Stream y `StreamBridge`.
+
+Configuracion local del umbral:
+
+```yaml
+novabank:
+  alertas:
+    saldo-bajo:
+      umbral: 100.00
+```
+
+Binding productor en `cuenta-service`:
+
+```yaml
+spring:
+  cloud:
+    stream:
+      bindings:
+        alertaSaldoBajo-out-0:
+          destination: novabank.alertas.saldo-bajo
+          content-type: application/json
+```
+
+`notificacion-service` consume el mismo topic con el binding `notificarSaldoBajo-in-0`, destino `novabank.alertas.saldo-bajo` y grupo `notificacion-service`. En esta iteracion solo registra la alerta en logs; no persiste notificaciones, no expone endpoints nuevos y no modifica el flujo SSE.
+
+Ejemplo de evento:
+
+```json
+{"eventId":"<uuid>","correlationId":"22222222-2222-2222-2222-222222222222","occurredAt":"<instant>","cuentaId":1,"saldoActual":75.00,"umbral":100.00,"moneda":"EUR"}
+```
+
+Validacion local:
+
+```powershell
+docker compose up -d
+mvn -pl cuenta-service spring-boot:run
+mvn -pl notificacion-service spring-boot:run
+docker compose exec kafka /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --list
+docker compose logs -f kafka
+docker compose logs -f kafka-ui
+```
+
+Despues, provocar un retiro o transferencia que deje una cuenta con saldo menor que `100.00`. Resultado esperado:
+
+- aparece un mensaje en `novabank.alertas.saldo-bajo`;
+- `notificacion-service` registra `cuentaId`, `saldoActual`, `umbral`, `moneda` y `correlationId`;
+- si el saldo queda exactamente en `100.00`, no se publica alerta.
 
 Arrancar infraestructura y `cuenta-service`:
 
@@ -667,7 +717,7 @@ Notas pendientes del Modulo 6:
 - La transferencia ordinaria ya usa el flujo Kafka/SAGA basico, sin compensacion avanzada.
 - La idempotencia publica de las operaciones asincronas queda pendiente de consolidacion sobre el estado persistido.
 - Transferencias en divisa conservan por ahora el flujo sincronico existente.
-- SSE, alertas de saldo bajo y Kafka Streams quedan pendientes.
+- Kafka Streams queda pendiente.
 
 ## Bases De Datos Y SQL
 

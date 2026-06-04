@@ -38,17 +38,20 @@ public class CuentaMovimientoAtomicoService {
     private final OperacionIdempotenteRepository operacionIdempotenteRepository;
     private final CuentaMapper cuentaMapper;
     private final MovimientoRegistradoEventPublisher movimientoRegistradoEventPublisher;
+    private final SaldoBajoAlertService saldoBajoAlertService;
 
     public CuentaMovimientoAtomicoService(
             CuentaRepository cuentaRepository,
             OperacionIdempotenteRepository operacionIdempotenteRepository,
             CuentaMapper cuentaMapper,
-            MovimientoRegistradoEventPublisher movimientoRegistradoEventPublisher
+            MovimientoRegistradoEventPublisher movimientoRegistradoEventPublisher,
+            SaldoBajoAlertService saldoBajoAlertService
     ) {
         this.cuentaRepository = cuentaRepository;
         this.operacionIdempotenteRepository = operacionIdempotenteRepository;
         this.cuentaMapper = cuentaMapper;
         this.movimientoRegistradoEventPublisher = movimientoRegistradoEventPublisher;
+        this.saldoBajoAlertService = saldoBajoAlertService;
     }
 
     /**
@@ -215,12 +218,30 @@ public class CuentaMovimientoAtomicoService {
                 datos.operationId()
         );
 
+        return publicarMovimientoRegistrado(evento)
+                .then(publicarAlertaSaldoBajo(evento));
+    }
+
+    private Mono<Void> publicarMovimientoRegistrado(MovimientoEventDTO evento) {
         return movimientoRegistradoEventPublisher.publicar(evento)
                 .onErrorResume(error -> {
                     log.error(
                             "No se pudo publicar MovimientoRegistradoEvent atomico cuentaId={} operationId={}",
                             evento.cuentaId(),
                             evento.operationId(),
+                            error
+                    );
+                    return Mono.empty();
+                });
+    }
+
+    private Mono<Void> publicarAlertaSaldoBajo(MovimientoEventDTO evento) {
+        return saldoBajoAlertService.evaluarYPublicar(evento)
+                .onErrorResume(error -> {
+                    log.error(
+                            "No se pudo publicar alerta de saldo bajo atomica cuentaId={} saldoResultante={}",
+                            evento.cuentaId(),
+                            evento.saldoResultante(),
                             error
                     );
                     return Mono.empty();

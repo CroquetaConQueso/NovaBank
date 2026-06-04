@@ -54,6 +54,9 @@ class CuentaServiceTest {
     @Mock
     private MovimientoRegistradoEventPublisher movimientoRegistradoEventPublisher;
 
+    @Mock
+    private SaldoBajoAlertService saldoBajoAlertService;
+
     @InjectMocks
     private CuentaService cuentaService;
 
@@ -186,6 +189,7 @@ class CuentaServiceTest {
         when(cuentaRepository.findById(1L)).thenReturn(Mono.just(cuenta));
         when(cuentaRepository.save(cuenta)).thenReturn(Mono.just(cuenta));
         when(movimientoRegistradoEventPublisher.publicar(any())).thenReturn(Mono.empty());
+        when(saldoBajoAlertService.evaluarYPublicar(any())).thenReturn(Mono.empty());
 
         StepVerifier.create(cuentaService.depositar(
                         1L,
@@ -196,6 +200,7 @@ class CuentaServiceTest {
 
         assertThat(cuenta.getSaldo()).isEqualByComparingTo("150.00");
         verify(movimientoRegistradoEventPublisher).publicar(any());
+        verify(saldoBajoAlertService).evaluarYPublicar(any());
     }
 
     @Test
@@ -212,6 +217,7 @@ class CuentaServiceTest {
 
         verify(cuentaRepository, never()).findById(eq(1L));
         verify(movimientoRegistradoEventPublisher, never()).publicar(any());
+        verify(saldoBajoAlertService, never()).evaluarYPublicar(any());
     }
 
     @Test
@@ -246,6 +252,7 @@ class CuentaServiceTest {
 
         assertThat(cuenta.getSaldo()).isEqualByComparingTo("25.00");
         verify(movimientoRegistradoEventPublisher, never()).publicar(any());
+        verify(saldoBajoAlertService, never()).evaluarYPublicar(any());
     }
 
     @Test
@@ -256,6 +263,7 @@ class CuentaServiceTest {
         when(cuentaRepository.findAllById(List.of(1L, 2L))).thenReturn(Flux.just(origen, destino));
         when(cuentaRepository.saveAll(any(Iterable.class))).thenAnswer(invocation -> Flux.fromIterable(invocation.getArgument(0)));
         when(movimientoRegistradoEventPublisher.publicar(any())).thenReturn(Mono.empty());
+        when(saldoBajoAlertService.evaluarYPublicar(any())).thenReturn(Mono.empty());
 
         StepVerifier.create(cuentaService.transferir(
                         new TransferenciaInternaRequestDTO(1L, 2L, new BigDecimal("75.00"))
@@ -273,6 +281,7 @@ class CuentaServiceTest {
         assertThat(origen.getSaldo()).isEqualByComparingTo("125.00");
         assertThat(destino.getSaldo()).isEqualByComparingTo("85.00");
         verify(movimientoRegistradoEventPublisher, org.mockito.Mockito.times(2)).publicar(any());
+        verify(saldoBajoAlertService, org.mockito.Mockito.times(2)).evaluarYPublicar(any());
     }
 
     @Test
@@ -321,6 +330,7 @@ class CuentaServiceTest {
         assertThat(origen.getSaldo()).isEqualByComparingTo("10.00");
         assertThat(destino.getSaldo()).isEqualByComparingTo("20.00");
         verify(movimientoRegistradoEventPublisher, never()).publicar(any());
+        verify(saldoBajoAlertService, never()).evaluarYPublicar(any());
     }
 
     private ClienteResponseDTO cliente(Long id) {

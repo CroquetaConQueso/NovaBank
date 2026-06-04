@@ -46,10 +46,15 @@ class CuentaMovimientoAtomicoServiceTest extends PostgresTestContainerSupport {
     @MockBean
     private MovimientoRegistradoEventPublisher movimientoRegistradoEventPublisher;
 
+    @MockBean
+    private SaldoBajoAlertService saldoBajoAlertService;
+
     @BeforeEach
     void setUp() {
         reset(movimientoRegistradoEventPublisher);
+        reset(saldoBajoAlertService);
         org.mockito.Mockito.when(movimientoRegistradoEventPublisher.publicar(any())).thenReturn(Mono.empty());
+        org.mockito.Mockito.when(saldoBajoAlertService.evaluarYPublicar(any())).thenReturn(Mono.empty());
         operacionIdempotenteRepository.deleteAll()
                 .then(cuentaRepository.deleteAll())
                 .block();
@@ -127,6 +132,7 @@ class CuentaMovimientoAtomicoServiceTest extends PostgresTestContainerSupport {
                 .verifyComplete();
 
         verify(movimientoRegistradoEventPublisher, times(2)).publicar(any());
+        verify(saldoBajoAlertService, times(2)).evaluarYPublicar(any());
     }
 
     @Test
@@ -148,6 +154,7 @@ class CuentaMovimientoAtomicoServiceTest extends PostgresTestContainerSupport {
                 .verifyComplete();
 
         verify(movimientoRegistradoEventPublisher, times(2)).publicar(any());
+        verify(saldoBajoAlertService, times(2)).evaluarYPublicar(any());
     }
 
     @Test
@@ -223,6 +230,8 @@ class CuentaMovimientoAtomicoServiceTest extends PostgresTestContainerSupport {
 
         StepVerifier.create(operacionIdempotenteRepository.findByOperationId("op-6"))
                 .verifyComplete();
+
+        verify(saldoBajoAlertService, org.mockito.Mockito.never()).evaluarYPublicar(any());
     }
 
     @Test

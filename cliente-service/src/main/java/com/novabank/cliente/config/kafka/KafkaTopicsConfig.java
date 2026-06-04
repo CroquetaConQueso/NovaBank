@@ -44,6 +44,11 @@ public class KafkaTopicsConfig {
         return topic(NovaBankTopics.ALERTAS_SALDO_BAJO, 3, RETENTION_30_DAYS_MS);
     }
 
+    @Bean
+    public NewTopic alertasOperacionesSospechosasTopic() {
+        return topic(NovaBankTopics.ALERTAS_OPERACIONES_SOSPECHOSAS, 3, RETENTION_30_DAYS_MS);
+    }
+
     private NewTopic topic(String name, int partitions, String retentionMs) {
         return TopicBuilder.name(name)
                 .partitions(partitions)

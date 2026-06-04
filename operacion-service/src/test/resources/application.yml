@@ -12,3 +12,8 @@ spring:
 eureka:
   client:
     enabled: false
+
+novabank:
+  kafka-streams:
+    operaciones-sospechosas:
+      enabled: false

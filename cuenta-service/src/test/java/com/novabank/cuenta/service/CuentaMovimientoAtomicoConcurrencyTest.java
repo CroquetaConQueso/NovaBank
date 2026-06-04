@@ -33,6 +33,7 @@ class CuentaMovimientoAtomicoConcurrencyTest {
     private CuentaRepository cuentaRepository;
     private OperacionIdempotenteRepository operacionIdempotenteRepository;
     private MovimientoRegistradoEventPublisher movimientoRegistradoEventPublisher;
+    private SaldoBajoAlertService saldoBajoAlertService;
     private CuentaMovimientoAtomicoService service;
 
     @BeforeEach
@@ -40,11 +41,13 @@ class CuentaMovimientoAtomicoConcurrencyTest {
         cuentaRepository = mock(CuentaRepository.class);
         operacionIdempotenteRepository = mock(OperacionIdempotenteRepository.class);
         movimientoRegistradoEventPublisher = mock(MovimientoRegistradoEventPublisher.class);
+        saldoBajoAlertService = mock(SaldoBajoAlertService.class);
         service = new CuentaMovimientoAtomicoService(
                 cuentaRepository,
                 operacionIdempotenteRepository,
                 new CuentaMapper(),
-                movimientoRegistradoEventPublisher
+                movimientoRegistradoEventPublisher,
+                saldoBajoAlertService
         );
     }
 
@@ -73,6 +76,7 @@ class CuentaMovimientoAtomicoConcurrencyTest {
                 .verifyComplete();
 
         verify(movimientoRegistradoEventPublisher, never()).publicar(org.mockito.ArgumentMatchers.any());
+        verify(saldoBajoAlertService, never()).evaluarYPublicar(org.mockito.ArgumentMatchers.any());
     }
 
     @Test

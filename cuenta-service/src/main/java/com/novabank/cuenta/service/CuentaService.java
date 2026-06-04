@@ -40,19 +40,22 @@ public class CuentaService {
     private final GeneradorNumeroCuentaStrategy generadorNumeroCuentaStrategy;
     private final CuentaMapper cuentaMapper;
     private final MovimientoRegistradoEventPublisher movimientoRegistradoEventPublisher;
+    private final SaldoBajoAlertService saldoBajoAlertService;
 
     public CuentaService(
             CuentaRepository cuentaRepository,
             ClienteServiceClient clienteServiceClient,
             GeneradorNumeroCuentaStrategy generadorNumeroCuentaStrategy,
             CuentaMapper cuentaMapper,
-            MovimientoRegistradoEventPublisher movimientoRegistradoEventPublisher
+            MovimientoRegistradoEventPublisher movimientoRegistradoEventPublisher,
+            SaldoBajoAlertService saldoBajoAlertService
     ) {
         this.cuentaRepository = cuentaRepository;
         this.clienteServiceClient = clienteServiceClient;
         this.generadorNumeroCuentaStrategy = generadorNumeroCuentaStrategy;
         this.cuentaMapper = cuentaMapper;
         this.movimientoRegistradoEventPublisher = movimientoRegistradoEventPublisher;
+        this.saldoBajoAlertService = saldoBajoAlertService;
     }
 
     @Transactional
@@ -239,6 +242,11 @@ public class CuentaService {
                 operationId
         );
 
+        return publicarMovimientoRegistrado(evento)
+                .then(publicarAlertaSaldoBajo(evento));
+    }
+
+    private Mono<Void> publicarMovimientoRegistrado(MovimientoEventDTO evento) {
         return movimientoRegistradoEventPublisher.publicar(evento)
                 .onErrorResume(error -> {
                     log.error(
@@ -246,6 +254,19 @@ public class CuentaService {
                             evento.cuentaId(),
                             evento.tipo(),
                             evento.operationId(),
+                            error
+                    );
+                    return Mono.empty();
+                });
+    }
+
+    private Mono<Void> publicarAlertaSaldoBajo(MovimientoEventDTO evento) {
+        return saldoBajoAlertService.evaluarYPublicar(evento)
+                .onErrorResume(error -> {
+                    log.error(
+                            "No se pudo publicar alerta de saldo bajo cuentaId={} saldoResultante={}",
+                            evento.cuentaId(),
+                            evento.saldoResultante(),
                             error
                     );
                     return Mono.empty();

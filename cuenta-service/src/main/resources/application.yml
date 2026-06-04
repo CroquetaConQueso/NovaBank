@@ -27,6 +27,9 @@ spring:
         movimientoRegistrado-out-0:
           destination: novabank.movimientos.registrados
           content-type: application/json
+        alertaSaldoBajo-out-0:
+          destination: novabank.alertas.saldo-bajo
+          content-type: application/json
       kafka:
         binder:
           brokers: localhost:9092
@@ -44,3 +47,8 @@ management:
 logging:
   pattern:
     level: "%5p [traceId=%X{traceId:-},spanId=%X{spanId:-}]"
+
+novabank:
+  alertas:
+    saldo-bajo:
+      umbral: 100.00

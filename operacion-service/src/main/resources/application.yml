@@ -42,3 +42,14 @@ management:
 logging:
   pattern:
     level: "%5p [traceId=%X{traceId:-},spanId=%X{spanId:-}]"
+
+novabank:
+  kafka-streams:
+    operaciones-sospechosas:
+      enabled: true
+      application-id: operacion-service-suspicious-streams
+      bootstrap-servers: localhost:9092
+      input-topic: novabank.operaciones.solicitadas
+      output-topic: novabank.alertas.operaciones-sospechosas
+      ventana-minutos: 10
+      umbral-operaciones: 5

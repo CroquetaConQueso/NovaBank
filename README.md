@@ -197,6 +197,7 @@ Los contratos iniciales estan en `novabank-events` bajo `com.novabank.events`:
 - `OperacionFallidaEvent`
 - `MovimientoRegistradoEvent`
 - `AlertaSaldoBajoEvent`
+- `AlertaOperacionSospechosaEvent`
 
 Todos los eventos incluyen `eventId`, `correlationId` y `occurredAt`, y transportan solo datos simples del dominio.
 
@@ -210,6 +211,7 @@ Topics previstos:
 | `novabank.operaciones.fallidas` | 6 | 30 dias |
 | `novabank.movimientos.registrados` | 6 | 7 dias |
 | `novabank.alertas.saldo-bajo` | 3 | 30 dias |
+| `novabank.alertas.operaciones-sospechosas` | 3 | 30 dias |
 
 Los nombres de topics estan centralizados en `NovaBankTopics`.
 
@@ -482,6 +484,66 @@ Despues, provocar un retiro o transferencia que deje una cuenta con saldo menor 
 - `notificacion-service` registra `cuentaId`, `saldoActual`, `umbral`, `moneda` y `correlationId`;
 - si el saldo queda exactamente en `100.00`, no se publica alerta.
 
+## Kafka Streams Para Operaciones Sospechosas
+
+`operacion-service` incorpora una topologia Kafka Streams local para detectar actividad sospechosa de retiradas. La regla didactica es: si una misma cuenta acumula mas de 5 operaciones `RETIRADA` o `RETIRO` en una ventana de 10 minutos, se publica `AlertaOperacionSospechosaEvent`.
+
+La ventana se materializa en un store en memoria para mantener esta iteracion local y portable. En un entorno productivo se deberia revisar durabilidad, restauracion de estado y reglas antifraude reales.
+
+Flujo:
+
+```text
+novabank.operaciones.solicitadas
+  -> operacion-service Kafka Streams
+  -> filtra RETIRADA/RETIRO con cuentaOrigenId
+  -> agrupa por cuentaOrigenId y ventana de 10 minutos
+  -> publica en novabank.alertas.operaciones-sospechosas si count > 5
+  -> notificacion-service registra la alerta en logs
+```
+
+Configuracion local:
+
+```yaml
+novabank:
+  kafka-streams:
+    operaciones-sospechosas:
+      application-id: operacion-service-suspicious-streams
+      bootstrap-servers: localhost:9092
+      input-topic: novabank.operaciones.solicitadas
+      output-topic: novabank.alertas.operaciones-sospechosas
+      ventana-minutos: 10
+      umbral-operaciones: 5
+```
+
+Ejemplo de alerta generada:
+
+```json
+{"eventId":"<uuid>","correlationId":"22222222-2222-2222-2222-222222222222","occurredAt":"<instant>","cuentaId":1,"tipoOperacion":"RETIRADA","numeroOperaciones":6,"ventanaMinutos":10,"descripcion":"Mas de 5 retiradas en 10 minutos"}
+```
+
+Validacion local:
+
+```powershell
+docker compose up -d
+mvn -pl operacion-service spring-boot:run
+mvn -pl notificacion-service spring-boot:run
+docker compose exec -i kafka /opt/kafka/bin/kafka-console-producer.sh --bootstrap-server kafka:9092 --topic novabank.operaciones.solicitadas
+```
+
+Publicar 6 eventos como este, cambiando `eventId` y `operationId` en cada envio:
+
+```json
+{"eventId":"11111111-1111-1111-1111-111111111111","correlationId":"22222222-2222-2222-2222-222222222222","occurredAt":"2026-06-04T10:15:30Z","operationId":"33333333-3333-3333-3333-333333333333","tipoOperacion":"RETIRADA","cuentaOrigenId":1,"cuentaDestinoId":null,"importe":10.00,"moneda":"EUR"}
+```
+
+Comprobar:
+
+- Kafka UI en `http://localhost:8090`, topics `novabank.operaciones.solicitadas` y `novabank.alertas.operaciones-sospechosas`.
+- Logs de `operacion-service`: `Alerta de operacion sospechosa generada`.
+- Logs de `notificacion-service`: `Alerta de operacion sospechosa recibida`.
+
+Con solo 5 retiradas no debe generarse alerta. Los depositos y eventos sin `cuentaOrigenId` no cuentan. Esta deteccion es local y didactica: no sustituye reglas antifraude reales, no persiste alertas y `notificacion-service` solo registra logs.
+
 Arrancar infraestructura y `cuenta-service`:
 
 ```powershell
@@ -717,7 +779,7 @@ Notas pendientes del Modulo 6:
 - La transferencia ordinaria ya usa el flujo Kafka/SAGA basico, sin compensacion avanzada.
 - La idempotencia publica de las operaciones asincronas queda pendiente de consolidacion sobre el estado persistido.
 - Transferencias en divisa conservan por ahora el flujo sincronico existente.
-- Kafka Streams queda pendiente.
+- Reglas antifraude avanzadas y persistencia de alertas quedan pendientes.
 
 ## Bases De Datos Y SQL
 

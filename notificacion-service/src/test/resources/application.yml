@@ -10,11 +10,22 @@ spring:
     config:
       enabled: false
     function:
-      definition: notificarBienvenida
+      definition: ""
     stream:
+      enabled: false
+      function:
+        autodetect: false
       bindings:
         notificarBienvenida-in-0:
           destination: novabank.clientes.registrados
+          group: notificacion-service
+          content-type: application/json
+        notificarSaldoBajo-in-0:
+          destination: novabank.alertas.saldo-bajo
+          group: notificacion-service
+          content-type: application/json
+        notificarOperacionSospechosa-in-0:
+          destination: novabank.alertas.operaciones-sospechosas
           group: notificacion-service
           content-type: application/json
   kafka:

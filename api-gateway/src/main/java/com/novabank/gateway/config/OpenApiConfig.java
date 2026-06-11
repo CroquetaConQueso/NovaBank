@@ -1,4 +1,4 @@
-package com.novabank.exchangerate.config;
+package com.novabank.gateway.config;
 
 import io.swagger.v3.oas.annotations.OpenAPIDefinition;
 import io.swagger.v3.oas.annotations.info.Info;
@@ -8,12 +8,12 @@ import org.springframework.context.annotation.Configuration;
 @Configuration
 @OpenAPIDefinition(
         info = @Info(
-                title = "NovaBank Exchange Rate Mock API",
+                title = "NovaBank API Gateway",
                 version = "4.0-SNAPSHOT",
-                description = "API HTTP mock para tasas de cambio usadas por transferencias en divisa."
+                description = "Entrada HTTP al ecosistema NovaBank y vista agregada de documentacion OpenAPI."
         ),
         servers = {
-                @Server(url = "/", description = "Servicio local o ruta publicada por Gateway")
+                @Server(url = "/", description = "API Gateway local")
         }
 )
 public class OpenApiConfig {

@@ -79,6 +79,34 @@ Los servicios de negocio se comunican mediante WebClient con resolucion por Eure
 | `exchange-rate-mock-service` | 8084 | Mock reactivo | Tasas de cambio predefinidas para pruebas locales. | No aplica |
 | `notificacion-service` | 8085 | Servicio reactivo | Consumidor Kafka para notificaciones de bienvenida. | No aplica |
 
+## Swagger / OpenAPI
+
+Swagger documenta solo APIs HTTP REST. Los topics Kafka, producers, consumers, SAGA interna, consumer groups y state stores se documentan en este README y en la documentacion del modulo, no como rutas OpenAPI. El endpoint SSE de movimientos aparece como `text/event-stream`, pero su validacion real debe hacerse con `curl -N` o un cliente compatible.
+
+OpenAPI agregado desde Gateway:
+
+| Entrada | URL |
+| --- | --- |
+| OpenAPI auth-server | `http://localhost:8080/v3/api-docs/auth-server` |
+| OpenAPI cliente-service | `http://localhost:8080/v3/api-docs/cliente-service` |
+| OpenAPI cuenta-service | `http://localhost:8080/v3/api-docs/cuenta-service` |
+| OpenAPI operacion-service | `http://localhost:8080/v3/api-docs/operacion-service` |
+| OpenAPI exchange-rate-mock-service | `http://localhost:8080/v3/api-docs/exchange-rate-mock-service` |
+
+El Gateway expone los JSON OpenAPI agregados para evitar CORS al consultarlos desde el entorno local. La interfaz Swagger UI se mantiene en cada microservicio.
+
+Acceso directo por microservicio:
+
+| Servicio | Swagger UI | OpenAPI JSON |
+| --- | --- | --- |
+| `auth-server` | `http://localhost:9000/swagger-ui/index.html` | `http://localhost:9000/v3/api-docs` |
+| `cliente-service` | `http://localhost:8081/swagger-ui/index.html` | `http://localhost:8081/v3/api-docs` |
+| `cuenta-service` | `http://localhost:8082/swagger-ui/index.html` | `http://localhost:8082/v3/api-docs` |
+| `operacion-service` | `http://localhost:8083/swagger-ui/index.html` | `http://localhost:8083/v3/api-docs` |
+| `exchange-rate-mock-service` | `http://localhost:8084/swagger-ui/index.html` | `http://localhost:8084/v3/api-docs` |
+
+`notificacion-service` no expone API REST funcional; consume eventos Kafka y registra notificaciones en logs. Los endpoints de negocio publicados por el Gateway requieren JWT salvo login, registro, validacion de token, actuator health/info y documentacion Swagger/OpenAPI.
+
 ## Estructura Del Repositorio
 
 ```text

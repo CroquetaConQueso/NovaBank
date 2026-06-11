@@ -11,12 +11,12 @@ import org.springframework.context.annotation.Configuration;
 @Configuration
 @OpenAPIDefinition(
         info = @Info(
-                title = "NovaBank - Cuentas",
+                title = "NovaBank Cuentas API",
                 version = "4.0-SNAPSHOT",
-                description = "Gestion reactiva de cuentas, saldos, movimientos atomicos y SSE."
+                description = "API HTTP reactiva para cuentas, saldos, movimientos atomicos y SSE."
         ),
         servers = {
-                @Server(url = "/", description = "API Gateway")
+                @Server(url = "/", description = "Servicio local o ruta publicada por Gateway")
         },
         security = {
                 @SecurityRequirement(name = "bearerAuth")

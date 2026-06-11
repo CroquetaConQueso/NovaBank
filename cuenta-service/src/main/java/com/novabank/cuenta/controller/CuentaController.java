@@ -7,6 +7,8 @@ import com.novabank.cuenta.dto.SaldoResponseDTO;
 import com.novabank.cuenta.service.CuentaService;
 import com.novabank.cuenta.service.MovimientoEventService;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -105,10 +107,17 @@ public class CuentaController {
     @GetMapping(value = "/{id}/movimientos/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     @Operation(
             summary = "Suscribirse a movimientos de una cuenta",
-            description = "Devuelve un stream SSE con los movimientos aplicados sobre una cuenta."
+            description = "Devuelve un stream SSE text/event-stream con movimientos publicados para la cuenta. Kafka alimenta el stream internamente, pero no forma parte de la API HTTP."
     )
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "Stream SSE abierto correctamente"),
+            @ApiResponse(
+                    responseCode = "200",
+                    description = "Stream SSE abierto correctamente",
+                    content = @Content(
+                            mediaType = MediaType.TEXT_EVENT_STREAM_VALUE,
+                            schema = @Schema(implementation = MovimientoEventDTO.class)
+                    )
+            ),
             @ApiResponse(responseCode = "400", description = "Identificador invalido"),
             @ApiResponse(responseCode = "401", description = "Token ausente o invalido al acceder mediante Gateway")
     })

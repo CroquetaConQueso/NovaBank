@@ -44,7 +44,19 @@ baseUrl = http://localhost:8080
 
 ## Swagger
 
-Swagger se revisa por microservicio:
+Swagger documenta APIs HTTP REST. Kafka, SAGA interna, eventos, topics, consumer groups y state stores se documentan en README/PDF, no como rutas falsas.
+
+OpenAPI agregado desde el Gateway:
+
+- `auth-server`: `http://localhost:8080/v3/api-docs/auth-server`
+- `cliente-service`: `http://localhost:8080/v3/api-docs/cliente-service`
+- `cuenta-service`: `http://localhost:8080/v3/api-docs/cuenta-service`
+- `operacion-service`: `http://localhost:8080/v3/api-docs/operacion-service`
+- `exchange-rate-mock-service`: `http://localhost:8080/v3/api-docs/exchange-rate-mock-service`
+
+El Gateway agrega los JSON OpenAPI. La interfaz Swagger UI se revisa directamente en cada microservicio.
+
+Swagger directo por microservicio:
 
 - `auth-server`: `http://localhost:9000/swagger-ui/index.html`
 - `cliente-service`: `http://localhost:8081/swagger-ui/index.html`
@@ -52,4 +64,4 @@ Swagger se revisa por microservicio:
 - `operacion-service`: `http://localhost:8083/swagger-ui/index.html`
 - `exchange-rate-mock-service`: `http://localhost:8084/swagger-ui/index.html`
 
-El Gateway no agrega Swagger en esta version.
+`notificacion-service` no expone API REST funcional de negocio.

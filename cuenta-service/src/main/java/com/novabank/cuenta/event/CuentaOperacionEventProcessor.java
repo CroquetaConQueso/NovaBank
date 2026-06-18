@@ -35,13 +35,19 @@ public class CuentaOperacionEventProcessor {
         OperacionSolicitadaEvent event = message.getPayload();
 
         log.info(
-                "OperacionSolicitadaEvent recibido operationId={} tipoOperacion={} correlationId={}",
+                "OperacionSolicitadaEvent recibido operationId={} tipoOperacion={} cuentaOrigenId={} "
+                        + "cuentaDestinoId={} correlationId={}",
                 event.operationId(),
                 event.tipoOperacion(),
+                event.cuentaOrigenId(),
+                event.cuentaDestinoId(),
                 event.correlationId()
         );
 
         return aplicarOperacion(event)
+                .thenReturn(true)
+                .onErrorResume(error -> publicarFalloNegocio(event, error).thenReturn(false))
+                .flatMap(aplicada -> aplicada ? publicarCompletada(event) : Mono.empty())
                 .contextWrite(context -> {
                     if (event.operationId() != null) {
                         context = context.put(CorrelationIdSupport.OPERATION_ID_CONTEXT_KEY, event.operationId().toString());
@@ -50,13 +56,7 @@ public class CuentaOperacionEventProcessor {
                         context = context.put(CorrelationIdSupport.CONTEXT_KEY, event.correlationId().toString());
                     }
                     return context;
-                })
-                .then(Mono.defer(() -> publisher.publicarCompletada(event)))
-                .doOnSuccess(ignored -> log.info(
-                        "OperacionSolicitadaEvent procesado correctamente operationId={}",
-                        event.operationId()
-                ))
-                .onErrorResume(error -> publicarFallo(event, error));
+                });
     }
 
     private Mono<Void> aplicarOperacion(OperacionSolicitadaEvent event) {
@@ -80,18 +80,48 @@ public class CuentaOperacionEventProcessor {
         });
     }
 
-    private Mono<Void> publicarFallo(OperacionSolicitadaEvent event, Throwable error) {
+    private Mono<Void> publicarCompletada(OperacionSolicitadaEvent event) {
+        return Mono.defer(() -> publisher.publicarCompletada(event))
+                .doOnSuccess(ignored -> log.info(
+                        "Operacion aplicada y resultado COMPLETADA publicado operationId={} tipoOperacion={} "
+                                + "cuentaOrigenId={} cuentaDestinoId={}",
+                        event.operationId(),
+                        event.tipoOperacion(),
+                        event.cuentaOrigenId(),
+                        event.cuentaDestinoId()
+                ))
+                .doOnError(error -> log.error(
+                        "Operacion aplicada pero no se pudo publicar COMPLETADA operationId={} tipoOperacion={} "
+                                + "cuentaOrigenId={} cuentaDestinoId={} motivo={}",
+                        event.operationId(),
+                        event.tipoOperacion(),
+                        event.cuentaOrigenId(),
+                        event.cuentaDestinoId(),
+                        motivo(error),
+                        error
+                ));
+    }
+
+    private Mono<Void> publicarFalloNegocio(OperacionSolicitadaEvent event, Throwable error) {
         String codigoError = resolverCodigoError(error);
-        String motivo = error.getMessage() == null ? error.getClass().getSimpleName() : error.getMessage();
+        String motivo = motivo(error);
 
         log.warn(
-                "OperacionSolicitadaEvent fallido operationId={} codigoError={} motivo={}",
+                "Operacion rechazada operationId={} tipoOperacion={} cuentaOrigenId={} cuentaDestinoId={} "
+                        + "codigoError={} motivo={}",
                 event.operationId(),
+                event.tipoOperacion(),
+                event.cuentaOrigenId(),
+                event.cuentaDestinoId(),
                 codigoError,
                 motivo
         );
 
         return publisher.publicarFallida(event, codigoError, motivo);
+    }
+
+    private String motivo(Throwable error) {
+        return error.getMessage() == null ? error.getClass().getSimpleName() : error.getMessage();
     }
 
     private String tipoNormalizado(String tipoOperacion) {

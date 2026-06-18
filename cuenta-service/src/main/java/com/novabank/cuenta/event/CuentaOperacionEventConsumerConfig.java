@@ -20,7 +20,20 @@ public class CuentaOperacionEventConsumerConfig {
             CuentaOperacionEventProcessor processor
     ) {
         return messages -> messages
-                .concatMap(processor::procesar)
+                .concatMap(message -> processor.procesar(message)
+                        .onErrorResume(error -> {
+                            OperacionSolicitadaEvent event = message.getPayload();
+                            log.error(
+                                    "Error tecnico procesando resultado operationId={} tipoOperacion={} "
+                                            + "cuentaOrigenId={} cuentaDestinoId={}",
+                                    event.operationId(),
+                                    event.tipoOperacion(),
+                                    event.cuentaOrigenId(),
+                                    event.cuentaDestinoId(),
+                                    error
+                            );
+                            return reactor.core.publisher.Mono.empty();
+                        }))
                 .subscribe(
                         ignored -> {
                         },

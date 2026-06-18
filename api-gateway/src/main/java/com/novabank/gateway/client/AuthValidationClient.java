@@ -14,7 +14,7 @@ public class AuthValidationClient {
 
     public AuthValidationClient(
             WebClient.Builder webClientBuilder,
-            @Value("${novabank.gateway.auth-validation-url:lb://AUTH-SERVER/api/auth/validate}") String validationUrl
+            @Value("${novabank.gateway.auth-validation-url:lb://auth-server/api/auth/validate}") String validationUrl
     ) {
         this.webClient = webClientBuilder.build();
         this.validationUrl = validationUrl;

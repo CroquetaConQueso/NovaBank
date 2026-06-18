@@ -3,7 +3,7 @@ server:
 
 spring:
   application:
-    name: EXCHANGE-RATE-SERVICE
+    name: exchange-rate-mock-service
   config:
     import: optional:configserver:http://localhost:8888
 

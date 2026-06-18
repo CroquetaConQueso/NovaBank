@@ -29,7 +29,7 @@ public class ClienteServiceClient {
     @Autowired
     public ClienteServiceClient(
             WebClient.Builder webClientBuilder,
-            @Value("${novabank.clients.cliente-service.base-url:http://CLIENTE-SERVICE}") String baseUrl
+            @Value("${novabank.clients.cliente-service.base-url:http://cliente-service}") String baseUrl
     ) {
         this(
                 webClientBuilder,

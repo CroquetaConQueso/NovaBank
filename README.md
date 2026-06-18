@@ -87,6 +87,16 @@ Swagger documenta solo APIs HTTP REST. Los topics Kafka, producers, consumers, S
 
 Las rutas agregadas tienen una sola fuente de verdad: `api-gateway.yml` en el repositorio de Config Server. El Gateway no declara rutas OpenAPI programaticas ni usa destinos `localhost`; cada ruta debe usar `lb://<spring.application.name>`. La convencion de discovery es lowercase kebab-case y coincide con el nombre del modulo Maven, incluido `exchange-rate-mock-service`.
 
+### Convencion De Nombres De Servicios
+
+Los nombres logicos finales son `api-gateway`, `auth-server`, `cliente-service`, `cuenta-service`, `operacion-service`, `exchange-rate-mock-service`, `notificacion-service`, `config-server` y `eureka-server`. Los identificadores `lb://`, las URLs base de WebClient, los archivos del repositorio de configuracion y los segmentos agregados de OpenAPI deben usar exactamente estos nombres.
+
+Las rutas de Spring Cloud Gateway usan `lb://nombre-servicio`. Los clientes construidos con `WebClient.Builder` y `@LoadBalanced` usan `http://nombre-servicio`, donde el host es el service ID registrado en Eureka.
+
+### Swagger Unificado Desde Gateway
+
+Cuando se incorpore `documento-service` en el Modulo 7 se añadiran exclusivamente en `config-repo/api-gateway.yml`: la ruta de negocio con `uri: lb://documento-service`, la ruta agregada `/v3/api-docs/documento-service` con `RewritePath` a `/v3/api-docs`, y la entrada homonima de `springdoc.swagger-ui.urls`. No se añadira un `RouteLocator` Java.
+
 OpenAPI agregado desde Gateway:
 
 | Entrada | URL |

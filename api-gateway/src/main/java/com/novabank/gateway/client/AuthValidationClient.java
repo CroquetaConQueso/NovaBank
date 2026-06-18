@@ -14,15 +14,15 @@ public class AuthValidationClient {
 
     public AuthValidationClient(
             WebClient.Builder webClientBuilder,
-            @Value("${novabank.gateway.auth-validation-url:lb://auth-server/api/auth/validate}") String validationUrl
+            @Value("${novabank.gateway.auth-validation-url:http://auth-server/api/auth/validate}") String validationUrl
     ) {
         this.webClient = webClientBuilder.build();
         this.validationUrl = validationUrl;
     }
 
     /**
-     * Usa la URL lb:// configurada para resolver auth-server mediante Eureka
-     * sin fijar host ni puerto en el filtro.
+     * Usa auth-server como host logico para resolverlo mediante Eureka con el
+     * WebClient.Builder anotado con @LoadBalanced.
      */
     public Mono<ValidateTokenResponseDTO> validate(String token) {
         return webClient.get()

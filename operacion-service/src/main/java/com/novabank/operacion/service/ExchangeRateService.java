@@ -42,8 +42,8 @@ public class ExchangeRateService {
     @Autowired
     public ExchangeRateService(
             WebClient.Builder webClientBuilder,
-            @Value("${novabank.clients.exchange-rate-service.base-url:http://exchange-rate-mock-service}") String baseUrl,
-            @Value("${novabank.clients.exchange-rate-service.timeout:3s}") Duration timeout,
+            @Value("${novabank.clients.exchange-rate-mock-service.base-url:http://exchange-rate-mock-service}") String baseUrl,
+            @Value("${novabank.clients.exchange-rate-mock-service.timeout:3s}") Duration timeout,
             ExchangeRateCache exchangeRateCache
     ) {
         this(
@@ -121,7 +121,10 @@ public class ExchangeRateService {
                 .transformDeferred(CircuitBreakerOperator.of(exchangeRateCircuitBreaker))
                 .onErrorMap(
                         CallNotPermittedException.class,
-                        error -> new ExchangeRateUnavailableException("exchange-rate-service no esta disponible", error)
+                        error -> new ExchangeRateUnavailableException(
+                                "exchange-rate-mock-service no esta disponible",
+                                error
+                        )
                 )
                 .onErrorResume(error -> resolverConCacheSiEsTecnico(error, fromNormalizado, toNormalizado));
     }
@@ -166,11 +169,11 @@ public class ExchangeRateService {
     }
 
     private ExchangeRateUnavailableException servicioNoDisponible(WebClientRequestException ex) {
-        return new RetryableExchangeRateUnavailableException("exchange-rate-service no esta disponible", ex);
+        return new RetryableExchangeRateUnavailableException("exchange-rate-mock-service no esta disponible", ex);
     }
 
     private ExchangeRateUnavailableException timeout(TimeoutException ex) {
-        return new RetryableExchangeRateUnavailableException("exchange-rate-service no respondio a tiempo", ex);
+        return new RetryableExchangeRateUnavailableException("exchange-rate-mock-service no respondio a tiempo", ex);
     }
 
     private Mono<ExchangeRateResultDTO> resolverConCacheSiEsTecnico(

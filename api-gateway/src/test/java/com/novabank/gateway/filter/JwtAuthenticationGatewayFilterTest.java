@@ -47,7 +47,13 @@ class JwtAuthenticationGatewayFilterTest {
             "/api/auth/register",
             "/api/auth/validate",
             "/actuator/health",
-            "/actuator/info"
+            "/actuator/info",
+            "/v3/api-docs",
+            "/v3/api-docs/auth-server",
+            "/v3/api-docs/cliente-service",
+            "/v3/api-docs/cuenta-service",
+            "/v3/api-docs/operacion-service",
+            "/v3/api-docs/exchange-rate-mock-service"
     })
     void rutasPublicasNoExigenToken(String path) {
         AtomicBoolean chainCalled = new AtomicBoolean(false);

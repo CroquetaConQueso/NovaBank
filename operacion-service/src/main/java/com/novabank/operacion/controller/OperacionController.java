@@ -10,6 +10,7 @@ import com.novabank.operacion.dto.TransferenciaDivisaRequestDTO;
 import com.novabank.operacion.dto.TransferenciaRequestDTO;
 import com.novabank.operacion.service.OperacionService;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -54,6 +55,7 @@ public class OperacionController {
     })
     public Mono<ResponseEntity<OperacionAceptadaResponseDTO>> depositar(
             @Valid @RequestBody OperacionRequestDTO request,
+            @Parameter(description = "Clave opcional para idempotencia publica de la operacion")
             @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey
     ) {
         return operacionService.solicitarDeposito(request, idempotencyKey)
@@ -73,6 +75,7 @@ public class OperacionController {
     })
     public Mono<ResponseEntity<OperacionAceptadaResponseDTO>> retirar(
             @Valid @RequestBody OperacionRequestDTO request,
+            @Parameter(description = "Clave opcional para idempotencia publica de la operacion")
             @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey
     ) {
         return operacionService.solicitarRetirada(request, idempotencyKey)
@@ -92,6 +95,7 @@ public class OperacionController {
     })
     public Mono<ResponseEntity<TransferenciaAceptadaResponseDTO>> transferir(
             @Valid @RequestBody TransferenciaRequestDTO request,
+            @Parameter(description = "Clave opcional para idempotencia publica de la transferencia")
             @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey
     ) {
         return operacionService.transferir(request, idempotencyKey)
@@ -113,6 +117,7 @@ public class OperacionController {
     })
     public Mono<OperacionResponseDTO> transferirEnDivisa(
             @Valid @RequestBody TransferenciaDivisaRequestDTO request,
+            @Parameter(description = "Clave opcional para idempotencia publica de la transferencia en divisa")
             @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey
     ) {
         return operacionService.transferirEnDivisa(request, idempotencyKey);
@@ -144,6 +149,7 @@ public class OperacionController {
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Estado obtenido correctamente"),
             @ApiResponse(responseCode = "400", description = "OperationId invalido"),
+            @ApiResponse(responseCode = "401", description = "Token ausente o invalido al acceder mediante Gateway"),
             @ApiResponse(responseCode = "404", description = "Operacion asincrona no encontrada")
     })
     public Mono<OperacionEstadoResponseDTO> consultarSaga(@PathVariable UUID operationId) {

@@ -1,6 +1,6 @@
-# NovaBank Digital Services - Modulo 5
+# NovaBank Digital Services - Modulo 6
 
-NovaBank es un proyecto Maven multi-modulo que simula una plataforma bancaria con servicios independientes, comunicacion reactiva y persistencia separada por dominio. El estado actual corresponde al cierre tecnico del Modulo 5: servicios de negocio sobre Spring WebFlux, Spring Data R2DBC, Project Reactor, WebClient, trazabilidad, resiliencia reactiva, idempotencia y tests con PostgreSQL real mediante Testcontainers.
+NovaBank es un proyecto Maven multi-modulo que simula una plataforma bancaria con servicios independientes, comunicacion reactiva y persistencia separada por dominio. El estado actual estabiliza el Modulo 6: mantiene la base reactiva del Modulo 5 e incorpora eventos Kafka, una SAGA basica para operaciones, alertas y consumidores de notificaciones.
 
 ## Evolucion Del Proyecto
 
@@ -11,6 +11,8 @@ NovaBank es un proyecto Maven multi-modulo que simula una plataforma bancaria co
 | Modulo 3 | Aplicacion monolitica con seguridad y persistencia. |
 | Modulo 4 | Transicion a microservicios sincronicos con Spring Cloud. |
 | Modulo 5 | Migracion de Spring MVC a WebFlux, R2DBC, WebClient, SSE, idempotencia, resiliencia y observabilidad. |
+| Modulo 6 | Kafka, eventos compartidos, operaciones asincronas, SAGA basica, alertas y Swagger agregado. |
+| Modulo 7 | Pendiente: Docker completo, LocalStack, S3, Lambda y documento-service. |
 
 ## Capacidades Principales
 
@@ -78,6 +80,36 @@ Los servicios de negocio se comunican mediante WebClient con resolucion por Eure
 | `operacion-service` | 8083 | Servicio reactivo | Depositos, retiros, transferencias, divisas e historial. | `novabank_operaciones` |
 | `exchange-rate-mock-service` | 8084 | Mock reactivo | Tasas de cambio predefinidas para pruebas locales. | No aplica |
 | `notificacion-service` | 8085 | Servicio reactivo | Consumidor Kafka para notificaciones de bienvenida. | No aplica |
+
+## Swagger / OpenAPI
+
+Swagger documenta solo APIs HTTP REST. Los topics Kafka, producers, consumers, SAGA interna, consumer groups y state stores se documentan en este README y en la documentacion del modulo, no como rutas OpenAPI. El endpoint SSE de movimientos aparece como `text/event-stream`, pero su validacion real debe hacerse con `curl -N` o un cliente compatible.
+
+Las rutas agregadas tienen una sola fuente de verdad: `api-gateway.yml` en el repositorio de Config Server. El Gateway no declara rutas OpenAPI programaticas ni usa destinos `localhost`; cada ruta debe usar `lb://<spring.application.name>`. La convencion de discovery es lowercase kebab-case y coincide con el nombre del modulo Maven, incluido `exchange-rate-mock-service`.
+
+OpenAPI agregado desde Gateway:
+
+| Entrada | URL |
+| --- | --- |
+| OpenAPI auth-server | `http://localhost:8080/v3/api-docs/auth-server` |
+| OpenAPI cliente-service | `http://localhost:8080/v3/api-docs/cliente-service` |
+| OpenAPI cuenta-service | `http://localhost:8080/v3/api-docs/cuenta-service` |
+| OpenAPI operacion-service | `http://localhost:8080/v3/api-docs/operacion-service` |
+| OpenAPI exchange-rate-mock-service | `http://localhost:8080/v3/api-docs/exchange-rate-mock-service` |
+
+El Gateway expone los JSON OpenAPI agregados para evitar CORS al consultarlos desde el entorno local. La interfaz Swagger UI se mantiene en cada microservicio.
+
+Acceso directo por microservicio:
+
+| Servicio | Swagger UI | OpenAPI JSON |
+| --- | --- | --- |
+| `auth-server` | `http://localhost:9000/swagger-ui/index.html` | `http://localhost:9000/v3/api-docs` |
+| `cliente-service` | `http://localhost:8081/swagger-ui/index.html` | `http://localhost:8081/v3/api-docs` |
+| `cuenta-service` | `http://localhost:8082/swagger-ui/index.html` | `http://localhost:8082/v3/api-docs` |
+| `operacion-service` | `http://localhost:8083/swagger-ui/index.html` | `http://localhost:8083/v3/api-docs` |
+| `exchange-rate-mock-service` | `http://localhost:8084/swagger-ui/index.html` | `http://localhost:8084/v3/api-docs` |
+
+`notificacion-service` no expone API REST funcional; consume eventos Kafka y registra notificaciones en logs. Los endpoints de negocio publicados por el Gateway requieren JWT salvo login, registro, validacion de token, actuator health/info y documentacion Swagger/OpenAPI.
 
 ## Estructura Del Repositorio
 
@@ -1028,7 +1060,21 @@ Cada servicio es propietario de sus tablas. No hay claves foraneas entre bases d
 | `novabank_auth` | `usuarios` |
 | `novabank_clientes` | `clientes` |
 | `novabank_cuentas` | `cuentas`, `account_number_sequence`, `operaciones_idempotentes` |
-| `novabank_operaciones` | `movimientos`, `operaciones_publicas_idempotentes` |
+| `novabank_operaciones` | `movimientos`, `operaciones_publicas_idempotentes`, `operaciones_asincronas` |
+
+## Diagnostico De Operaciones Kafka
+
+`cuenta-service` distingue la aplicacion de la operacion financiera de la publicacion de su resultado. Un error de negocio durante la aplicacion publica `OperacionFallidaEvent` con un codigo como `SALDO_INSUFICIENTE`, `CUENTA_NO_ENCONTRADA` o `SOLICITUD_INVALIDA`.
+
+Si la operacion ya fue aplicada pero falla la publicacion de `OperacionCompletadaEvent`, se registra un error tecnico y no se publica `OperacionFallidaEvent`, porque eso declararia incorrectamente que el movimiento financiero no ocurrio. Los logs incluyen `operationId`, `tipoOperacion`, `cuentaOrigenId`, `cuentaDestinoId` y el motivo del error.
+
+Una operacion que permanece en `SOLICITADA` debe investigarse revisando primero los logs de publicacion de `cuenta-service` y despues el topic `novabank.operaciones.completadas`. Una estrategia outbox queda pendiente para reintentar de forma durable estos fallos tecnicos.
+
+## Evolucion A Arquitectura Hexagonal
+
+La migracion sera gradual y por casos de uso verticales. No se han movido paquetes en bloque durante esta estabilizacion porque el procesamiento financiero combina transaccion local, eventos de movimiento, alertas y resultados Kafka.
+
+La estructura objetivo, el mapeo de paquetes y el primer corte recomendado estan documentados en [docs/arquitectura-hexagonal.md](docs/arquitectura-hexagonal.md). `documento-service` del Modulo 7 debera nacer con adaptadores de salida separados para S3 y Lambda.
 
 ## Testing
 
@@ -1065,6 +1111,8 @@ Los servicios devuelven respuestas de error controladas con codigo, mensaje, tim
 
 ## Mejoras Futuras
 
+- Incorporar outbox o entrega transaccional para reintentar resultados Kafka sin confundir fallos tecnicos con fallos de negocio.
+- Ejecutar la migracion hexagonal vertical del procesamiento de operaciones en `cuenta-service`.
 - Persistencia durable de eventos de movimientos.
 - Integracion con un proveedor real de tipo de cambio.
 - Observabilidad centralizada con backend de trazas y metricas.
@@ -1073,4 +1121,4 @@ Los servicios devuelven respuestas de error controladas con codigo, mensaje, tim
 
 ## Repositorio Y Autor
 
-Proyecto academico NovaBank Digital Services para la formacion Backend Java NTT. El PDF de entrega del Modulo 5 se prepara aparte a partir del estado final documentado en este repositorio.
+Proyecto academico NovaBank Digital Services para la formacion Backend Java NTT.

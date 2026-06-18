@@ -59,6 +59,29 @@ class CuentaOperacionEventProcessorTest {
     }
 
     @Test
+    void procesarRetiradaValidaPublicaOperacionCompletada() {
+        CuentaOperacionEventProcessor processor = new CuentaOperacionEventProcessor(cuentaService, publisher);
+        OperacionSolicitadaEvent event = operacion("RETIRADA", 10L, null, "25.00");
+        CuentaResponseDTO cuenta = new CuentaResponseDTO(
+                10L,
+                "ES00000000000000000010",
+                1L,
+                new BigDecimal("75.00"),
+                LocalDateTime.now()
+        );
+
+        when(cuentaService.retirar(eq(10L), any(CuentaOperacionRequestDTO.class))).thenReturn(Mono.just(cuenta));
+        when(publisher.publicarCompletada(event)).thenReturn(Mono.empty());
+
+        StepVerifier.create(processor.procesar(MessageBuilder.withPayload(event).build()))
+                .verifyComplete();
+
+        verify(cuentaService).retirar(eq(10L), any(CuentaOperacionRequestDTO.class));
+        verify(publisher).publicarCompletada(event);
+        verify(publisher, never()).publicarFallida(eq(event), any(), any());
+    }
+
+    @Test
     void procesarRetiradaConSaldoInsuficientePublicaOperacionFallida() {
         CuentaOperacionEventProcessor processor = new CuentaOperacionEventProcessor(cuentaService, publisher);
         OperacionSolicitadaEvent event = operacion("RETIRADA", 10L, null, "999.00");
@@ -153,6 +176,52 @@ class CuentaOperacionEventProcessorTest {
         verify(cuentaService).transferir(any(TransferenciaInternaRequestDTO.class));
         verify(publisher).publicarFallida(eq(event), eq("CUENTA_NO_ENCONTRADA"), startsWith("No existe ninguna cuenta"));
         verify(publisher, never()).publicarCompletada(event);
+    }
+
+    @Test
+    void procesarPayloadInvalidoPublicaSolicitudInvalida() {
+        CuentaOperacionEventProcessor processor = new CuentaOperacionEventProcessor(cuentaService, publisher);
+        OperacionSolicitadaEvent event = operacion("DEPOSITO", null, null, "25.00");
+
+        when(publisher.publicarFallida(
+                eq(event),
+                eq("SOLICITUD_INVALIDA"),
+                startsWith("La cuenta destino es obligatoria")
+        )).thenReturn(Mono.empty());
+
+        StepVerifier.create(processor.procesar(MessageBuilder.withPayload(event).build()))
+                .verifyComplete();
+
+        verify(publisher).publicarFallida(
+                eq(event),
+                eq("SOLICITUD_INVALIDA"),
+                startsWith("La cuenta destino es obligatoria")
+        );
+        verify(publisher, never()).publicarCompletada(event);
+    }
+
+    @Test
+    void falloAlPublicarCompletadaNoPublicaFalloDeNegocio() {
+        CuentaOperacionEventProcessor processor = new CuentaOperacionEventProcessor(cuentaService, publisher);
+        OperacionSolicitadaEvent event = operacion("DEPOSITO", null, 10L, "25.00");
+        CuentaResponseDTO cuenta = new CuentaResponseDTO(
+                10L,
+                "ES00000000000000000010",
+                1L,
+                new BigDecimal("125.00"),
+                LocalDateTime.now()
+        );
+
+        when(cuentaService.depositar(eq(10L), any(CuentaOperacionRequestDTO.class))).thenReturn(Mono.just(cuenta));
+        when(publisher.publicarCompletada(event))
+                .thenReturn(Mono.error(new IllegalStateException("Kafka no disponible")));
+
+        StepVerifier.create(processor.procesar(MessageBuilder.withPayload(event).build()))
+                .expectErrorMessage("Kafka no disponible")
+                .verify();
+
+        verify(publisher).publicarCompletada(event);
+        verify(publisher, never()).publicarFallida(eq(event), any(), any());
     }
 
     private OperacionSolicitadaEvent operacion(

@@ -11,12 +11,12 @@ import org.springframework.context.annotation.Configuration;
 @Configuration
 @OpenAPIDefinition(
         info = @Info(
-                title = "NovaBank - Operaciones",
+                title = "NovaBank Operaciones API",
                 version = "4.0-SNAPSHOT",
-                description = "Operaciones financieras reactivas, idempotencia publica y transferencias en divisa."
+                description = "API HTTP para operaciones financieras, idempotencia publica, transferencias en divisa y estado asincrono."
         ),
         servers = {
-                @Server(url = "/", description = "API Gateway")
+                @Server(url = "/", description = "Servicio local o ruta publicada por Gateway")
         },
         security = {
                 @SecurityRequirement(name = "bearerAuth")

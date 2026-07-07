@@ -1,5 +1,6 @@
-package com.novabank.cuenta.event;
+package com.novabank.cuenta.adapter.out.kafka;
 
+import com.novabank.cuenta.application.port.out.AlertaSaldoBajoPublisherPort;
 import com.novabank.cuenta.dto.MovimientoEventDTO;
 import com.novabank.cuenta.tracing.CorrelationIdSupport;
 import com.novabank.events.alerta.AlertaSaldoBajoEvent;
@@ -22,7 +23,7 @@ import java.time.Instant;
 import java.util.UUID;
 
 @Component
-public class AlertaSaldoBajoEventPublisher {
+public class AlertaSaldoBajoEventPublisher implements AlertaSaldoBajoPublisherPort {
 
     public static final String ALERTA_SALDO_BAJO_BINDING = "alertaSaldoBajo-out-0";
     private static final String MONEDA_LOCAL = "EUR";
@@ -35,6 +36,7 @@ public class AlertaSaldoBajoEventPublisher {
         this.streamBridge = streamBridge;
     }
 
+    @Override
     public Mono<Void> publicar(MovimientoEventDTO movimiento, BigDecimal umbral) {
         return Mono.deferContextual(context -> publicar(movimiento, umbral, context));
     }

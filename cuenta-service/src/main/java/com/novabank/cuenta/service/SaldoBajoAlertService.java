@@ -1,7 +1,7 @@
 package com.novabank.cuenta.service;
 
 import com.novabank.cuenta.dto.MovimientoEventDTO;
-import com.novabank.cuenta.event.AlertaSaldoBajoEventPublisher;
+import com.novabank.cuenta.application.port.out.AlertaSaldoBajoPublisherPort;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -15,11 +15,11 @@ public class SaldoBajoAlertService {
 
     private static final Logger log = LoggerFactory.getLogger(SaldoBajoAlertService.class);
 
-    private final AlertaSaldoBajoEventPublisher publisher;
+    private final AlertaSaldoBajoPublisherPort publisher;
     private final BigDecimal umbral;
 
     public SaldoBajoAlertService(
-            AlertaSaldoBajoEventPublisher publisher,
+            AlertaSaldoBajoPublisherPort publisher,
             @Value("${novabank.alertas.saldo-bajo.umbral:100.00}") BigDecimal umbral
     ) {
         this.publisher = publisher;

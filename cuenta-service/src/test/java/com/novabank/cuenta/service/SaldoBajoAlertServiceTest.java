@@ -1,7 +1,7 @@
 package com.novabank.cuenta.service;
 
 import com.novabank.cuenta.dto.MovimientoEventDTO;
-import com.novabank.cuenta.event.AlertaSaldoBajoEventPublisher;
+import com.novabank.cuenta.application.port.out.AlertaSaldoBajoPublisherPort;
 import org.junit.jupiter.api.Test;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
@@ -16,7 +16,7 @@ import static org.mockito.Mockito.when;
 
 class SaldoBajoAlertServiceTest {
 
-    private final AlertaSaldoBajoEventPublisher publisher = mock(AlertaSaldoBajoEventPublisher.class);
+    private final AlertaSaldoBajoPublisherPort publisher = mock(AlertaSaldoBajoPublisherPort.class);
     private final SaldoBajoAlertService service = new SaldoBajoAlertService(publisher, new BigDecimal("100.00"));
 
     @Test

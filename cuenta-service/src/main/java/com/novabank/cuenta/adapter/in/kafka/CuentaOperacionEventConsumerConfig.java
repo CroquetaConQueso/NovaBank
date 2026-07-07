@@ -1,7 +1,9 @@
 package com.novabank.cuenta.adapter.in.kafka;
 
 import com.novabank.cuenta.application.port.in.ProcesarOperacionSolicitadaCommand;
+import com.novabank.cuenta.application.port.in.ProcesarOperacionSolicitadaResultado;
 import com.novabank.cuenta.application.port.in.ProcesarOperacionSolicitadaUseCase;
+import com.novabank.cuenta.application.port.out.OperacionResultadoPublisherPort;
 import com.novabank.events.operacion.OperacionSolicitadaEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -19,12 +21,19 @@ public class CuentaOperacionEventConsumerConfig {
 
     @Bean
     public Consumer<Flux<Message<OperacionSolicitadaEvent>>> procesarOperacion(
-            ProcesarOperacionSolicitadaUseCase useCase
+            ProcesarOperacionSolicitadaUseCase useCase,
+            OperacionResultadoPublisherPort operacionResultadoPublisherPort
     ) {
         return messages -> messages
                 .concatMap(message -> {
                     OperacionSolicitadaEvent event = message.getPayload();
-                    return useCase.procesar(toCommand(event))
+                    ProcesarOperacionSolicitadaCommand command = toCommand(event);
+                    return useCase.procesar(command)
+                            .flatMap(resultado -> publicarResultado(
+                                    operacionResultadoPublisherPort,
+                                    command,
+                                    resultado
+                            ))
                             .onErrorResume(error -> {
                                 log.error(
                                         "Error tecnico procesando resultado operationId={} tipoOperacion={} "
@@ -43,6 +52,37 @@ public class CuentaOperacionEventConsumerConfig {
                         },
                         error -> log.error("Error no recuperable en el consumidor de operaciones solicitadas", error)
                 );
+    }
+
+    private reactor.core.publisher.Mono<ProcesarOperacionSolicitadaResultado> publicarResultado(
+            OperacionResultadoPublisherPort operacionResultadoPublisherPort,
+            ProcesarOperacionSolicitadaCommand command,
+            ProcesarOperacionSolicitadaResultado resultado
+    ) {
+        if (resultado.estado() == ProcesarOperacionSolicitadaResultado.Estado.COMPLETADA) {
+            return operacionResultadoPublisherPort.publicarCompletada(command)
+                    .doOnSuccess(ignored -> log.info(
+                            "Operacion aplicada y resultado COMPLETADA publicado operationId={} tipoOperacion={} "
+                                    + "cuentaOrigenId={} cuentaDestinoId={}",
+                            command.operationId(),
+                            command.tipoOperacion(),
+                            command.cuentaOrigenId(),
+                            command.cuentaDestinoId()
+                    ))
+                    .thenReturn(resultado);
+        }
+
+        return operacionResultadoPublisherPort.publicarFallida(command, resultado.codigoError(), resultado.motivo())
+                .doOnSuccess(ignored -> log.info(
+                        "Operacion rechazada y resultado FALLIDA publicado operationId={} tipoOperacion={} "
+                                + "cuentaOrigenId={} cuentaDestinoId={} codigoError={}",
+                        command.operationId(),
+                        command.tipoOperacion(),
+                        command.cuentaOrigenId(),
+                        command.cuentaDestinoId(),
+                        resultado.codigoError()
+                ))
+                .thenReturn(resultado);
     }
 
     private ProcesarOperacionSolicitadaCommand toCommand(OperacionSolicitadaEvent event) {

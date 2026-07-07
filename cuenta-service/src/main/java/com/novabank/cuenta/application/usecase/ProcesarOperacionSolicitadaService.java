@@ -4,7 +4,6 @@ import com.novabank.cuenta.application.port.in.ProcesarOperacionSolicitadaComman
 import com.novabank.cuenta.application.port.in.ProcesarOperacionSolicitadaResultado;
 import com.novabank.cuenta.application.port.in.ProcesarOperacionSolicitadaUseCase;
 import com.novabank.cuenta.application.port.out.AplicarOperacionCuentaPort;
-import com.novabank.cuenta.application.port.out.OperacionResultadoPublisherPort;
 import com.novabank.cuenta.exception.InsufficientBalanceException;
 import com.novabank.cuenta.exception.ResourceNotFoundException;
 import com.novabank.cuenta.tracing.CorrelationIdSupport;
@@ -21,14 +20,9 @@ public class ProcesarOperacionSolicitadaService implements ProcesarOperacionSoli
     private static final Logger log = LoggerFactory.getLogger(ProcesarOperacionSolicitadaService.class);
 
     private final AplicarOperacionCuentaPort aplicarOperacionCuentaPort;
-    private final OperacionResultadoPublisherPort operacionResultadoPublisherPort;
 
-    public ProcesarOperacionSolicitadaService(
-            AplicarOperacionCuentaPort aplicarOperacionCuentaPort,
-            OperacionResultadoPublisherPort operacionResultadoPublisherPort
-    ) {
+    public ProcesarOperacionSolicitadaService(AplicarOperacionCuentaPort aplicarOperacionCuentaPort) {
         this.aplicarOperacionCuentaPort = aplicarOperacionCuentaPort;
-        this.operacionResultadoPublisherPort = operacionResultadoPublisherPort;
     }
 
     @Override
@@ -45,10 +39,14 @@ public class ProcesarOperacionSolicitadaService implements ProcesarOperacionSoli
 
         return aplicarOperacion(command)
                 .thenReturn(ProcesarOperacionSolicitadaResultado.completada(command))
-                .onErrorResume(error -> publicarFalloNegocio(command, error))
-                .flatMap(resultado -> resultado.estado() == ProcesarOperacionSolicitadaResultado.Estado.COMPLETADA
-                        ? publicarCompletada(command).thenReturn(resultado)
-                        : Mono.just(resultado))
+                .doOnSuccess(resultado -> log.info(
+                        "Operacion aplicada operationId={} tipoOperacion={} cuentaOrigenId={} cuentaDestinoId={}",
+                        command.operationId(),
+                        command.tipoOperacion(),
+                        command.cuentaOrigenId(),
+                        command.cuentaDestinoId()
+                ))
+                .onErrorResume(error -> resolverFalloNegocio(command, error))
                 .contextWrite(context -> {
                     if (command.operationId() != null) {
                         context = context.put(
@@ -84,29 +82,7 @@ public class ProcesarOperacionSolicitadaService implements ProcesarOperacionSoli
         });
     }
 
-    private Mono<Void> publicarCompletada(ProcesarOperacionSolicitadaCommand command) {
-        return Mono.defer(() -> operacionResultadoPublisherPort.publicarCompletada(command))
-                .doOnSuccess(ignored -> log.info(
-                        "Operacion aplicada y resultado COMPLETADA publicado operationId={} tipoOperacion={} "
-                                + "cuentaOrigenId={} cuentaDestinoId={}",
-                        command.operationId(),
-                        command.tipoOperacion(),
-                        command.cuentaOrigenId(),
-                        command.cuentaDestinoId()
-                ))
-                .doOnError(error -> log.error(
-                        "Operacion aplicada pero no se pudo publicar COMPLETADA operationId={} tipoOperacion={} "
-                                + "cuentaOrigenId={} cuentaDestinoId={} motivo={}",
-                        command.operationId(),
-                        command.tipoOperacion(),
-                        command.cuentaOrigenId(),
-                        command.cuentaDestinoId(),
-                        motivo(error),
-                        error
-                ));
-    }
-
-    private Mono<ProcesarOperacionSolicitadaResultado> publicarFalloNegocio(
+    private Mono<ProcesarOperacionSolicitadaResultado> resolverFalloNegocio(
             ProcesarOperacionSolicitadaCommand command,
             Throwable error
     ) {
@@ -124,8 +100,7 @@ public class ProcesarOperacionSolicitadaService implements ProcesarOperacionSoli
                 motivo
         );
 
-        return operacionResultadoPublisherPort.publicarFallida(command, codigoError, motivo)
-                .thenReturn(ProcesarOperacionSolicitadaResultado.fallida(command, codigoError, motivo));
+        return Mono.just(ProcesarOperacionSolicitadaResultado.fallida(command, codigoError, motivo));
     }
 
     private String motivo(Throwable error) {

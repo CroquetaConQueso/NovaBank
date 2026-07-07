@@ -1,5 +1,6 @@
 package com.novabank.cuenta.event;
 
+import com.novabank.cuenta.adapter.out.kafka.OperacionResultadoEventPublisher;
 import com.novabank.events.operacion.OperacionCompletadaEvent;
 import com.novabank.events.operacion.OperacionFallidaEvent;
 import com.novabank.events.operacion.OperacionSolicitadaEvent;

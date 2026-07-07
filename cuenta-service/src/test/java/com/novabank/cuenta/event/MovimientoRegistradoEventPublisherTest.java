@@ -1,5 +1,6 @@
 package com.novabank.cuenta.event;
 
+import com.novabank.cuenta.adapter.out.kafka.MovimientoRegistradoEventPublisher;
 import com.novabank.cuenta.dto.MovimientoEventDTO;
 import com.novabank.cuenta.tracing.CorrelationIdSupport;
 import com.novabank.events.movimiento.MovimientoRegistradoEvent;

@@ -4,7 +4,7 @@ import com.novabank.cuenta.dto.AplicarMovimientoRequestDTO;
 import com.novabank.cuenta.dto.AplicarMovimientoResponseDTO;
 import com.novabank.cuenta.dto.CuentaResponseDTO;
 import com.novabank.cuenta.dto.MovimientoEventDTO;
-import com.novabank.cuenta.event.MovimientoRegistradoEventPublisher;
+import com.novabank.cuenta.application.port.out.MovimientoRegistradoPublisherPort;
 import com.novabank.cuenta.exception.IdempotencyConflictException;
 import com.novabank.cuenta.exception.InsufficientBalanceException;
 import com.novabank.cuenta.exception.ResourceNotFoundException;
@@ -37,20 +37,20 @@ public class CuentaMovimientoAtomicoService {
     private final CuentaRepository cuentaRepository;
     private final OperacionIdempotenteRepository operacionIdempotenteRepository;
     private final CuentaMapper cuentaMapper;
-    private final MovimientoRegistradoEventPublisher movimientoRegistradoEventPublisher;
+    private final MovimientoRegistradoPublisherPort movimientoRegistradoPublisherPort;
     private final SaldoBajoAlertService saldoBajoAlertService;
 
     public CuentaMovimientoAtomicoService(
             CuentaRepository cuentaRepository,
             OperacionIdempotenteRepository operacionIdempotenteRepository,
             CuentaMapper cuentaMapper,
-            MovimientoRegistradoEventPublisher movimientoRegistradoEventPublisher,
+            MovimientoRegistradoPublisherPort movimientoRegistradoPublisherPort,
             SaldoBajoAlertService saldoBajoAlertService
     ) {
         this.cuentaRepository = cuentaRepository;
         this.operacionIdempotenteRepository = operacionIdempotenteRepository;
         this.cuentaMapper = cuentaMapper;
-        this.movimientoRegistradoEventPublisher = movimientoRegistradoEventPublisher;
+        this.movimientoRegistradoPublisherPort = movimientoRegistradoPublisherPort;
         this.saldoBajoAlertService = saldoBajoAlertService;
     }
 
@@ -223,7 +223,7 @@ public class CuentaMovimientoAtomicoService {
     }
 
     private Mono<Void> publicarMovimientoRegistrado(MovimientoEventDTO evento) {
-        return movimientoRegistradoEventPublisher.publicar(evento)
+        return movimientoRegistradoPublisherPort.publicar(evento)
                 .onErrorResume(error -> {
                     log.error(
                             "No se pudo publicar MovimientoRegistradoEvent atomico cuentaId={} operationId={}",

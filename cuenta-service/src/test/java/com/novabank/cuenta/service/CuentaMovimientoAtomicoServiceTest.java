@@ -1,7 +1,7 @@
 package com.novabank.cuenta.service;
 
 import com.novabank.cuenta.dto.AplicarMovimientoRequestDTO;
-import com.novabank.cuenta.event.MovimientoRegistradoEventPublisher;
+import com.novabank.cuenta.application.port.out.MovimientoRegistradoPublisherPort;
 import com.novabank.cuenta.exception.IdempotencyConflictException;
 import com.novabank.cuenta.exception.InsufficientBalanceException;
 import com.novabank.cuenta.exception.ResourceNotFoundException;
@@ -44,7 +44,7 @@ class CuentaMovimientoAtomicoServiceTest extends PostgresTestContainerSupport {
     private OperacionIdempotenteRepository operacionIdempotenteRepository;
 
     @MockBean
-    private MovimientoRegistradoEventPublisher movimientoRegistradoEventPublisher;
+    private MovimientoRegistradoPublisherPort movimientoRegistradoEventPublisher;
 
     @MockBean
     private SaldoBajoAlertService saldoBajoAlertService;

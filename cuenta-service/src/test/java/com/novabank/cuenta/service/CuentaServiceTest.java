@@ -5,7 +5,7 @@ import com.novabank.cuenta.dto.ClienteResponseDTO;
 import com.novabank.cuenta.dto.CuentaCreateRequestDTO;
 import com.novabank.cuenta.dto.CuentaOperacionRequestDTO;
 import com.novabank.cuenta.dto.TransferenciaInternaRequestDTO;
-import com.novabank.cuenta.event.MovimientoRegistradoEventPublisher;
+import com.novabank.cuenta.application.port.out.MovimientoRegistradoPublisherPort;
 import com.novabank.cuenta.exception.InsufficientBalanceException;
 import com.novabank.cuenta.exception.RemoteServiceException;
 import com.novabank.cuenta.exception.ResourceNotFoundException;
@@ -52,7 +52,7 @@ class CuentaServiceTest {
     private CuentaMapper cuentaMapper;
 
     @Mock
-    private MovimientoRegistradoEventPublisher movimientoRegistradoEventPublisher;
+    private MovimientoRegistradoPublisherPort movimientoRegistradoEventPublisher;
 
     @Mock
     private SaldoBajoAlertService saldoBajoAlertService;

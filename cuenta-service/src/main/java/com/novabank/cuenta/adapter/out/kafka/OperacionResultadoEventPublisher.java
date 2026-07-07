@@ -1,5 +1,7 @@
-package com.novabank.cuenta.event;
+package com.novabank.cuenta.adapter.out.kafka;
 
+import com.novabank.cuenta.application.port.in.ProcesarOperacionSolicitadaCommand;
+import com.novabank.cuenta.application.port.out.OperacionResultadoPublisherPort;
 import com.novabank.events.core.NovaBankTopics;
 import com.novabank.events.operacion.OperacionCompletadaEvent;
 import com.novabank.events.operacion.OperacionFallidaEvent;
@@ -18,7 +20,7 @@ import java.time.Instant;
 import java.util.UUID;
 
 @Component
-public class OperacionResultadoEventPublisher {
+public class OperacionResultadoEventPublisher implements OperacionResultadoPublisherPort {
 
     public static final String OPERACION_COMPLETADA_BINDING = "operacionCompletada-out-0";
     public static final String OPERACION_FALLIDA_BINDING = "operacionFallida-out-0";
@@ -31,7 +33,8 @@ public class OperacionResultadoEventPublisher {
         this.streamBridge = streamBridge;
     }
 
-    public Mono<Void> publicarCompletada(OperacionSolicitadaEvent solicitud) {
+    @Override
+    public Mono<Void> publicarCompletada(ProcesarOperacionSolicitadaCommand solicitud) {
         OperacionCompletadaEvent event = new OperacionCompletadaEvent(
                 UUID.randomUUID(),
                 solicitud.correlationId(),
@@ -52,7 +55,12 @@ public class OperacionResultadoEventPublisher {
                 ));
     }
 
-    public Mono<Void> publicarFallida(OperacionSolicitadaEvent solicitud, String codigoError, String motivo) {
+    public Mono<Void> publicarCompletada(OperacionSolicitadaEvent solicitud) {
+        return publicarCompletada(toCommand(solicitud));
+    }
+
+    @Override
+    public Mono<Void> publicarFallida(ProcesarOperacionSolicitadaCommand solicitud, String codigoError, String motivo) {
         OperacionFallidaEvent event = new OperacionFallidaEvent(
                 UUID.randomUUID(),
                 solicitud.correlationId(),
@@ -73,6 +81,10 @@ public class OperacionResultadoEventPublisher {
                 ));
     }
 
+    public Mono<Void> publicarFallida(OperacionSolicitadaEvent solicitud, String codigoError, String motivo) {
+        return publicarFallida(toCommand(solicitud), codigoError, motivo);
+    }
+
     private Mono<Void> enviar(String bindingName, Object event) {
         return Mono.fromCallable(() -> streamBridge.send(bindingName, message(event)))
                 .flatMap(enviado -> enviado
@@ -84,5 +96,19 @@ public class OperacionResultadoEventPublisher {
         return MessageBuilder.withPayload(event)
                 .setHeader(MessageHeaders.CONTENT_TYPE, MimeTypeUtils.APPLICATION_JSON_VALUE)
                 .build();
+    }
+
+    private ProcesarOperacionSolicitadaCommand toCommand(OperacionSolicitadaEvent event) {
+        return new ProcesarOperacionSolicitadaCommand(
+                event.eventId(),
+                event.correlationId(),
+                event.occurredAt(),
+                event.operationId(),
+                event.tipoOperacion(),
+                event.cuentaOrigenId(),
+                event.cuentaDestinoId(),
+                event.importe(),
+                event.moneda()
+        );
     }
 }

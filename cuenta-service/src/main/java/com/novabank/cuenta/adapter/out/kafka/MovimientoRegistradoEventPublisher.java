@@ -1,5 +1,6 @@
-package com.novabank.cuenta.event;
+package com.novabank.cuenta.adapter.out.kafka;
 
+import com.novabank.cuenta.application.port.out.MovimientoRegistradoPublisherPort;
 import com.novabank.cuenta.dto.MovimientoEventDTO;
 import com.novabank.cuenta.tracing.CorrelationIdSupport;
 import com.novabank.events.core.NovaBankTopics;
@@ -21,7 +22,7 @@ import java.time.Instant;
 import java.util.UUID;
 
 @Component
-public class MovimientoRegistradoEventPublisher {
+public class MovimientoRegistradoEventPublisher implements MovimientoRegistradoPublisherPort {
 
     public static final String MOVIMIENTO_REGISTRADO_BINDING = "movimientoRegistrado-out-0";
     private static final String MONEDA_LOCAL = "EUR";
@@ -34,6 +35,7 @@ public class MovimientoRegistradoEventPublisher {
         this.streamBridge = streamBridge;
     }
 
+    @Override
     public Mono<Void> publicar(MovimientoEventDTO movimiento) {
         return Mono.deferContextual(context -> publicar(movimiento, context));
     }

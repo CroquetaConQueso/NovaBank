@@ -1,5 +1,16 @@
-package com.novabank.operacion.controller;
+package com.novabank.operacion.adapter.in.web;
 
+import com.novabank.operacion.application.port.in.ConsultarEstadoOperacionQuery;
+import com.novabank.operacion.application.port.in.ConsultarEstadoOperacionUseCase;
+import com.novabank.operacion.application.port.in.EstadoOperacionAsincronaResult;
+import com.novabank.operacion.application.port.in.OperacionAceptadaResult;
+import com.novabank.operacion.application.port.in.SolicitarDepositoCommand;
+import com.novabank.operacion.application.port.in.SolicitarDepositoUseCase;
+import com.novabank.operacion.application.port.in.SolicitarRetiradaCommand;
+import com.novabank.operacion.application.port.in.SolicitarRetiradaUseCase;
+import com.novabank.operacion.application.port.in.SolicitarTransferenciaCommand;
+import com.novabank.operacion.application.port.in.SolicitarTransferenciaUseCase;
+import com.novabank.operacion.application.port.in.TransferenciaAceptadaResult;
 import com.novabank.operacion.dto.MovimientoResponseDTO;
 import com.novabank.operacion.dto.OperacionAceptadaResponseDTO;
 import com.novabank.operacion.dto.OperacionEstadoResponseDTO;
@@ -9,6 +20,7 @@ import com.novabank.operacion.dto.TransferenciaAceptadaResponseDTO;
 import com.novabank.operacion.dto.TransferenciaDivisaRequestDTO;
 import com.novabank.operacion.dto.TransferenciaRequestDTO;
 import com.novabank.operacion.service.OperacionService;
+import com.novabank.operacion.tracing.CorrelationIdSupport;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -18,12 +30,12 @@ import jakarta.validation.Valid;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RestController;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -36,9 +48,23 @@ import java.util.UUID;
 @Tag(name = "Operaciones", description = "Operaciones financieras y consulta de movimientos")
 public class OperacionController {
 
+    private final SolicitarDepositoUseCase solicitarDepositoUseCase;
+    private final SolicitarRetiradaUseCase solicitarRetiradaUseCase;
+    private final SolicitarTransferenciaUseCase solicitarTransferenciaUseCase;
+    private final ConsultarEstadoOperacionUseCase consultarEstadoOperacionUseCase;
     private final OperacionService operacionService;
 
-    public OperacionController(OperacionService operacionService) {
+    public OperacionController(
+            SolicitarDepositoUseCase solicitarDepositoUseCase,
+            SolicitarRetiradaUseCase solicitarRetiradaUseCase,
+            SolicitarTransferenciaUseCase solicitarTransferenciaUseCase,
+            ConsultarEstadoOperacionUseCase consultarEstadoOperacionUseCase,
+            OperacionService operacionService
+    ) {
+        this.solicitarDepositoUseCase = solicitarDepositoUseCase;
+        this.solicitarRetiradaUseCase = solicitarRetiradaUseCase;
+        this.solicitarTransferenciaUseCase = solicitarTransferenciaUseCase;
+        this.consultarEstadoOperacionUseCase = consultarEstadoOperacionUseCase;
         this.operacionService = operacionService;
     }
 
@@ -58,7 +84,13 @@ public class OperacionController {
             @Parameter(description = "Clave opcional para idempotencia publica de la operacion")
             @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey
     ) {
-        return operacionService.solicitarDeposito(request, idempotencyKey)
+        return Mono.deferContextual(context -> solicitarDepositoUseCase.solicitarDeposito(new SolicitarDepositoCommand(
+                        request.cuentaId(),
+                        request.cantidad(),
+                        idempotencyKey,
+                        resolveCorrelationId(CorrelationIdSupport.fromContext(context))
+                )))
+                .map(this::toOperacionAceptadaResponse)
                 .map(response -> ResponseEntity.accepted().body(response));
     }
 
@@ -78,7 +110,13 @@ public class OperacionController {
             @Parameter(description = "Clave opcional para idempotencia publica de la operacion")
             @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey
     ) {
-        return operacionService.solicitarRetirada(request, idempotencyKey)
+        return Mono.deferContextual(context -> solicitarRetiradaUseCase.solicitarRetirada(new SolicitarRetiradaCommand(
+                        request.cuentaId(),
+                        request.cantidad(),
+                        idempotencyKey,
+                        resolveCorrelationId(CorrelationIdSupport.fromContext(context))
+                )))
+                .map(this::toOperacionAceptadaResponse)
                 .map(response -> ResponseEntity.accepted().body(response));
     }
 
@@ -98,7 +136,16 @@ public class OperacionController {
             @Parameter(description = "Clave opcional para idempotencia publica de la transferencia")
             @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey
     ) {
-        return operacionService.transferir(request, idempotencyKey)
+        return Mono.deferContextual(context -> solicitarTransferenciaUseCase.solicitarTransferencia(
+                        new SolicitarTransferenciaCommand(
+                                request.cuentaOrigenId(),
+                                request.cuentaDestinoId(),
+                                request.cantidad(),
+                                idempotencyKey,
+                                resolveCorrelationId(CorrelationIdSupport.fromContext(context))
+                        )
+                ))
+                .map(this::toTransferenciaAceptadaResponse)
                 .map(response -> ResponseEntity.accepted().body(response));
     }
 
@@ -153,6 +200,60 @@ public class OperacionController {
             @ApiResponse(responseCode = "404", description = "Operacion asincrona no encontrada")
     })
     public Mono<OperacionEstadoResponseDTO> consultarSaga(@PathVariable UUID operationId) {
-        return operacionService.consultarOperacionAsincrona(operationId);
+        return consultarEstadoOperacionUseCase.consultar(new ConsultarEstadoOperacionQuery(operationId))
+                .map(this::toOperacionEstadoResponse);
+    }
+
+    private OperacionAceptadaResponseDTO toOperacionAceptadaResponse(OperacionAceptadaResult result) {
+        return new OperacionAceptadaResponseDTO(
+                result.operationId(),
+                result.estado(),
+                result.mensaje(),
+                result.tipoOperacion(),
+                result.cuentaId(),
+                result.importe()
+        );
+    }
+
+    private TransferenciaAceptadaResponseDTO toTransferenciaAceptadaResponse(TransferenciaAceptadaResult result) {
+        return new TransferenciaAceptadaResponseDTO(
+                result.operationId(),
+                result.estado(),
+                result.mensaje(),
+                result.tipoOperacion(),
+                result.cuentaOrigenId(),
+                result.cuentaDestinoId(),
+                result.importe(),
+                result.moneda()
+        );
+    }
+
+    private OperacionEstadoResponseDTO toOperacionEstadoResponse(EstadoOperacionAsincronaResult result) {
+        return new OperacionEstadoResponseDTO(
+                result.operationId(),
+                result.correlationId(),
+                result.tipoOperacion(),
+                result.estado(),
+                result.cuentaId(),
+                result.cuentaOrigenId(),
+                result.cuentaDestinoId(),
+                result.importe(),
+                result.moneda(),
+                result.motivoFallo(),
+                result.creadaEn(),
+                result.actualizadaEn()
+        );
+    }
+
+    private UUID resolveCorrelationId(String correlationId) {
+        if (correlationId == null || correlationId.isBlank()) {
+            return UUID.randomUUID();
+        }
+
+        try {
+            return UUID.fromString(correlationId);
+        } catch (IllegalArgumentException ignored) {
+            return UUID.randomUUID();
+        }
     }
 }

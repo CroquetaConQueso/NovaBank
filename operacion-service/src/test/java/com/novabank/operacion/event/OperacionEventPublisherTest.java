@@ -1,6 +1,7 @@
 package com.novabank.operacion.event;
 
 import com.novabank.events.operacion.OperacionSolicitadaEvent;
+import com.novabank.operacion.adapter.out.kafka.OperacionEventPublisher;
 import com.novabank.operacion.exception.EventoNoPublicadoException;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;

@@ -1,5 +1,13 @@
 package com.novabank.operacion.controller;
 
+import com.novabank.operacion.adapter.in.web.OperacionController;
+import com.novabank.operacion.application.port.in.ConsultarEstadoOperacionUseCase;
+import com.novabank.operacion.application.port.in.EstadoOperacionAsincronaResult;
+import com.novabank.operacion.application.port.in.OperacionAceptadaResult;
+import com.novabank.operacion.application.port.in.SolicitarDepositoUseCase;
+import com.novabank.operacion.application.port.in.SolicitarRetiradaUseCase;
+import com.novabank.operacion.application.port.in.SolicitarTransferenciaUseCase;
+import com.novabank.operacion.application.port.in.TransferenciaAceptadaResult;
 import com.novabank.operacion.dto.MovimientoResponseDTO;
 import com.novabank.operacion.dto.OperacionAceptadaResponseDTO;
 import com.novabank.operacion.dto.OperacionEstadoResponseDTO;
@@ -47,10 +55,22 @@ class OperacionControllerTest {
     @MockBean
     private OperacionService operacionService;
 
+    @MockBean
+    private SolicitarDepositoUseCase solicitarDepositoUseCase;
+
+    @MockBean
+    private SolicitarRetiradaUseCase solicitarRetiradaUseCase;
+
+    @MockBean
+    private SolicitarTransferenciaUseCase solicitarTransferenciaUseCase;
+
+    @MockBean
+    private ConsultarEstadoOperacionUseCase consultarEstadoOperacionUseCase;
+
     @Test
     void depositoDevuelveOperacionAceptada() {
-        when(operacionService.solicitarDeposito(any(OperacionRequestDTO.class), nullable(String.class)))
-                .thenReturn(Mono.just(aceptada("DEPOSITO", 10L)));
+        when(solicitarDepositoUseCase.solicitarDeposito(any()))
+                .thenReturn(Mono.just(aceptadaResult("DEPOSITO", 10L)));
 
         webTestClient.post()
                 .uri("/api/operaciones/deposito")
@@ -67,8 +87,8 @@ class OperacionControllerTest {
 
     @Test
     void retiroSinCabecerasEspecialesDevuelveOperacionAceptada() {
-        when(operacionService.solicitarRetirada(any(OperacionRequestDTO.class), nullable(String.class)))
-                .thenReturn(Mono.just(aceptada("RETIRADA", 10L)));
+        when(solicitarRetiradaUseCase.solicitarRetirada(any()))
+                .thenReturn(Mono.just(aceptadaResult("RETIRADA", 10L)));
 
         webTestClient.post()
                 .uri("/api/operaciones/retiro")
@@ -83,8 +103,8 @@ class OperacionControllerTest {
 
     @Test
     void transferenciaUsaRutaEsperada() {
-        when(operacionService.transferir(any(TransferenciaRequestDTO.class), nullable(String.class)))
-                .thenReturn(Mono.just(transferenciaAceptada()));
+        when(solicitarTransferenciaUseCase.solicitarTransferencia(any()))
+                .thenReturn(Mono.just(transferenciaAceptadaResult()));
 
         webTestClient.post()
                 .uri("/api/operaciones/transferencia")
@@ -159,8 +179,8 @@ class OperacionControllerTest {
     @Test
     void consultarSagaDevuelveEstadoPersistido() {
         UUID operationId = UUID.fromString("33333333-3333-3333-3333-333333333333");
-        when(operacionService.consultarOperacionAsincrona(operationId))
-                .thenReturn(Mono.just(estado(operationId, "COMPLETADA")));
+        when(consultarEstadoOperacionUseCase.consultar(any()))
+                .thenReturn(Mono.just(estadoResult(operationId, "COMPLETADA")));
 
         webTestClient.get()
                 .uri("/api/operaciones/sagas/{operationId}", operationId)
@@ -175,7 +195,7 @@ class OperacionControllerTest {
     @Test
     void consultarSagaInexistenteDevuelve404() {
         UUID operationId = UUID.fromString("99999999-9999-9999-9999-999999999999");
-        when(operacionService.consultarOperacionAsincrona(operationId))
+        when(consultarEstadoOperacionUseCase.consultar(any()))
                 .thenReturn(Mono.error(new OperacionAsincronaNotFoundException("No existe operacion asincrona")));
 
         webTestClient.get()
@@ -189,8 +209,8 @@ class OperacionControllerTest {
     @Test
     void consultarSagaTransferenciaDevuelveEstadoPersistido() {
         UUID operationId = UUID.fromString("44444444-4444-4444-4444-444444444444");
-        when(operacionService.consultarOperacionAsincrona(operationId))
-                .thenReturn(Mono.just(estadoTransferencia(operationId, "FALLIDA")));
+        when(consultarEstadoOperacionUseCase.consultar(any()))
+                .thenReturn(Mono.just(estadoTransferenciaResult(operationId, "FALLIDA")));
 
         webTestClient.get()
                 .uri("/api/operaciones/sagas/{operationId}", operationId)
@@ -207,7 +227,7 @@ class OperacionControllerTest {
 
     @Test
     void depositoConPublicacionFallidaDevuelve503Controlado() {
-        when(operacionService.solicitarDeposito(any(OperacionRequestDTO.class), nullable(String.class)))
+        when(solicitarDepositoUseCase.solicitarDeposito(any()))
                 .thenReturn(Mono.error(new EventoNoPublicadoException("No se pudo publicar OperacionSolicitadaEvent")));
 
         webTestClient.post()
@@ -354,8 +374,8 @@ class OperacionControllerTest {
 
     @Test
     void depositoAsincronoNoValidaCuentaEnOperacionService() {
-        when(operacionService.solicitarDeposito(any(OperacionRequestDTO.class), nullable(String.class)))
-                .thenReturn(Mono.just(aceptada("DEPOSITO", 99L)));
+        when(solicitarDepositoUseCase.solicitarDeposito(any()))
+                .thenReturn(Mono.just(aceptadaResult("DEPOSITO", 99L)));
 
         webTestClient.post()
                 .uri("/api/operaciones/deposito")
@@ -370,8 +390,8 @@ class OperacionControllerTest {
 
     @Test
     void retiroAsincronoDevuelveAceptadoSinValidarSaldoEnOperacionService() {
-        when(operacionService.solicitarRetirada(any(OperacionRequestDTO.class), nullable(String.class)))
-                .thenReturn(Mono.just(aceptada("RETIRADA", 10L)));
+        when(solicitarRetiradaUseCase.solicitarRetirada(any()))
+                .thenReturn(Mono.just(aceptadaResult("RETIRADA", 10L)));
 
         webTestClient.post()
                 .uri("/api/operaciones/retiro")
@@ -386,8 +406,8 @@ class OperacionControllerTest {
 
     @Test
     void depositoAceptaIdempotencyKey() {
-        when(operacionService.solicitarDeposito(any(OperacionRequestDTO.class), nullable(String.class)))
-                .thenReturn(Mono.just(aceptada("DEPOSITO", 10L)));
+        when(solicitarDepositoUseCase.solicitarDeposito(any()))
+                .thenReturn(Mono.just(aceptadaResult("DEPOSITO", 10L)));
 
         webTestClient.post()
                 .uri("/api/operaciones/deposito")
@@ -403,7 +423,7 @@ class OperacionControllerTest {
 
     @Test
     void conflictoDeIdempotenciaDevuelve409() {
-        when(operacionService.transferir(any(TransferenciaRequestDTO.class), nullable(String.class)))
+        when(solicitarTransferenciaUseCase.solicitarTransferencia(any()))
                 .thenReturn(Mono.error(new PublicIdempotencyConflictException(
                         "La clave de idempotencia ya existe con una peticion diferente"
                 )));
@@ -438,8 +458,32 @@ class OperacionControllerTest {
         );
     }
 
+    private OperacionAceptadaResult aceptadaResult(String tipoOperacion, Long cuentaId) {
+        return new OperacionAceptadaResult(
+                UUID.fromString("33333333-3333-3333-3333-333333333333"),
+                "SOLICITADA",
+                tipoOperacion + " solicitada para procesamiento asincrono",
+                tipoOperacion,
+                cuentaId,
+                new BigDecimal("50.00")
+        );
+    }
+
     private TransferenciaAceptadaResponseDTO transferenciaAceptada() {
         return new TransferenciaAceptadaResponseDTO(
+                UUID.fromString("33333333-3333-3333-3333-333333333333"),
+                "SOLICITADA",
+                "TRANSFERENCIA solicitada para procesamiento asincrono",
+                "TRANSFERENCIA",
+                10L,
+                11L,
+                new BigDecimal("50.00"),
+                "EUR"
+        );
+    }
+
+    private TransferenciaAceptadaResult transferenciaAceptadaResult() {
+        return new TransferenciaAceptadaResult(
                 UUID.fromString("33333333-3333-3333-3333-333333333333"),
                 "SOLICITADA",
                 "TRANSFERENCIA solicitada para procesamiento asincrono",
@@ -469,9 +513,45 @@ class OperacionControllerTest {
         );
     }
 
+    private EstadoOperacionAsincronaResult estadoResult(UUID operationId, String estado) {
+        LocalDateTime ahora = LocalDateTime.now();
+        return new EstadoOperacionAsincronaResult(
+                operationId,
+                UUID.fromString("22222222-2222-2222-2222-222222222222"),
+                "DEPOSITO",
+                estado,
+                10L,
+                null,
+                10L,
+                new BigDecimal("50.00"),
+                "EUR",
+                null,
+                ahora,
+                ahora
+        );
+    }
+
     private OperacionEstadoResponseDTO estadoTransferencia(UUID operationId, String estado) {
         LocalDateTime ahora = LocalDateTime.now();
         return new OperacionEstadoResponseDTO(
+                operationId,
+                UUID.fromString("22222222-2222-2222-2222-222222222222"),
+                "TRANSFERENCIA",
+                estado,
+                10L,
+                10L,
+                11L,
+                new BigDecimal("50.00"),
+                "EUR",
+                "Saldo insuficiente",
+                ahora,
+                ahora
+        );
+    }
+
+    private EstadoOperacionAsincronaResult estadoTransferenciaResult(UUID operationId, String estado) {
+        LocalDateTime ahora = LocalDateTime.now();
+        return new EstadoOperacionAsincronaResult(
                 operationId,
                 UUID.fromString("22222222-2222-2222-2222-222222222222"),
                 "TRANSFERENCIA",

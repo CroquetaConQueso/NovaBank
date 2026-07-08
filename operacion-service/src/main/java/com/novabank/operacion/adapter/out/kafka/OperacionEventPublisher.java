@@ -1,7 +1,9 @@
-package com.novabank.operacion.event;
+package com.novabank.operacion.adapter.out.kafka;
 
 import com.novabank.events.core.NovaBankTopics;
 import com.novabank.events.operacion.OperacionSolicitadaEvent;
+import com.novabank.operacion.application.port.out.OperacionSolicitadaPublisherPort;
+import com.novabank.operacion.domain.model.OperacionSolicitada;
 import com.novabank.operacion.exception.EventoNoPublicadoException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -17,7 +19,7 @@ import reactor.core.publisher.Mono;
 import java.nio.charset.StandardCharsets;
 
 @Component
-public class OperacionEventPublisher {
+public class OperacionEventPublisher implements OperacionSolicitadaPublisherPort {
 
     public static final String OPERACION_SOLICITADA_BINDING = "operacionSolicitada-out-0";
 
@@ -29,7 +31,11 @@ public class OperacionEventPublisher {
         this.streamBridge = streamBridge;
     }
 
-    public Mono<Void> publicarOperacionSolicitada(OperacionSolicitadaEvent event, Long kafkaKey) {
+    @Override
+    public Mono<Void> publicar(OperacionSolicitada operacion) {
+        OperacionSolicitadaEvent event = toEvent(operacion);
+        Long kafkaKey = operacion.kafkaKey();
+
         return Mono.fromCallable(() -> streamBridge.send(
                         OPERACION_SOLICITADA_BINDING,
                         message(event, kafkaKey)
@@ -51,6 +57,36 @@ public class OperacionEventPublisher {
                         event.tipoOperacion(),
                         error
                 ));
+    }
+
+    public Mono<Void> publicarOperacionSolicitada(OperacionSolicitadaEvent event, Long kafkaKey) {
+        return publicar(new OperacionSolicitada(
+                event.eventId(),
+                event.correlationId(),
+                event.occurredAt(),
+                event.operationId(),
+                event.tipoOperacion(),
+                event.cuentaOrigenId(),
+                event.cuentaDestinoId(),
+                event.cuentaDestinoId() == null ? event.cuentaOrigenId() : event.cuentaDestinoId(),
+                event.importe(),
+                event.moneda(),
+                kafkaKey
+        ));
+    }
+
+    private OperacionSolicitadaEvent toEvent(OperacionSolicitada operacion) {
+        return new OperacionSolicitadaEvent(
+                operacion.eventId(),
+                operacion.correlationId(),
+                operacion.occurredAt(),
+                operacion.operationId(),
+                operacion.tipoOperacion(),
+                operacion.cuentaOrigenId(),
+                operacion.cuentaDestinoId(),
+                operacion.importe(),
+                operacion.moneda()
+        );
     }
 
     private Message<OperacionSolicitadaEvent> message(OperacionSolicitadaEvent event, Long kafkaKey) {

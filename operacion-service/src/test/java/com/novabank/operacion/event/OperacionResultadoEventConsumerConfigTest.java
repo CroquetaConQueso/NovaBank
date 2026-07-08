@@ -2,8 +2,12 @@ package com.novabank.operacion.event;
 
 import com.novabank.events.operacion.OperacionCompletadaEvent;
 import com.novabank.events.operacion.OperacionFallidaEvent;
-import com.novabank.operacion.service.OperacionAsincronaEstadoService;
+import com.novabank.operacion.adapter.in.kafka.OperacionResultadoEventConsumerConfig;
+import com.novabank.operacion.application.port.in.ActualizarEstadoOperacionResultadoUseCase;
+import com.novabank.operacion.application.port.in.ActualizarOperacionResultadoCommand;
+import com.novabank.operacion.application.port.in.ActualizarOperacionResultadoResult;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.messaging.support.MessageBuilder;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -13,6 +17,7 @@ import java.time.Instant;
 import java.util.UUID;
 import java.util.function.Consumer;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.timeout;
@@ -21,42 +26,65 @@ import static org.mockito.Mockito.when;
 
 class OperacionResultadoEventConsumerConfigTest {
 
-    private final OperacionAsincronaEstadoService estadoService = mock(OperacionAsincronaEstadoService.class);
+    private final ActualizarEstadoOperacionResultadoUseCase useCase =
+            mock(ActualizarEstadoOperacionResultadoUseCase.class);
     private final OperacionResultadoEventConsumerConfig config = new OperacionResultadoEventConsumerConfig();
 
     @Test
-    void consumirOperacionCompletadaActualizaEstado() {
-        when(estadoService.marcarCompletada(any(OperacionCompletadaEvent.class))).thenReturn(Mono.empty());
+    void consumirOperacionCompletadaConvierteEventoAComando() {
+        when(useCase.actualizar(any())).thenReturn(Mono.just(new ActualizarOperacionResultadoResult(
+                UUID.fromString("33333333-3333-3333-3333-333333333333"),
+                "COMPLETADA",
+                true
+        )));
         Consumer<Flux<org.springframework.messaging.Message<OperacionCompletadaEvent>>> consumer =
-                config.consumirOperacionCompletada(estadoService);
+                config.consumirOperacionCompletada(useCase);
 
-        OperacionCompletadaEvent event = completada();
-        consumer.accept(Flux.just(MessageBuilder.withPayload(event).build()));
+        consumer.accept(Flux.just(MessageBuilder.withPayload(completada()).build()));
 
-        verify(estadoService, timeout(1000)).marcarCompletada(event);
+        ArgumentCaptor<ActualizarOperacionResultadoCommand> captor =
+                ArgumentCaptor.forClass(ActualizarOperacionResultadoCommand.class);
+        verify(useCase, timeout(1000)).actualizar(captor.capture());
+        assertThat(captor.getValue().operationId())
+                .isEqualTo(UUID.fromString("33333333-3333-3333-3333-333333333333"));
+        assertThat(captor.getValue().resultado())
+                .isEqualTo(ActualizarOperacionResultadoCommand.Resultado.COMPLETADA);
     }
 
     @Test
-    void consumirOperacionFallidaActualizaEstado() {
-        when(estadoService.marcarFallida(any(OperacionFallidaEvent.class))).thenReturn(Mono.empty());
+    void consumirOperacionFallidaConvierteEventoAComando() {
+        when(useCase.actualizar(any())).thenReturn(Mono.just(new ActualizarOperacionResultadoResult(
+                UUID.fromString("33333333-3333-3333-3333-333333333333"),
+                "FALLIDA",
+                true
+        )));
         Consumer<Flux<org.springframework.messaging.Message<OperacionFallidaEvent>>> consumer =
-                config.consumirOperacionFallida(estadoService);
+                config.consumirOperacionFallida(useCase);
 
-        OperacionFallidaEvent event = fallida();
-        consumer.accept(Flux.just(MessageBuilder.withPayload(event).build()));
+        consumer.accept(Flux.just(MessageBuilder.withPayload(fallida()).build()));
 
-        verify(estadoService, timeout(1000)).marcarFallida(event);
+        ArgumentCaptor<ActualizarOperacionResultadoCommand> captor =
+                ArgumentCaptor.forClass(ActualizarOperacionResultadoCommand.class);
+        verify(useCase, timeout(1000)).actualizar(captor.capture());
+        assertThat(captor.getValue().resultado())
+                .isEqualTo(ActualizarOperacionResultadoCommand.Resultado.FALLIDA);
+        assertThat(captor.getValue().codigoError()).isEqualTo("SALDO_INSUFICIENTE");
+        assertThat(captor.getValue().motivo()).isEqualTo("Saldo insuficiente");
     }
 
     @Test
     void consumirOperacionInexistenteNoRompeElStream() {
-        when(estadoService.marcarFallida(any(OperacionFallidaEvent.class))).thenReturn(Mono.empty());
+        when(useCase.actualizar(any())).thenReturn(Mono.just(new ActualizarOperacionResultadoResult(
+                UUID.fromString("33333333-3333-3333-3333-333333333333"),
+                "FALLIDA",
+                false
+        )));
         Consumer<Flux<org.springframework.messaging.Message<OperacionFallidaEvent>>> consumer =
-                config.consumirOperacionFallida(estadoService);
+                config.consumirOperacionFallida(useCase);
 
         consumer.accept(Flux.just(MessageBuilder.withPayload(fallida()).build()));
 
-        verify(estadoService, timeout(1000)).marcarFallida(any(OperacionFallidaEvent.class));
+        verify(useCase, timeout(1000)).actualizar(any(ActualizarOperacionResultadoCommand.class));
     }
 
     private OperacionCompletadaEvent completada() {

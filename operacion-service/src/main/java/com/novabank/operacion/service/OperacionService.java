@@ -12,8 +12,17 @@ import com.novabank.operacion.dto.OperacionResponseDTO;
 import com.novabank.operacion.dto.TransferenciaAceptadaResponseDTO;
 import com.novabank.operacion.dto.TransferenciaDivisaRequestDTO;
 import com.novabank.operacion.dto.TransferenciaRequestDTO;
-import com.novabank.events.operacion.OperacionSolicitadaEvent;
-import com.novabank.operacion.event.OperacionEventPublisher;
+import com.novabank.operacion.application.port.in.ConsultarEstadoOperacionQuery;
+import com.novabank.operacion.application.port.in.ConsultarEstadoOperacionUseCase;
+import com.novabank.operacion.application.port.in.EstadoOperacionAsincronaResult;
+import com.novabank.operacion.application.port.in.OperacionAceptadaResult;
+import com.novabank.operacion.application.port.in.SolicitarDepositoCommand;
+import com.novabank.operacion.application.port.in.SolicitarDepositoUseCase;
+import com.novabank.operacion.application.port.in.SolicitarRetiradaCommand;
+import com.novabank.operacion.application.port.in.SolicitarRetiradaUseCase;
+import com.novabank.operacion.application.port.in.SolicitarTransferenciaCommand;
+import com.novabank.operacion.application.port.in.SolicitarTransferenciaUseCase;
+import com.novabank.operacion.application.port.in.TransferenciaAceptadaResult;
 import com.novabank.operacion.exception.RemoteResourceNotFoundException;
 import com.novabank.operacion.exception.ValidationException;
 import com.novabank.operacion.mapper.MovimientoMapper;
@@ -31,7 +40,6 @@ import reactor.core.publisher.Signal;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.List;
@@ -47,8 +55,10 @@ public class OperacionService {
     private final MovimientoRepository movimientoRepository;
     private final MovimientoMapper movimientoMapper;
     private final PublicIdempotencyService publicIdempotencyService;
-    private final OperacionEventPublisher operacionEventPublisher;
-    private final OperacionAsincronaEstadoService operacionAsincronaEstadoService;
+    private final SolicitarDepositoUseCase solicitarDepositoUseCase;
+    private final SolicitarRetiradaUseCase solicitarRetiradaUseCase;
+    private final SolicitarTransferenciaUseCase solicitarTransferenciaUseCase;
+    private final ConsultarEstadoOperacionUseCase consultarEstadoOperacionUseCase;
 
     public OperacionService(
             CuentaServiceClient cuentaServiceClient,
@@ -56,34 +66,51 @@ public class OperacionService {
             MovimientoRepository movimientoRepository,
             MovimientoMapper movimientoMapper,
             PublicIdempotencyService publicIdempotencyService,
-            OperacionEventPublisher operacionEventPublisher,
-            OperacionAsincronaEstadoService operacionAsincronaEstadoService
+            SolicitarDepositoUseCase solicitarDepositoUseCase,
+            SolicitarRetiradaUseCase solicitarRetiradaUseCase,
+            SolicitarTransferenciaUseCase solicitarTransferenciaUseCase,
+            ConsultarEstadoOperacionUseCase consultarEstadoOperacionUseCase
     ) {
         this.cuentaServiceClient = cuentaServiceClient;
         this.exchangeRateService = exchangeRateService;
         this.movimientoRepository = movimientoRepository;
         this.movimientoMapper = movimientoMapper;
         this.publicIdempotencyService = publicIdempotencyService;
-        this.operacionEventPublisher = operacionEventPublisher;
-        this.operacionAsincronaEstadoService = operacionAsincronaEstadoService;
+        this.solicitarDepositoUseCase = solicitarDepositoUseCase;
+        this.solicitarRetiradaUseCase = solicitarRetiradaUseCase;
+        this.solicitarTransferenciaUseCase = solicitarTransferenciaUseCase;
+        this.consultarEstadoOperacionUseCase = consultarEstadoOperacionUseCase;
     }
 
     public Mono<OperacionAceptadaResponseDTO> solicitarDeposito(
             OperacionRequestDTO request,
             String idempotencyKey
     ) {
-        return solicitarOperacionSimple(request, idempotencyKey, "DEPOSITO", null, request.cuentaId(), request.cuentaId());
+        return Mono.deferContextual(contextView -> solicitarDepositoUseCase.solicitarDeposito(new SolicitarDepositoCommand(
+                        request.cuentaId(),
+                        request.cantidad(),
+                        idempotencyKey,
+                        resolveCorrelationId(CorrelationIdSupport.fromContext(contextView))
+                )))
+                .map(this::toOperacionAceptadaResponse);
     }
 
     public Mono<OperacionAceptadaResponseDTO> solicitarRetirada(
             OperacionRequestDTO request,
             String idempotencyKey
     ) {
-        return solicitarOperacionSimple(request, idempotencyKey, "RETIRADA", request.cuentaId(), null, request.cuentaId());
+        return Mono.deferContextual(contextView -> solicitarRetiradaUseCase.solicitarRetirada(new SolicitarRetiradaCommand(
+                        request.cuentaId(),
+                        request.cantidad(),
+                        idempotencyKey,
+                        resolveCorrelationId(CorrelationIdSupport.fromContext(contextView))
+                )))
+                .map(this::toOperacionAceptadaResponse);
     }
 
     public Mono<OperacionEstadoResponseDTO> consultarOperacionAsincrona(UUID operationId) {
-        return operacionAsincronaEstadoService.consultar(operationId);
+        return consultarEstadoOperacionUseCase.consultar(new ConsultarEstadoOperacionQuery(operationId))
+                .map(this::toOperacionEstadoResponse);
     }
 
     /**
@@ -118,54 +145,6 @@ public class OperacionService {
                         "Deposito realizado correctamente",
                         List.of(movimiento)
                 ));
-    }
-
-    private Mono<OperacionAceptadaResponseDTO> solicitarOperacionSimple(
-            OperacionRequestDTO request,
-            String idempotencyKey,
-            String tipoOperacion,
-            Long cuentaOrigenId,
-            Long cuentaDestinoId,
-            Long kafkaKey
-    ) {
-        return Mono.deferContextual(contextView -> {
-            UUID operationId = UUID.randomUUID();
-            UUID correlationId = resolveCorrelationId(CorrelationIdSupport.fromContext(contextView));
-            OperacionSolicitadaEvent event = new OperacionSolicitadaEvent(
-                    UUID.randomUUID(),
-                    correlationId,
-                    Instant.now(),
-                    operationId,
-                    tipoOperacion,
-                    cuentaOrigenId,
-                    cuentaDestinoId,
-                    request.cantidad(),
-                    "EUR"
-            );
-
-            log.info(
-                    "operacion asincrona recibida tipoOperacion={} cuentaId={} importe={} operationId={} idempotencyKey={}",
-                    tipoOperacion,
-                    request.cuentaId(),
-                    request.cantidad(),
-                    operationId,
-                    idempotencyKey == null || idempotencyKey.isBlank() ? "no-informada" : "informada"
-            );
-
-            return operacionAsincronaEstadoService.crearSolicitada(event, request.cuentaId())
-                    .then(operacionEventPublisher.publicarOperacionSolicitada(event, kafkaKey))
-                    .onErrorResume(error -> operacionAsincronaEstadoService
-                            .marcarFallidaPorPublicacion(event, error)
-                            .then(Mono.error(error)))
-                    .thenReturn(new OperacionAceptadaResponseDTO(
-                            operationId,
-                            "SOLICITADA",
-                            tipoOperacion + " solicitada para procesamiento asincrono",
-                            tipoOperacion,
-                            request.cuentaId(),
-                            request.cantidad()
-                    ));
-        });
     }
 
     /**
@@ -214,46 +193,16 @@ public class OperacionService {
             TransferenciaRequestDTO request,
             String idempotencyKey
     ) {
-        return Mono.deferContextual(contextView -> {
-            UUID operationId = UUID.randomUUID();
-            UUID correlationId = resolveCorrelationId(CorrelationIdSupport.fromContext(contextView));
-            OperacionSolicitadaEvent event = new OperacionSolicitadaEvent(
-                    UUID.randomUUID(),
-                    correlationId,
-                    Instant.now(),
-                    operationId,
-                    "TRANSFERENCIA",
-                    request.cuentaOrigenId(),
-                    request.cuentaDestinoId(),
-                    request.cantidad(),
-                    "EUR"
-            );
-
-            log.info(
-                    "transferencia asincrona recibida cuentaOrigenId={} cuentaDestinoId={} importe={} operationId={} idempotencyKey={}",
-                    request.cuentaOrigenId(),
-                    request.cuentaDestinoId(),
-                    request.cantidad(),
-                    operationId,
-                    idempotencyKey == null || idempotencyKey.isBlank() ? "no-informada" : "pendiente-consolidacion"
-            );
-
-            return operacionAsincronaEstadoService.crearSolicitada(event, request.cuentaOrigenId())
-                    .then(operacionEventPublisher.publicarOperacionSolicitada(event, request.cuentaOrigenId()))
-                    .onErrorResume(error -> operacionAsincronaEstadoService
-                            .marcarFallidaPorPublicacion(event, error)
-                            .then(Mono.error(error)))
-                    .thenReturn(new TransferenciaAceptadaResponseDTO(
-                            operationId,
-                            "SOLICITADA",
-                            "TRANSFERENCIA solicitada para procesamiento asincrono",
-                            "TRANSFERENCIA",
-                            request.cuentaOrigenId(),
-                            request.cuentaDestinoId(),
-                            request.cantidad(),
-                            "EUR"
-                    ));
-        });
+        return Mono.deferContextual(contextView -> solicitarTransferenciaUseCase.solicitarTransferencia(
+                        new SolicitarTransferenciaCommand(
+                                request.cuentaOrigenId(),
+                                request.cuentaDestinoId(),
+                                request.cantidad(),
+                                idempotencyKey,
+                                resolveCorrelationId(CorrelationIdSupport.fromContext(contextView))
+                        )
+                ))
+                .map(this::toTransferenciaAceptadaResponse);
     }
 
     /**
@@ -470,6 +419,47 @@ public class OperacionService {
         } catch (IllegalArgumentException ignored) {
             return UUID.randomUUID();
         }
+    }
+
+    private OperacionAceptadaResponseDTO toOperacionAceptadaResponse(OperacionAceptadaResult result) {
+        return new OperacionAceptadaResponseDTO(
+                result.operationId(),
+                result.estado(),
+                result.mensaje(),
+                result.tipoOperacion(),
+                result.cuentaId(),
+                result.importe()
+        );
+    }
+
+    private TransferenciaAceptadaResponseDTO toTransferenciaAceptadaResponse(TransferenciaAceptadaResult result) {
+        return new TransferenciaAceptadaResponseDTO(
+                result.operationId(),
+                result.estado(),
+                result.mensaje(),
+                result.tipoOperacion(),
+                result.cuentaOrigenId(),
+                result.cuentaDestinoId(),
+                result.importe(),
+                result.moneda()
+        );
+    }
+
+    private OperacionEstadoResponseDTO toOperacionEstadoResponse(EstadoOperacionAsincronaResult result) {
+        return new OperacionEstadoResponseDTO(
+                result.operationId(),
+                result.correlationId(),
+                result.tipoOperacion(),
+                result.estado(),
+                result.cuentaId(),
+                result.cuentaOrigenId(),
+                result.cuentaDestinoId(),
+                result.importe(),
+                result.moneda(),
+                result.motivoFallo(),
+                result.creadaEn(),
+                result.actualizadaEn()
+        );
     }
 
     private void logOperacion(Signal<MovimientoResponseDTO> signal, String tipo) {

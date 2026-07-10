@@ -12,7 +12,7 @@ NovaBank es un proyecto Maven multi-modulo que simula una plataforma bancaria co
 | Modulo 4 | Transicion a microservicios sincronicos con Spring Cloud. |
 | Modulo 5 | Migracion de Spring MVC a WebFlux, R2DBC, WebClient, SSE, idempotencia, resiliencia y observabilidad. |
 | Modulo 6 | Kafka, eventos compartidos, operaciones asincronas, SAGA basica, alertas y Swagger agregado. |
-| Modulo 7 | Pendiente: Docker completo, LocalStack, S3, Lambda y documento-service. |
+| Modulo 7 | En curso: `documento-service` introducido como esqueleto hexagonal. Pendiente: LocalStack, S3, Lambda e integracion completa de justificantes. |
 
 ## Capacidades Principales
 
@@ -44,6 +44,7 @@ flowchart LR
     operaciones --> cuentas
     cuentas --> clientes
     operaciones --> exchange["exchange-rate-mock-service :8084"]
+    documentos["documento-service :8086"]
 
     auth --> dbAuth[("novabank_auth")]
     clientes --> dbClientes[("novabank_clientes")]
@@ -56,6 +57,7 @@ flowchart LR
     config --> cuentas
     config --> operaciones
     config --> exchange
+    config --> documentos
 
     eureka["eureka-server :8761"] <--> gateway
     eureka <--> auth
@@ -63,6 +65,7 @@ flowchart LR
     eureka <--> cuentas
     eureka <--> operaciones
     eureka <--> exchange
+    eureka <--> documentos
 ```
 
 Los servicios de negocio se comunican mediante WebClient con resolucion por Eureka. Cada servicio propietario de datos usa su propia base PostgreSQL.
@@ -80,6 +83,7 @@ Los servicios de negocio se comunican mediante WebClient con resolucion por Eure
 | `operacion-service` | 8083 | Servicio reactivo | Depositos, retiros, transferencias, divisas e historial. | `novabank_operaciones` |
 | `exchange-rate-mock-service` | 8084 | Mock reactivo | Tasas de cambio predefinidas para pruebas locales. | No aplica |
 | `notificacion-service` | 8085 | Servicio reactivo | Consumidor Kafka para notificaciones de bienvenida. | No aplica |
+| `documento-service` | 8086 | Servicio reactivo | Esqueleto hexagonal para justificantes de operaciones. S3/LocalStack se integrara en una rama posterior. | Pendiente |
 
 ## Swagger / OpenAPI
 
@@ -108,8 +112,9 @@ Acceso directo por microservicio:
 | `cuenta-service` | `http://localhost:8082/swagger-ui/index.html` | `http://localhost:8082/v3/api-docs` |
 | `operacion-service` | `http://localhost:8083/swagger-ui/index.html` | `http://localhost:8083/v3/api-docs` |
 | `exchange-rate-mock-service` | `http://localhost:8084/swagger-ui/index.html` | `http://localhost:8084/v3/api-docs` |
+| `documento-service` | `http://localhost:8086/swagger-ui/index.html` | `http://localhost:8086/v3/api-docs` |
 
-`notificacion-service` no expone API REST funcional; consume eventos Kafka y registra notificaciones en logs. Los endpoints de negocio publicados por el Gateway requieren JWT salvo login, registro, validacion de token, actuator health/info y documentacion Swagger/OpenAPI.
+`notificacion-service` no expone API REST funcional; consume eventos Kafka y registra notificaciones en logs. `documento-service` expone endpoints base del Modulo 7, pero todavia no integra S3 real, LocalStack ni Lambda. Su agregacion en Gateway/Config Server queda pendiente para la iteracion de configuracion correspondiente. Los endpoints de negocio publicados por el Gateway requieren JWT salvo login, registro, validacion de token, actuator health/info y documentacion Swagger/OpenAPI.
 
 ## Estructura Del Repositorio
 
@@ -124,6 +129,7 @@ NovaBank/
 |-- cliente-service/
 |-- cuenta-service/
 |-- operacion-service/
+|-- documento-service/
 |-- exchange-rate-mock-service/
 |-- notificacion-service/
 |-- docs/
@@ -1074,7 +1080,7 @@ Una operacion que permanece en `SOLICITADA` debe investigarse revisando primero 
 
 La migracion sera gradual y por casos de uso verticales. No se han movido paquetes en bloque durante esta estabilizacion porque el procesamiento financiero combina transaccion local, eventos de movimiento, alertas y resultados Kafka.
 
-La estructura objetivo, el mapeo de paquetes y el primer corte recomendado estan documentados en [docs/arquitectura-hexagonal.md](docs/arquitectura-hexagonal.md). `documento-service` del Modulo 7 debera nacer con adaptadores de salida separados para S3 y Lambda.
+La estructura objetivo, el mapeo de paquetes y el primer corte recomendado estan documentados en [docs/arquitectura-hexagonal.md](docs/arquitectura-hexagonal.md). `documento-service` del Modulo 7 nace ya con estructura hexagonal; S3 vivira bajo `adapter/out/storage` en la siguiente iteracion.
 
 ## Testing
 
@@ -1085,6 +1091,7 @@ mvn clean test
 mvn -pl cliente-service test
 mvn -pl cuenta-service test
 mvn -pl operacion-service test
+mvn -pl documento-service test
 ```
 
 Los tests de persistencia relevantes usan PostgreSQL mediante Testcontainers. Es necesario tener Docker Desktop o un runtime compatible en ejecucion para el reactor completo.

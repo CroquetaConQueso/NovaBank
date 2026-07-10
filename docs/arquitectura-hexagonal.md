@@ -62,4 +62,6 @@ Este cambio no se aplica en esta estabilizacion porque exige mover dependencias 
 - Los adaptadores convierten sus payloads a modelos o comandos de aplicacion.
 - Los puertos de salida no exponen `StreamBridge`, `WebClient` ni repositorios Spring Data.
 - Se permiten `Mono` y `Flux` en puertos de aplicacion mientras el proyecto mantenga su modelo reactivo.
-- `documento-service` del Modulo 7 debe nacer con esta estructura, con S3 y Lambda bajo `adapter/out`.
+- `documento-service` del Modulo 7 nace con esta estructura desde su primer commit funcional.
+- La integracion de S3/LocalStack debe quedar en `documento-service/src/main/java/com/novabank/documento/adapter/out/storage`.
+- La integracion futura con Lambda no debe entrar en dominio ni aplicacion; si se implementa, debe quedar detras de un puerto de salida especifico y un adaptador de infraestructura.

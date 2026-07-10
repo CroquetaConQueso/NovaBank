@@ -27,6 +27,7 @@
         <module>cliente-service</module>
         <module>cuenta-service</module>
         <module>operacion-service</module>
+        <module>documento-service</module>
         <module>exchange-rate-mock-service</module>
         <module>notificacion-service</module>
     </modules>

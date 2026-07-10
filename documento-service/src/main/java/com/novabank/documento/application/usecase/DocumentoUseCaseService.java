@@ -6,14 +6,13 @@ import com.novabank.documento.application.port.in.EliminarDocumentoOperacionUseC
 import com.novabank.documento.application.port.in.GenerarUrlDescargaDocumentoUseCase;
 import com.novabank.documento.application.port.in.ListarDocumentosCuentaUseCase;
 import com.novabank.documento.application.port.in.UrlDescargaDocumentoResult;
+import com.novabank.documento.application.port.out.DocumentoUrlTemporal;
 import com.novabank.documento.application.port.out.DocumentoStoragePort;
 import com.novabank.documento.domain.model.DocumentoOperacion;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
-import java.time.Duration;
-import java.time.Instant;
 import java.util.UUID;
 
 @Service
@@ -21,8 +20,6 @@ public class DocumentoUseCaseService implements
         GenerarUrlDescargaDocumentoUseCase,
         ListarDocumentosCuentaUseCase,
         EliminarDocumentoOperacionUseCase {
-
-    private static final Duration URL_TTL = Duration.ofMinutes(15);
 
     private final DocumentoStoragePort storagePort;
 
@@ -34,7 +31,7 @@ public class DocumentoUseCaseService implements
     public Mono<UrlDescargaDocumentoResult> generarUrlDescarga(UUID operacionId) {
         return validarOperacionId(operacionId)
                 .then(storagePort.generarUrlTemporalDescarga(operacionId))
-                .map(url -> new UrlDescargaDocumentoResult(operacionId, url, Instant.now().plus(URL_TTL)));
+                .map(urlTemporal -> toUrlResult(operacionId, urlTemporal));
     }
 
     @Override
@@ -73,5 +70,9 @@ public class DocumentoUseCaseService implements
                 documento.contentType(),
                 documento.creadoEn()
         );
+    }
+
+    private UrlDescargaDocumentoResult toUrlResult(UUID operacionId, DocumentoUrlTemporal urlTemporal) {
+        return new UrlDescargaDocumentoResult(operacionId, urlTemporal.url(), urlTemporal.expiraEn());
     }
 }

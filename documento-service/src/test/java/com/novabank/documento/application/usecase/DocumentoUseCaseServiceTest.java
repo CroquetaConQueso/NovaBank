@@ -2,6 +2,7 @@ package com.novabank.documento.application.usecase;
 
 import com.novabank.documento.application.exception.DocumentoNotFoundException;
 import com.novabank.documento.application.port.out.DocumentoStoragePort;
+import com.novabank.documento.application.port.out.DocumentoUrlTemporal;
 import com.novabank.documento.domain.model.DocumentoId;
 import com.novabank.documento.domain.model.DocumentoOperacion;
 import com.novabank.documento.domain.model.TipoDocumento;
@@ -10,7 +11,6 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
-import java.net.URI;
 import java.time.Instant;
 import java.util.UUID;
 
@@ -21,8 +21,16 @@ class DocumentoUseCaseServiceTest {
         UUID operacionId = UUID.randomUUID();
         DocumentoUseCaseService service = new DocumentoUseCaseService(new DocumentoStoragePort() {
             @Override
-            public Mono<URI> generarUrlTemporalDescarga(UUID id) {
-                return Mono.just(URI.create("http://localhost/documento.pdf"));
+            public Mono<DocumentoOperacion> guardar(DocumentoOperacion documento, byte[] contenido) {
+                return Mono.just(documento);
+            }
+
+            @Override
+            public Mono<DocumentoUrlTemporal> generarUrlTemporalDescarga(UUID id) {
+                return Mono.just(new DocumentoUrlTemporal(
+                        java.net.URI.create("http://localhost/documento.pdf"),
+                        Instant.now().plusSeconds(900)
+                ));
             }
 
             @Override
@@ -65,7 +73,12 @@ class DocumentoUseCaseServiceTest {
 
         DocumentoUseCaseService service = new DocumentoUseCaseService(new DocumentoStoragePort() {
             @Override
-            public Mono<URI> generarUrlTemporalDescarga(UUID id) {
+            public Mono<DocumentoOperacion> guardar(DocumentoOperacion documento, byte[] contenido) {
+                return Mono.just(documento);
+            }
+
+            @Override
+            public Mono<DocumentoUrlTemporal> generarUrlTemporalDescarga(UUID id) {
                 return Mono.empty();
             }
 
@@ -98,7 +111,12 @@ class DocumentoUseCaseServiceTest {
     void eliminarDocumentoInexistenteDevuelveNotFound() {
         DocumentoUseCaseService service = new DocumentoUseCaseService(new DocumentoStoragePort() {
             @Override
-            public Mono<URI> generarUrlTemporalDescarga(UUID id) {
+            public Mono<DocumentoOperacion> guardar(DocumentoOperacion documento, byte[] contenido) {
+                return Mono.just(documento);
+            }
+
+            @Override
+            public Mono<DocumentoUrlTemporal> generarUrlTemporalDescarga(UUID id) {
                 return Mono.empty();
             }
 

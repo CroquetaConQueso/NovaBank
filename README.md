@@ -12,7 +12,7 @@ NovaBank es un proyecto Maven multi-modulo que simula una plataforma bancaria co
 | Modulo 4 | Transicion a microservicios sincronicos con Spring Cloud. |
 | Modulo 5 | Migracion de Spring MVC a WebFlux, R2DBC, WebClient, SSE, idempotencia, resiliencia y observabilidad. |
 | Modulo 6 | Kafka, eventos compartidos, operaciones asincronas, SAGA basica, alertas y Swagger agregado. |
-| Modulo 7 | En curso: `documento-service` introducido como esqueleto hexagonal. Pendiente: LocalStack, S3, Lambda e integracion completa de justificantes. |
+| Modulo 7 | En curso: `documento-service` integra justificantes JSON en S3 compatible con LocalStack. Pendiente: Lambda e integracion completa con despliegue Docker. |
 
 ## Capacidades Principales
 
@@ -83,7 +83,7 @@ Los servicios de negocio se comunican mediante WebClient con resolucion por Eure
 | `operacion-service` | 8083 | Servicio reactivo | Depositos, retiros, transferencias, divisas e historial. | `novabank_operaciones` |
 | `exchange-rate-mock-service` | 8084 | Mock reactivo | Tasas de cambio predefinidas para pruebas locales. | No aplica |
 | `notificacion-service` | 8085 | Servicio reactivo | Consumidor Kafka para notificaciones de bienvenida. | No aplica |
-| `documento-service` | 8086 | Servicio reactivo | Esqueleto hexagonal para justificantes de operaciones. S3/LocalStack se integrara en una rama posterior. | Pendiente |
+| `documento-service` | 8086 | Servicio reactivo | Generacion y consulta de justificantes JSON en S3 compatible con LocalStack. | S3 `novabank-justificantes` |
 
 ## Swagger / OpenAPI
 
@@ -114,7 +114,7 @@ Acceso directo por microservicio:
 | `exchange-rate-mock-service` | `http://localhost:8084/swagger-ui/index.html` | `http://localhost:8084/v3/api-docs` |
 | `documento-service` | `http://localhost:8086/swagger-ui/index.html` | `http://localhost:8086/v3/api-docs` |
 
-`notificacion-service` no expone API REST funcional; consume eventos Kafka y registra notificaciones en logs. `documento-service` expone endpoints base del Modulo 7, pero todavia no integra S3 real, LocalStack ni Lambda. Su agregacion en Gateway/Config Server queda pendiente para la iteracion de configuracion correspondiente. Los endpoints de negocio publicados por el Gateway requieren JWT salvo login, registro, validacion de token, actuator health/info y documentacion Swagger/OpenAPI.
+`notificacion-service` no expone API REST funcional; consume eventos Kafka y registra notificaciones en logs. `documento-service` expone endpoints base del Modulo 7 e integra S3 mediante `S3AsyncClient`; Lambda queda pendiente. Su agregacion en Gateway/Config Server queda pendiente para la iteracion de configuracion correspondiente. Los endpoints de negocio publicados por el Gateway requieren JWT salvo login, registro, validacion de token, actuator health/info y documentacion Swagger/OpenAPI.
 
 ## Estructura Del Repositorio
 
@@ -210,6 +210,63 @@ Apagar el entorno:
 ```powershell
 docker compose down
 ```
+
+## Documento Service Y LocalStack
+
+`documento-service` genera justificantes JSON al consumir `OperacionCompletadaEvent` desde el topic `novabank.operaciones.completadas` mediante el binding `generarJustificanteOperacion-in-0` y el grupo `documento-service`. El consumer solo convierte el evento a un comando de aplicacion; la generacion JSON y el almacenamiento quedan detras de puertos.
+
+El almacenamiento usa AWS SDK v2 con `S3AsyncClient`; no se usa `S3Client` sincrono. La configuracion local por defecto es:
+
+```yaml
+novabank:
+  aws:
+    region: eu-west-1
+    endpoint-override: http://localhost:4566
+  s3:
+    bucket-justificantes: novabank-justificantes
+    presigned-url-ttl: PT15M
+```
+
+En Docker, el endpoint previsto para una iteracion posterior es `http://localstack:4566`.
+
+El bucket esperado es:
+
+```text
+novabank-justificantes
+```
+
+Las claves se guardan con prefijo por cuenta para que `GET /api/documentos/cuentas/{cuentaId}` pueda resolverse sin base de datos adicional:
+
+```text
+cuentas/{cuentaId}/operaciones/{yyyy}/{MM}/{operationId}.json
+```
+
+El evento compartido `OperacionCompletadaEvent` actual no incluye cuenta origen/destino ni una cuenta unica. Para no cambiar payloads Kafka, los justificantes generados solo desde ese evento se indexan temporalmente bajo `cuentaId=0` hasta que una iteracion posterior incorpore una fuente de correlacion con cuenta. Si el caso de uso de aplicacion recibe cuenta explicita, se usa esa cuenta en la clave.
+
+Endpoints directos de `documento-service`:
+
+```text
+GET    /api/documentos/operaciones/{operationId}/url
+GET    /api/documentos/cuentas/{cuentaId}
+DELETE /api/documentos/operaciones/{operationId}
+```
+
+La URL de descarga es prefirmada y caduca segun `novabank.s3.presigned-url-ttl`. Si el documento no existe, se devuelve `404`.
+
+Arranque manual minimo de LocalStack si todavia no se usa el compose completo:
+
+```powershell
+docker run --rm -it -p 4566:4566 -e SERVICES=s3 -e DEFAULT_REGION=eu-west-1 localstack/localstack
+```
+
+Creacion idempotente del bucket:
+
+```powershell
+awslocal s3api head-bucket --bucket novabank-justificantes
+awslocal s3api create-bucket --bucket novabank-justificantes --create-bucket-configuration LocationConstraint=eu-west-1
+```
+
+Tambien queda disponible el script [localstack-init/01-crear-buckets.sh](localstack-init/01-crear-buckets.sh) para inicializacion futura.
 
 ## Base Tecnica De Eventos Del Modulo 6
 
@@ -1080,7 +1137,7 @@ Una operacion que permanece en `SOLICITADA` debe investigarse revisando primero 
 
 La migracion sera gradual y por casos de uso verticales. No se han movido paquetes en bloque durante esta estabilizacion porque el procesamiento financiero combina transaccion local, eventos de movimiento, alertas y resultados Kafka.
 
-La estructura objetivo, el mapeo de paquetes y el primer corte recomendado estan documentados en [docs/arquitectura-hexagonal.md](docs/arquitectura-hexagonal.md). `documento-service` del Modulo 7 nace ya con estructura hexagonal; S3 vivira bajo `adapter/out/storage` en la siguiente iteracion.
+La estructura objetivo, el mapeo de paquetes y el primer corte recomendado estan documentados en [docs/arquitectura-hexagonal.md](docs/arquitectura-hexagonal.md). `documento-service` del Modulo 7 nace ya con estructura hexagonal; S3 vive bajo `adapter/out/storage` y queda detras de puertos de aplicacion.
 
 ## Testing
 

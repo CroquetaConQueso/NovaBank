@@ -12,7 +12,7 @@ NovaBank es un proyecto Maven multi-modulo que simula una plataforma bancaria co
 | Modulo 4 | Transicion a microservicios sincronicos con Spring Cloud. |
 | Modulo 5 | Migracion de Spring MVC a WebFlux, R2DBC, WebClient, SSE, idempotencia, resiliencia y observabilidad. |
 | Modulo 6 | Kafka, eventos compartidos, operaciones asincronas, SAGA basica, alertas y Swagger agregado. |
-| Modulo 7 | En curso: `documento-service` integra justificantes JSON en S3 compatible con LocalStack. Pendiente: Lambda e integracion completa con despliegue Docker. |
+| Modulo 7 | En curso: `documento-service` integra justificantes JSON en S3 compatible con LocalStack, Lambda calcula comisiones internacionales y la plataforma local se dockeriza con Docker Compose. |
 
 ## Capacidades Principales
 
@@ -75,7 +75,7 @@ Los servicios de negocio se comunican mediante WebClient con resolucion por Eure
 | Servicio | Puerto | Tipo | Responsabilidad | Base de datos |
 | --- | ---: | --- | --- | --- |
 | `eureka-server` | 8761 | Infraestructura | Registro y descubrimiento de servicios. | No aplica |
-| `config-server` | 8888 | Infraestructura | Entrega configuracion desde un repositorio Git externo. | No aplica |
+| `config-server` | 8888 | Infraestructura | Entrega configuracion desde Config Server; en Docker usa configuracion nativa empaquetada. | No aplica |
 | `api-gateway` | 8080 | Edge reactivo | Entrada HTTP, validacion JWT perimetral y propagacion de trazas. | No aplica |
 | `auth-server` | 9000 | Servicio reactivo | Registro, login y validacion de tokens. | `novabank_auth` |
 | `cliente-service` | 8081 | Servicio reactivo | Alta, consulta y actualizacion de clientes. | `novabank_clientes` |
@@ -100,6 +100,7 @@ OpenAPI agregado desde Gateway:
 | OpenAPI cuenta-service | `http://localhost:8080/v3/api-docs/cuenta-service` |
 | OpenAPI operacion-service | `http://localhost:8080/v3/api-docs/operacion-service` |
 | OpenAPI exchange-rate-mock-service | `http://localhost:8080/v3/api-docs/exchange-rate-mock-service` |
+| OpenAPI documento-service | `http://localhost:8080/v3/api-docs/documento-service` |
 
 El Gateway expone los JSON OpenAPI agregados para evitar CORS al consultarlos desde el entorno local. La interfaz Swagger UI se mantiene en cada microservicio.
 
@@ -114,7 +115,70 @@ Acceso directo por microservicio:
 | `exchange-rate-mock-service` | `http://localhost:8084/swagger-ui/index.html` | `http://localhost:8084/v3/api-docs` |
 | `documento-service` | `http://localhost:8086/swagger-ui/index.html` | `http://localhost:8086/v3/api-docs` |
 
-`notificacion-service` no expone API REST funcional; consume eventos Kafka y registra notificaciones en logs. `documento-service` expone endpoints base del Modulo 7 e integra S3 mediante `S3AsyncClient`; Lambda queda pendiente. Su agregacion en Gateway/Config Server queda pendiente para la iteracion de configuracion correspondiente. Los endpoints de negocio publicados por el Gateway requieren JWT salvo login, registro, validacion de token, actuator health/info y documentacion Swagger/OpenAPI.
+`notificacion-service` no expone API REST funcional; consume eventos Kafka y registra notificaciones en logs. `documento-service` expone endpoints base del Modulo 7 e integra S3 mediante `S3AsyncClient`. Los endpoints de negocio publicados por el Gateway requieren JWT salvo login, registro, validacion de token, actuator health/info y documentacion Swagger/OpenAPI.
+
+## Modulo 7 Docker Cloud-Native
+
+La plataforma local se puede levantar con Docker Compose. Incluye PostgreSQL, Kafka, Kafka UI, LocalStack, Eureka, Config Server, API Gateway y los microservicios activos del Caso 7.
+
+Construir imagenes:
+
+```powershell
+docker compose build
+```
+
+o:
+
+```powershell
+.\scripts\build-docker-images.ps1
+```
+
+Levantar:
+
+```powershell
+docker compose up -d
+```
+
+o construyendo antes:
+
+```powershell
+.\scripts\start-local-platform.ps1 -Build
+```
+
+Parar:
+
+```powershell
+docker compose down
+```
+
+Limpiar volumenes locales:
+
+```powershell
+docker compose down -v
+```
+
+URLs utiles:
+
+| Recurso | URL |
+| --- | --- |
+| Eureka | `http://localhost:8761` |
+| API Gateway | `http://localhost:8080` |
+| Gateway health | `http://localhost:8080/actuator/health` |
+| Swagger UI agregado | `http://localhost:8080/swagger-ui/index.html` |
+| Kafka UI | `http://localhost:8090` |
+| LocalStack | `http://localhost:4566` |
+| Config Server | `http://localhost:8888` |
+
+Dentro de Docker se usan nombres de servicio (`kafka:9092`, `postgres:5432`, `localstack:4566`, `config-server:8888`, `eureka-server:8761`), no `localhost`. Config Server usa perfil `native` con configuracion interna en `config-server/src/main/resources/config-repo-docker`; no monta el `config-repo` externo del escritorio.
+
+LocalStack arranca con S3 y Lambda. El bucket `novabank-justificantes` se crea con `localstack-init/01-crear-buckets.sh`. La Lambda `novabank-comision` se despliega manualmente para mantener el compose estable:
+
+```powershell
+mvn -pl comision-lambda package
+.\scripts\deploy-comision-lambda-localstack.ps1
+```
+
+Detalle operativo: [docs/docker-cloud-native.md](docs/docker-cloud-native.md).
 
 ## Estructura Del Repositorio
 

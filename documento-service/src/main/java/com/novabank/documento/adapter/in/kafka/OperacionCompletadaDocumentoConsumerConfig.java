@@ -23,17 +23,34 @@ public class OperacionCompletadaDocumentoConsumerConfig {
             GenerarJustificanteOperacionUseCase useCase
     ) {
         return messages -> messages
-                .concatMap(message -> useCase.generar(toCommand(message.getPayload()))
-                        .doOnSuccess(documento -> log.info(
-                                "Justificante generado para operacion={} claveObjeto={}",
-                                documento.operacionId(),
-                                documento.claveObjeto()
-                        ))
-                        .onErrorResume(error -> {
-                            log.error("Error generando justificante de operacion completada", error);
-                            return Mono.empty();
-                        }))
+                .concatMap(message -> generarJustificante(message.getPayload(), useCase))
                 .subscribe();
+    }
+
+    private Mono<Void> generarJustificante(
+            OperacionCompletadaEvent event,
+            GenerarJustificanteOperacionUseCase useCase
+    ) {
+        if (event.cuentaIdPrincipal() == null) {
+            log.error(
+                    "OperacionCompletadaEvent sin cuentaIdPrincipal; no se genera justificante operationId={}",
+                    event.operationId()
+            );
+            return Mono.empty();
+        }
+
+        return useCase.generar(toCommand(event))
+                .doOnSuccess(documento -> log.info(
+                        "Justificante generado para operacion={} cuentaId={} claveObjeto={}",
+                        documento.operacionId(),
+                        documento.cuentaId(),
+                        documento.claveObjeto()
+                ))
+                .then()
+                .onErrorResume(error -> {
+                    log.error("Error generando justificante de operacion completada", error);
+                    return Mono.empty();
+                });
     }
 
     private GenerarJustificanteOperacionCommand toCommand(OperacionCompletadaEvent event) {
@@ -43,9 +60,9 @@ public class OperacionCompletadaDocumentoConsumerConfig {
                 event.occurredAt(),
                 event.operationId(),
                 event.tipoOperacion(),
-                null,
-                null,
-                null,
+                event.cuentaOrigenId(),
+                event.cuentaDestinoId(),
+                event.cuentaIdPrincipal(),
                 event.movimientoId(),
                 event.importe(),
                 event.moneda()

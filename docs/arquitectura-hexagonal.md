@@ -65,4 +65,5 @@ Este cambio no se aplica en esta estabilizacion porque exige mover dependencias 
 - `documento-service` del Modulo 7 nace con esta estructura desde su primer commit funcional.
 - La integracion de S3/LocalStack queda en `documento-service/src/main/java/com/novabank/documento/adapter/out/storage`.
 - El caso de uso de generacion de justificantes depende de puertos (`DocumentoStoragePort`, `JustificanteGeneratorPort`) y no conoce S3, LocalStack ni AWS SDK.
+- Kafka queda como adaptador de entrada: `OperacionCompletadaEvent` se convierte a comando de aplicacion y aporta `cuentaIdPrincipal` para asociar justificantes a cuentas reales.
 - La integracion futura con Lambda no debe entrar en dominio ni aplicacion; si se implementa, debe quedar detras de un puerto de salida especifico y un adaptador de infraestructura.

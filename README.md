@@ -241,7 +241,13 @@ Las claves se guardan con prefijo por cuenta para que `GET /api/documentos/cuent
 cuentas/{cuentaId}/operaciones/{yyyy}/{MM}/{operationId}.json
 ```
 
-El evento compartido `OperacionCompletadaEvent` actual no incluye cuenta origen/destino ni una cuenta unica. Para no cambiar payloads Kafka, los justificantes generados solo desde ese evento se indexan temporalmente bajo `cuentaId=0` hasta que una iteracion posterior incorpore una fuente de correlacion con cuenta. Si el caso de uso de aplicacion recibe cuenta explicita, se usa esa cuenta en la clave.
+`OperacionCompletadaEvent` incluye el contexto minimo de cuenta para asociar el justificante a una cuenta real: `cuentaOrigenId`, `cuentaDestinoId` y `cuentaIdPrincipal`. `documento-service` usa `cuentaIdPrincipal` para calcular la clave S3. Si un evento completado llega sin `cuentaIdPrincipal`, el consumer lo registra como error y no guarda justificante con una cuenta tecnica.
+
+Regla de `cuentaIdPrincipal`:
+
+- `DEPOSITO`: `cuentaOrigenId=null`, `cuentaDestinoId=<cuenta>`, `cuentaIdPrincipal=<cuenta>`.
+- `RETIRADA`/`RETIRO`: `cuentaOrigenId=<cuenta>`, `cuentaDestinoId=null`, `cuentaIdPrincipal=<cuenta>`.
+- `TRANSFERENCIA`: `cuentaOrigenId=<origen>`, `cuentaDestinoId=<destino>`, `cuentaIdPrincipal=<origen>`.
 
 Endpoints directos de `documento-service`:
 
@@ -658,7 +664,7 @@ JSON de deposito:
 {"eventId":"11111111-1111-1111-1111-111111111111","correlationId":"22222222-2222-2222-2222-222222222222","occurredAt":"2026-06-03T10:15:30Z","operationId":"33333333-3333-3333-3333-333333333333","tipoOperacion":"DEPOSITO","cuentaOrigenId":null,"cuentaDestinoId":1,"importe":25.00,"moneda":"EUR"}
 ```
 
-Resultado esperado: mensaje en `novabank.operaciones.completadas` con el mismo `operationId`, `correlationId`, `tipoOperacion`, `importe` y `moneda`.
+Resultado esperado: mensaje en `novabank.operaciones.completadas` con el mismo `operationId`, `correlationId`, `tipoOperacion`, `importe` y `moneda`, mas contexto de cuenta (`cuentaOrigenId=null`, `cuentaDestinoId=1`, `cuentaIdPrincipal=1`).
 
 JSON de retirada fallida por saldo insuficiente:
 

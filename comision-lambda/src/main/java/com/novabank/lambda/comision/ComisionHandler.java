@@ -34,7 +34,7 @@ public class ComisionHandler implements RequestHandler<ComisionRequest, Comision
 
         return new ComisionResponse(
                 comision,
-                tasaAplicada.setScale(3, RoundingMode.HALF_UP),
+                tasaAplicada.setScale(4, RoundingMode.HALF_UP),
                 paisDestino,
                 tipoCliente
         );
@@ -42,19 +42,19 @@ public class ComisionHandler implements RequestHandler<ComisionRequest, Comision
 
     private void validar(ComisionRequest request) {
         if (request == null) {
-            throw new ComisionValidationException("La solicitud de comision es obligatoria");
+            throw new InvalidComisionRequestException("La solicitud de comision es obligatoria");
         }
         if (request.getImporteEuros() == null) {
-            throw new ComisionValidationException("importeEuros es obligatorio");
+            throw new InvalidComisionRequestException("importeEuros es obligatorio");
         }
         if (request.getImporteEuros().compareTo(BigDecimal.ZERO) <= 0) {
-            throw new ComisionValidationException("importeEuros debe ser mayor que cero");
+            throw new InvalidComisionRequestException("importeEuros debe ser mayor que cero");
         }
         if (esBlank(request.getPaisDestino())) {
-            throw new ComisionValidationException("paisDestino es obligatorio");
+            throw new InvalidComisionRequestException("paisDestino es obligatorio");
         }
         if (esBlank(request.getTipoCliente())) {
-            throw new ComisionValidationException("tipoCliente es obligatorio");
+            throw new InvalidComisionRequestException("tipoCliente es obligatorio");
         }
     }
 

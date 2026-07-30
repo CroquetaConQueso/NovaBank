@@ -19,7 +19,7 @@ class ComisionHandlerTest {
         );
 
         assertEquals(new BigDecimal("20.00"), response.getComision());
-        assertEquals(new BigDecimal("0.020"), response.getTasaAplicada());
+        assertEquals(new BigDecimal("0.0200"), response.getTasaAplicada());
         assertEquals("US", response.getPaisDestino());
         assertEquals("PARTICULAR", response.getTipoCliente());
     }
@@ -32,7 +32,7 @@ class ComisionHandlerTest {
         );
 
         assertEquals(new BigDecimal("16.00"), response.getComision());
-        assertEquals(new BigDecimal("0.016"), response.getTasaAplicada());
+        assertEquals(new BigDecimal("0.0160"), response.getTasaAplicada());
         assertEquals("EMPRESA", response.getTipoCliente());
     }
 
@@ -44,7 +44,7 @@ class ComisionHandlerTest {
         );
 
         assertEquals(new BigDecimal("25.00"), response.getComision());
-        assertEquals(new BigDecimal("0.025"), response.getTasaAplicada());
+        assertEquals(new BigDecimal("0.0250"), response.getTasaAplicada());
         assertEquals("JP", response.getPaisDestino());
     }
 
@@ -56,15 +56,43 @@ class ComisionHandlerTest {
         );
 
         assertEquals(new BigDecimal("18.00"), response.getComision());
-        assertEquals(new BigDecimal("0.018"), response.getTasaAplicada());
+        assertEquals(new BigDecimal("0.0180"), response.getTasaAplicada());
         assertEquals("PARTICULAR", response.getTipoCliente());
     }
 
     @Test
-    void importeInvalidoLanzaExcepcionControlada() {
+    void importeNullLanzaExcepcionControlada() {
+        ComisionRequest request = new ComisionRequest(null, "US", "PARTICULAR");
+
+        assertThrows(InvalidComisionRequestException.class, () -> handler.handleRequest(request, null));
+    }
+
+    @Test
+    void importeCeroLanzaExcepcionControlada() {
         ComisionRequest request = new ComisionRequest(BigDecimal.ZERO, "US", "PARTICULAR");
 
-        assertThrows(ComisionValidationException.class, () -> handler.handleRequest(request, null));
+        assertThrows(InvalidComisionRequestException.class, () -> handler.handleRequest(request, null));
+    }
+
+    @Test
+    void importeNegativoLanzaExcepcionControlada() {
+        ComisionRequest request = new ComisionRequest(new BigDecimal("-1"), "US", "PARTICULAR");
+
+        assertThrows(InvalidComisionRequestException.class, () -> handler.handleRequest(request, null));
+    }
+
+    @Test
+    void paisBlankLanzaExcepcionControlada() {
+        ComisionRequest request = new ComisionRequest(new BigDecimal("100"), " ", "PARTICULAR");
+
+        assertThrows(InvalidComisionRequestException.class, () -> handler.handleRequest(request, null));
+    }
+
+    @Test
+    void tipoClienteBlankLanzaExcepcionControlada() {
+        ComisionRequest request = new ComisionRequest(new BigDecimal("100"), "US", " ");
+
+        assertThrows(InvalidComisionRequestException.class, () -> handler.handleRequest(request, null));
     }
 
     @Test
@@ -75,7 +103,7 @@ class ComisionHandlerTest {
         );
 
         assertEquals(new BigDecimal("10.00"), response.getComision());
-        assertEquals(new BigDecimal("0.030"), response.getTasaAplicada());
+        assertEquals(new BigDecimal("0.0300"), response.getTasaAplicada());
     }
 
     @Test

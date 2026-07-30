@@ -1,5 +1,6 @@
 package com.novabank.operacion.exception;
 
+import com.novabank.operacion.application.exception.ComisionNoDisponibleException;
 import com.novabank.operacion.dto.ErrorResponseDTO;
 import com.novabank.operacion.tracing.CorrelationIdSupport;
 import org.springframework.http.HttpStatus;
@@ -50,6 +51,11 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(ExchangeRateUnavailableException.class)
     public Mono<ResponseEntity<ErrorResponseDTO>> handleExchangeRateUnavailable(ExchangeRateUnavailableException ex) {
         return response(HttpStatus.SERVICE_UNAVAILABLE, "EXCHANGE_RATE_UNAVAILABLE", ex.getMessage());
+    }
+
+    @ExceptionHandler(ComisionNoDisponibleException.class)
+    public Mono<ResponseEntity<ErrorResponseDTO>> handleComisionNoDisponible(ComisionNoDisponibleException ex) {
+        return response(HttpStatus.SERVICE_UNAVAILABLE, "LAMBDA_COMISION_UNAVAILABLE", ex.getMessage());
     }
 
     @ExceptionHandler(EventoNoPublicadoException.class)

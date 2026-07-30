@@ -14,6 +14,7 @@ import com.novabank.operacion.application.port.in.SolicitarRetiradaUseCase;
 import com.novabank.operacion.application.port.in.SolicitarTransferenciaCommand;
 import com.novabank.operacion.application.port.in.SolicitarTransferenciaUseCase;
 import com.novabank.operacion.application.port.in.TransferenciaAceptadaResult;
+import com.novabank.operacion.application.port.out.ComisionCalculatorPort;
 import com.novabank.operacion.application.port.out.OperacionAsincronaRepositoryPort;
 import com.novabank.operacion.application.port.out.OperacionSolicitadaPublisherPort;
 import com.novabank.operacion.domain.model.EstadoOperacionAsincrona;
@@ -43,13 +44,16 @@ public class OperacionSagaService implements
 
     private final OperacionAsincronaRepositoryPort repositoryPort;
     private final OperacionSolicitadaPublisherPort publisherPort;
+    private final ComisionCalculatorPort comisionCalculatorPort;
 
     public OperacionSagaService(
             OperacionAsincronaRepositoryPort repositoryPort,
-            OperacionSolicitadaPublisherPort publisherPort
+            OperacionSolicitadaPublisherPort publisherPort,
+            ComisionCalculatorPort comisionCalculatorPort
     ) {
         this.repositoryPort = repositoryPort;
         this.publisherPort = publisherPort;
+        this.comisionCalculatorPort = comisionCalculatorPort;
     }
 
     @Override
@@ -85,7 +89,7 @@ public class OperacionSagaService implements
     @Override
     @Transactional
     public Mono<TransferenciaAceptadaResult> solicitarTransferencia(SolicitarTransferenciaCommand command) {
-        return Mono.defer(() -> {
+        return calcularComisionSiAplica(command).flatMap(comision -> Mono.defer(() -> {
             OperacionSolicitada solicitud = nuevaSolicitud(
                     "TRANSFERENCIA",
                     command.cuentaOrigenId(),
@@ -114,9 +118,11 @@ public class OperacionSagaService implements
                             command.cuentaOrigenId(),
                             command.cuentaDestinoId(),
                             command.cantidad(),
-                            MONEDA_LOCAL
+                            MONEDA_LOCAL,
+                            comision.comision(),
+                            comision.tasaAplicada()
                     ));
-        });
+        }));
     }
 
     @Override
@@ -296,5 +302,33 @@ public class OperacionSagaService implements
 
     private String idempotencyState(String idempotencyKey) {
         return idempotencyKey == null || idempotencyKey.isBlank() ? "no-informada" : "informada";
+    }
+
+    private Mono<ComisionCalculada> calcularComisionSiAplica(SolicitarTransferenciaCommand command) {
+        return Mono.defer(() -> {
+            if (!command.esInternacional()) {
+                return Mono.just(ComisionCalculada.noAplicable());
+            }
+
+            validarTransferenciaInternacional(command);
+            return comisionCalculatorPort.calcularComision(new ComisionCommand(
+                    command.cantidad(),
+                    command.paisDestino(),
+                    command.tipoCliente()
+            ));
+        });
+    }
+
+    private void validarTransferenciaInternacional(SolicitarTransferenciaCommand command) {
+        if (isBlank(command.paisDestino())) {
+            throw new IllegalArgumentException("paisDestino es obligatorio para transferencias internacionales");
+        }
+        if (isBlank(command.tipoCliente())) {
+            throw new IllegalArgumentException("tipoCliente es obligatorio para transferencias internacionales");
+        }
+    }
+
+    private boolean isBlank(String value) {
+        return value == null || value.isBlank();
     }
 }

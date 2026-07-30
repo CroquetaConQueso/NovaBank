@@ -5,6 +5,8 @@ import com.novabank.operacion.application.port.in.ConsultarEstadoOperacionQuery;
 import com.novabank.operacion.application.port.in.SolicitarDepositoCommand;
 import com.novabank.operacion.application.port.in.SolicitarRetiradaCommand;
 import com.novabank.operacion.application.port.in.SolicitarTransferenciaCommand;
+import com.novabank.operacion.application.exception.ComisionNoDisponibleException;
+import com.novabank.operacion.application.port.out.ComisionCalculatorPort;
 import com.novabank.operacion.application.port.out.OperacionAsincronaRepositoryPort;
 import com.novabank.operacion.application.port.out.OperacionSolicitadaPublisherPort;
 import com.novabank.operacion.domain.model.EstadoOperacionAsincrona;
@@ -37,6 +39,9 @@ class OperacionSagaServiceTest {
 
     @Mock
     private OperacionSolicitadaPublisherPort publisherPort;
+
+    @Mock
+    private ComisionCalculatorPort comisionCalculatorPort;
 
     @Test
     void solicitarDepositoRegistraSolicitadaPublicaSolicitudYDevuelveAceptada() {
@@ -122,6 +127,112 @@ class OperacionSagaServiceTest {
         assertThat(captor.getValue().cuentaOrigenId()).isEqualTo(10L);
         assertThat(captor.getValue().cuentaDestinoId()).isEqualTo(11L);
         assertThat(captor.getValue().kafkaKey()).isEqualTo(10L);
+        verify(comisionCalculatorPort, never()).calcularComision(any());
+    }
+
+    @Test
+    void solicitarTransferenciaInternacionalCalculaComisionYPublicaSolicitud() {
+        OperacionSagaService service = service();
+        when(repositoryPort.save(any())).thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
+        when(publisherPort.publicar(any())).thenReturn(Mono.empty());
+        when(comisionCalculatorPort.calcularComision(any()))
+                .thenReturn(Mono.just(new ComisionCalculada(
+                        new BigDecimal("16.00"),
+                        new BigDecimal("0.0160"),
+                        "US",
+                        "EMPRESA"
+                )));
+
+        StepVerifier.create(service.solicitarTransferencia(new SolicitarTransferenciaCommand(
+                        10L,
+                        11L,
+                        new BigDecimal("1000.00"),
+                        null,
+                        correlationId(),
+                        true,
+                        "US",
+                        "EMPRESA"
+                )))
+                .assertNext(result -> {
+                    assertThat(result.estado()).isEqualTo("SOLICITADA");
+                    assertThat(result.comision()).isEqualByComparingTo("16.00");
+                    assertThat(result.tasaComision()).isEqualByComparingTo("0.0160");
+                })
+                .verifyComplete();
+
+        ArgumentCaptor<ComisionCommand> comisionCaptor = ArgumentCaptor.forClass(ComisionCommand.class);
+        verify(comisionCalculatorPort).calcularComision(comisionCaptor.capture());
+        assertThat(comisionCaptor.getValue().importeEuros()).isEqualByComparingTo("1000.00");
+        assertThat(comisionCaptor.getValue().paisDestino()).isEqualTo("US");
+        assertThat(comisionCaptor.getValue().tipoCliente()).isEqualTo("EMPRESA");
+        verify(publisherPort).publicar(any(OperacionSolicitada.class));
+    }
+
+    @Test
+    void solicitarTransferenciaInternacionalConLambdaFallidaNoPersisteNiPublica() {
+        OperacionSagaService service = service();
+        when(comisionCalculatorPort.calcularComision(any()))
+                .thenReturn(Mono.error(new ComisionNoDisponibleException("Lambda no disponible")));
+
+        StepVerifier.create(service.solicitarTransferencia(new SolicitarTransferenciaCommand(
+                        10L,
+                        11L,
+                        new BigDecimal("1000.00"),
+                        null,
+                        correlationId(),
+                        true,
+                        "US",
+                        "EMPRESA"
+                )))
+                .expectError(ComisionNoDisponibleException.class)
+                .verify();
+
+        verify(repositoryPort, never()).save(any());
+        verify(publisherPort, never()).publicar(any());
+    }
+
+    @Test
+    void solicitarTransferenciaInternacionalSinPaisDestinoFallaValidacion() {
+        OperacionSagaService service = service();
+
+        StepVerifier.create(service.solicitarTransferencia(new SolicitarTransferenciaCommand(
+                        10L,
+                        11L,
+                        new BigDecimal("1000.00"),
+                        null,
+                        correlationId(),
+                        true,
+                        " ",
+                        "EMPRESA"
+                )))
+                .expectError(IllegalArgumentException.class)
+                .verify();
+
+        verify(comisionCalculatorPort, never()).calcularComision(any());
+        verify(repositoryPort, never()).save(any());
+        verify(publisherPort, never()).publicar(any());
+    }
+
+    @Test
+    void solicitarTransferenciaInternacionalSinTipoClienteFallaValidacion() {
+        OperacionSagaService service = service();
+
+        StepVerifier.create(service.solicitarTransferencia(new SolicitarTransferenciaCommand(
+                        10L,
+                        11L,
+                        new BigDecimal("1000.00"),
+                        null,
+                        correlationId(),
+                        true,
+                        "US",
+                        " "
+                )))
+                .expectError(IllegalArgumentException.class)
+                .verify();
+
+        verify(comisionCalculatorPort, never()).calcularComision(any());
+        verify(repositoryPort, never()).save(any());
+        verify(publisherPort, never()).publicar(any());
     }
 
     @Test
@@ -211,7 +322,7 @@ class OperacionSagaServiceTest {
     }
 
     private OperacionSagaService service() {
-        return new OperacionSagaService(repositoryPort, publisherPort);
+        return new OperacionSagaService(repositoryPort, publisherPort, comisionCalculatorPort);
     }
 
     private UUID correlationId() {

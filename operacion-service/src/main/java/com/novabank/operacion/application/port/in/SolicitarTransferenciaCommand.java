@@ -8,6 +8,23 @@ public record SolicitarTransferenciaCommand(
         Long cuentaDestinoId,
         BigDecimal cantidad,
         String idempotencyKey,
-        UUID correlationId
+        UUID correlationId,
+        Boolean internacional,
+        String paisDestino,
+        String tipoCliente
 ) {
+
+    public SolicitarTransferenciaCommand(
+            Long cuentaOrigenId,
+            Long cuentaDestinoId,
+            BigDecimal cantidad,
+            String idempotencyKey,
+            UUID correlationId
+    ) {
+        this(cuentaOrigenId, cuentaDestinoId, cantidad, idempotencyKey, correlationId, false, null, null);
+    }
+
+    public boolean esInternacional() {
+        return Boolean.TRUE.equals(internacional);
+    }
 }

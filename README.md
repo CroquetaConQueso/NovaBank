@@ -1,6 +1,6 @@
-# NovaBank Digital Services - Modulo 6
+# NovaBank Digital Services - Modulo 7
 
-NovaBank es un proyecto Maven multi-modulo que simula una plataforma bancaria con servicios independientes, comunicacion reactiva y persistencia separada por dominio. El estado actual estabiliza el Modulo 6: mantiene la base reactiva del Modulo 5 e incorpora eventos Kafka, una SAGA basica para operaciones, alertas y consumidores de notificaciones.
+NovaBank es un proyecto Maven multi-modulo que simula una plataforma bancaria con servicios independientes, comunicacion reactiva y persistencia separada por dominio. El estado actual documenta el Modulo 7: mantiene la base Kafka/SAGA del Modulo 6 e incorpora `documento-service`, justificantes en S3 compatible con LocalStack, Lambda local para comisiones internacionales, Docker Compose y preparacion teorica para Kubernetes/AWS.
 
 ## Evolucion Del Proyecto
 
@@ -179,6 +179,35 @@ mvn -pl comision-lambda package
 ```
 
 Detalle operativo: [docs/docker-cloud-native.md](docs/docker-cloud-native.md).
+
+Documentacion final del Modulo 7:
+
+| Documento | Contenido |
+| --- | --- |
+| [docs/modulo-7-cloud-native.md](docs/modulo-7-cloud-native.md) | Resumen funcional, flujos S3/Lambda, Docker Hub y validacion. |
+| [docs/kubernetes-eks-teorico.md](docs/kubernetes-eks-teorico.md) | Migracion teorica a Kubernetes/EKS. |
+| [docs/aws-deployment-options.md](docs/aws-deployment-options.md) | Comparativa EKS, ECS, App Runner, EC2, Lambda y API Gateway. |
+| [docs/aws-security-iam-secrets.md](docs/aws-security-iam-secrets.md) | IAM, secretos y criterios de seguridad. |
+| [docs/aws-api-gateway.md](docs/aws-api-gateway.md) | Relacion entre Spring Cloud Gateway y AWS API Gateway. |
+| [docs/aws-cost-model.md](docs/aws-cost-model.md) | Fuentes de coste y controles preventivos. |
+| [docs/checklist-entrega-m7.md](docs/checklist-entrega-m7.md) | Checklist de entrega. |
+
+La carpeta `k8s/` contiene manifiestos de ejemplo para una evolucion teorica a EKS. Usan imagenes placeholder `DOCKERHUB_USER/novabank-*:7.0.0` y secretos de ejemplo; no deben aplicarse en produccion sin sustitucion de valores, TLS, politicas IAM y configuracion de observabilidad.
+
+Preparar imagenes para Docker Hub:
+
+```powershell
+$env:DOCKERHUB_USER = "usuario-dockerhub"
+$env:VERSION = "7.0.0"
+.\scripts\tag-docker-images.ps1
+```
+
+Publicar requiere login y confirmacion manual:
+
+```powershell
+docker login
+.\scripts\push-docker-images.ps1
+```
 
 ## Estructura Del Repositorio
 

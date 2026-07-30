@@ -1,0 +1,87 @@
+server:
+  port: 8080
+
+spring:
+  cloud:
+    gateway:
+      discovery:
+        locator:
+          enabled: true
+          lower-case-service-id: true
+      routes:
+        - id: auth-server
+          uri: lb://auth-server
+          predicates:
+            - Path=/api/auth/**
+        - id: cliente-service
+          uri: lb://cliente-service
+          predicates:
+            - Path=/api/clientes/**
+        - id: cuenta-service
+          uri: lb://cuenta-service
+          predicates:
+            - Path=/api/cuentas/**,/internal/cuentas/**
+        - id: operacion-service
+          uri: lb://operacion-service
+          predicates:
+            - Path=/api/operaciones/**
+        - id: exchange-rate-mock-service
+          uri: lb://exchange-rate-mock-service
+          predicates:
+            - Path=/api/exchange-rate/**
+        - id: documento-service
+          uri: lb://documento-service
+          predicates:
+            - Path=/api/documentos/**
+        - id: openapi-auth-server
+          uri: lb://auth-server
+          predicates:
+            - Path=/v3/api-docs/auth-server
+          filters:
+            - RewritePath=/v3/api-docs/auth-server, /v3/api-docs
+        - id: openapi-cliente-service
+          uri: lb://cliente-service
+          predicates:
+            - Path=/v3/api-docs/cliente-service
+          filters:
+            - RewritePath=/v3/api-docs/cliente-service, /v3/api-docs
+        - id: openapi-cuenta-service
+          uri: lb://cuenta-service
+          predicates:
+            - Path=/v3/api-docs/cuenta-service
+          filters:
+            - RewritePath=/v3/api-docs/cuenta-service, /v3/api-docs
+        - id: openapi-operacion-service
+          uri: lb://operacion-service
+          predicates:
+            - Path=/v3/api-docs/operacion-service
+          filters:
+            - RewritePath=/v3/api-docs/operacion-service, /v3/api-docs
+        - id: openapi-exchange-rate-mock-service
+          uri: lb://exchange-rate-mock-service
+          predicates:
+            - Path=/v3/api-docs/exchange-rate-mock-service
+          filters:
+            - RewritePath=/v3/api-docs/exchange-rate-mock-service, /v3/api-docs
+        - id: openapi-documento-service
+          uri: lb://documento-service
+          predicates:
+            - Path=/v3/api-docs/documento-service
+          filters:
+            - RewritePath=/v3/api-docs/documento-service, /v3/api-docs
+
+springdoc:
+  swagger-ui:
+    urls:
+      - name: auth-server
+        url: /v3/api-docs/auth-server
+      - name: cliente-service
+        url: /v3/api-docs/cliente-service
+      - name: cuenta-service
+        url: /v3/api-docs/cuenta-service
+      - name: operacion-service
+        url: /v3/api-docs/operacion-service
+      - name: exchange-rate-mock-service
+        url: /v3/api-docs/exchange-rate-mock-service
+      - name: documento-service
+        url: /v3/api-docs/documento-service

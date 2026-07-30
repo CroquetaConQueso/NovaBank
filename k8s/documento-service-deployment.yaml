@@ -1,0 +1,60 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: documento-service
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: documento-service
+  template:
+    metadata:
+      labels:
+        app: documento-service
+    spec:
+      containers:
+        - name: documento-service
+          image: DOCKERHUB_USER/novabank-documento-service:7.0.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8086
+          envFrom:
+            - configMapRef:
+                name: novabank-config
+            - secretRef:
+                name: novabank-secrets-example
+          env:
+            - name: SERVER_PORT
+              value: "8086"
+          readinessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8086
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8086
+            initialDelaySeconds: 60
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "512Mi"
+            limits:
+              cpu: "1"
+              memory: "1Gi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: documento-service
+spec:
+  selector:
+    app: documento-service
+  ports:
+    - name: http
+      port: 8086
+      targetPort: 8086
+  type: ClusterIP

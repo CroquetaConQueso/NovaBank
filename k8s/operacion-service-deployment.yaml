@@ -1,0 +1,60 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: operacion-service
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: operacion-service
+  template:
+    metadata:
+      labels:
+        app: operacion-service
+    spec:
+      containers:
+        - name: operacion-service
+          image: DOCKERHUB_USER/novabank-operacion-service:7.0.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8083
+          envFrom:
+            - configMapRef:
+                name: novabank-config
+            - secretRef:
+                name: novabank-secrets-example
+          env:
+            - name: SERVER_PORT
+              value: "8083"
+          readinessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8083
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8083
+            initialDelaySeconds: 60
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "512Mi"
+            limits:
+              cpu: "1"
+              memory: "1Gi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: operacion-service
+spec:
+  selector:
+    app: operacion-service
+  ports:
+    - name: http
+      port: 8083
+      targetPort: 8083
+  type: ClusterIP

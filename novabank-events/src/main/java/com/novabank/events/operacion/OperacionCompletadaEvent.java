@@ -12,6 +12,9 @@ public record OperacionCompletadaEvent(
         Instant occurredAt,
         UUID operationId,
         String tipoOperacion,
+        Long cuentaOrigenId,
+        Long cuentaDestinoId,
+        Long cuentaIdPrincipal,
         Long movimientoId,
         BigDecimal importe,
         String moneda

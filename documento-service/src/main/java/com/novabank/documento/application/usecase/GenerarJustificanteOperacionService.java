@@ -18,8 +18,6 @@ import java.time.format.DateTimeFormatter;
 @Service
 public class GenerarJustificanteOperacionService implements GenerarJustificanteOperacionUseCase {
 
-    public static final long CUENTA_NO_DETERMINADA = 0L;
-
     private static final DateTimeFormatter YEAR = DateTimeFormatter.ofPattern("yyyy").withZone(ZoneOffset.UTC);
     private static final DateTimeFormatter MONTH = DateTimeFormatter.ofPattern("MM").withZone(ZoneOffset.UTC);
 
@@ -47,6 +45,9 @@ public class GenerarJustificanteOperacionService implements GenerarJustificanteO
         }
         if (command.tipoOperacion() == null || command.tipoOperacion().isBlank()) {
             return Mono.error(new IllegalArgumentException("tipoOperacion es obligatorio para generar justificante"));
+        }
+        if (command.cuentaId() == null) {
+            return Mono.error(new IllegalArgumentException("cuentaIdPrincipal es obligatorio para generar justificante"));
         }
         return Mono.empty();
     }
@@ -76,15 +77,6 @@ public class GenerarJustificanteOperacionService implements GenerarJustificanteO
     }
 
     private Long resolverCuenta(GenerarJustificanteOperacionCommand command) {
-        if (command.cuentaId() != null) {
-            return command.cuentaId();
-        }
-        if ("DEPOSITO".equalsIgnoreCase(command.tipoOperacion()) && command.cuentaDestinoId() != null) {
-            return command.cuentaDestinoId();
-        }
-        if (command.cuentaOrigenId() != null) {
-            return command.cuentaOrigenId();
-        }
-        return CUENTA_NO_DETERMINADA;
+        return command.cuentaId();
     }
 }

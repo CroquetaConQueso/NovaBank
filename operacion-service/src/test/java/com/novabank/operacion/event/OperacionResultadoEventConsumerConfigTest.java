@@ -95,6 +95,9 @@ class OperacionResultadoEventConsumerConfigTest {
                 UUID.fromString("33333333-3333-3333-3333-333333333333"),
                 "DEPOSITO",
                 null,
+                10L,
+                10L,
+                null,
                 new BigDecimal("50.00"),
                 "EUR"
         );

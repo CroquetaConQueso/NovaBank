@@ -18,6 +18,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.messaging.support.MessageBuilder.withPayload;
@@ -30,8 +31,8 @@ class OperacionCompletadaDocumentoConsumerConfigTest {
         when(useCase.generar(any())).thenReturn(Mono.just(new DocumentoOperacion(
                 DocumentoId.nuevo(),
                 UUID.randomUUID(),
-                0L,
-                "cuentas/0/operaciones/2026/07/documento.json",
+                10L,
+                "cuentas/10/operaciones/2026/07/documento.json",
                 TipoDocumento.JUSTIFICANTE_OPERACION,
                 "application/json",
                 Instant.now()
@@ -46,6 +47,9 @@ class OperacionCompletadaDocumentoConsumerConfigTest {
                 Instant.parse("2026-07-08T08:00:00Z"),
                 operationId,
                 "DEPOSITO",
+                null,
+                10L,
+                10L,
                 99L,
                 new BigDecimal("25.00"),
                 "EUR"
@@ -57,7 +61,31 @@ class OperacionCompletadaDocumentoConsumerConfigTest {
         assertThat(captor.getValue().operationId()).isEqualTo(operationId);
         assertThat(captor.getValue().correlationId()).isEqualTo(correlationId);
         assertThat(captor.getValue().tipoOperacion()).isEqualTo("DEPOSITO");
-        assertThat(captor.getValue().cuentaId()).isNull();
+        assertThat(captor.getValue().cuentaOrigenId()).isNull();
+        assertThat(captor.getValue().cuentaDestinoId()).isEqualTo(10L);
+        assertThat(captor.getValue().cuentaId()).isEqualTo(10L);
         assertThat(captor.getValue().movimientoId()).isEqualTo(99L);
+    }
+
+    @Test
+    void noInvocaUseCaseSiElEventoNoTraeCuentaPrincipal() {
+        GenerarJustificanteOperacionUseCase useCase = mock(GenerarJustificanteOperacionUseCase.class);
+        OperacionCompletadaDocumentoConsumerConfig config = new OperacionCompletadaDocumentoConsumerConfig();
+
+        config.generarJustificanteOperacion(useCase).accept(Flux.just(withPayload(new OperacionCompletadaEvent(
+                UUID.randomUUID(),
+                UUID.randomUUID(),
+                Instant.parse("2026-07-08T08:00:00Z"),
+                UUID.randomUUID(),
+                "DEPOSITO",
+                null,
+                10L,
+                null,
+                99L,
+                new BigDecimal("25.00"),
+                "EUR"
+        )).build()));
+
+        verify(useCase, never()).generar(any());
     }
 }

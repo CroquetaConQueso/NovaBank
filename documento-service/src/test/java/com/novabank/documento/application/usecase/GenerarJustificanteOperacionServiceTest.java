@@ -67,7 +67,7 @@ class GenerarJustificanteOperacionServiceTest {
                         "TRANSFERENCIA",
                         10L,
                         11L,
-                        null,
+                        10L,
                         99L,
                         new BigDecimal("25.00"),
                         "EUR"
@@ -85,10 +85,11 @@ class GenerarJustificanteOperacionServiceTest {
     }
 
     @Test
-    void siElEventoNoTraeCuentaUsaIndiceTecnicoCero() {
+    void siElEventoNoTraeCuentaPrincipalNoGuardaJustificante() {
+        CapturingStoragePort storagePort = new CapturingStoragePort();
         GenerarJustificanteOperacionService service = new GenerarJustificanteOperacionService(
                 command -> Mono.just(new GeneratedJustificante(new byte[]{1}, "application/json")),
-                new CapturingStoragePort()
+                storagePort
         );
 
         StepVerifier.create(service.generar(new GenerarJustificanteOperacionCommand(
@@ -104,14 +105,18 @@ class GenerarJustificanteOperacionServiceTest {
                         new BigDecimal("25.00"),
                         "EUR"
                 )))
-                .assertNext(documento -> assertThat(documento.cuentaId())
-                        .isEqualTo(GenerarJustificanteOperacionService.CUENTA_NO_DETERMINADA))
-                .verifyComplete();
+                .expectErrorMessage("cuentaIdPrincipal es obligatorio para generar justificante")
+                .verify();
+
+        assertThat(storagePort.guardado).isFalse();
     }
 
     private static class CapturingStoragePort implements DocumentoStoragePort {
+        private boolean guardado;
+
         @Override
         public Mono<DocumentoOperacion> guardar(DocumentoOperacion documento, byte[] contenido) {
+            guardado = true;
             return Mono.just(documento);
         }
 

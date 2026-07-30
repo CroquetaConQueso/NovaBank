@@ -41,6 +41,9 @@ public class OperacionResultadoEventPublisher implements OperacionResultadoPubli
                 Instant.now(),
                 solicitud.operationId(),
                 solicitud.tipoOperacion(),
+                cuentaOrigenId(solicitud),
+                cuentaDestinoId(solicitud),
+                cuentaIdPrincipal(solicitud),
                 null,
                 solicitud.importe(),
                 solicitud.moneda()
@@ -96,6 +99,32 @@ public class OperacionResultadoEventPublisher implements OperacionResultadoPubli
         return MessageBuilder.withPayload(event)
                 .setHeader(MessageHeaders.CONTENT_TYPE, MimeTypeUtils.APPLICATION_JSON_VALUE)
                 .build();
+    }
+
+    private Long cuentaOrigenId(ProcesarOperacionSolicitadaCommand solicitud) {
+        return switch (tipoNormalizado(solicitud)) {
+            case "RETIRO", "RETIRADA", "TRANSFERENCIA" -> solicitud.cuentaOrigenId();
+            default -> null;
+        };
+    }
+
+    private Long cuentaDestinoId(ProcesarOperacionSolicitadaCommand solicitud) {
+        return switch (tipoNormalizado(solicitud)) {
+            case "DEPOSITO", "TRANSFERENCIA" -> solicitud.cuentaDestinoId();
+            default -> null;
+        };
+    }
+
+    private Long cuentaIdPrincipal(ProcesarOperacionSolicitadaCommand solicitud) {
+        return switch (tipoNormalizado(solicitud)) {
+            case "DEPOSITO" -> solicitud.cuentaDestinoId();
+            case "RETIRO", "RETIRADA", "TRANSFERENCIA" -> solicitud.cuentaOrigenId();
+            default -> solicitud.cuentaOrigenId() != null ? solicitud.cuentaOrigenId() : solicitud.cuentaDestinoId();
+        };
+    }
+
+    private String tipoNormalizado(ProcesarOperacionSolicitadaCommand solicitud) {
+        return solicitud.tipoOperacion() == null ? "" : solicitud.tipoOperacion().trim().toUpperCase(java.util.Locale.ROOT);
     }
 
     private ProcesarOperacionSolicitadaCommand toCommand(OperacionSolicitadaEvent event) {

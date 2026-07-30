@@ -12,7 +12,7 @@ NovaBank es un proyecto Maven multi-modulo que simula una plataforma bancaria co
 | Modulo 4 | Transicion a microservicios sincronicos con Spring Cloud. |
 | Modulo 5 | Migracion de Spring MVC a WebFlux, R2DBC, WebClient, SSE, idempotencia, resiliencia y observabilidad. |
 | Modulo 6 | Kafka, eventos compartidos, operaciones asincronas, SAGA basica, alertas y Swagger agregado. |
-| Modulo 7 | En curso: `documento-service` integra justificantes JSON en S3 compatible con LocalStack, Lambda calcula comisiones internacionales y la plataforma local se dockeriza con Docker Compose. |
+| Modulo 7 | Estabilizacion final: `documento-service` integra justificantes JSON en S3 compatible con LocalStack, Lambda calcula comisiones internacionales, la plataforma local se dockeriza con Docker Compose y la entrega incluye documentacion AWS/Kubernetes/Docker Hub. |
 
 ## Capacidades Principales
 
@@ -185,12 +185,15 @@ Documentacion final del Modulo 7:
 | Documento | Contenido |
 | --- | --- |
 | [docs/modulo-7-cloud-native.md](docs/modulo-7-cloud-native.md) | Resumen funcional, flujos S3/Lambda, Docker Hub y validacion. |
+| [docs/docker-cloud-native.md](docs/docker-cloud-native.md) | Operativa Docker Compose, LocalStack, Kafka UI y servicios locales. |
+| [docs/lambda-comisiones.md](docs/lambda-comisiones.md) | Lambda Java de comisiones internacionales y pruebas LocalStack. |
 | [docs/kubernetes-eks-teorico.md](docs/kubernetes-eks-teorico.md) | Migracion teorica a Kubernetes/EKS. |
 | [docs/aws-deployment-options.md](docs/aws-deployment-options.md) | Comparativa EKS, ECS, App Runner, EC2, Lambda y API Gateway. |
 | [docs/aws-security-iam-secrets.md](docs/aws-security-iam-secrets.md) | IAM, secretos y criterios de seguridad. |
 | [docs/aws-api-gateway.md](docs/aws-api-gateway.md) | Relacion entre Spring Cloud Gateway y AWS API Gateway. |
 | [docs/aws-cost-model.md](docs/aws-cost-model.md) | Fuentes de coste y controles preventivos. |
 | [docs/checklist-entrega-m7.md](docs/checklist-entrega-m7.md) | Checklist de entrega. |
+| [docs/reporte-validacion-m7.md](docs/reporte-validacion-m7.md) | Resultado de la validacion final, bloqueos de entorno y comandos ejecutados. |
 
 La carpeta `k8s/` contiene manifiestos de ejemplo para una evolucion teorica a EKS. Usan imagenes placeholder `DOCKERHUB_USER/novabank-*:7.0.0` y secretos de ejemplo; no deben aplicarse en produccion sin sustitucion de valores, TLS, politicas IAM y configuracion de observabilidad.
 
@@ -207,6 +210,57 @@ Publicar requiere login y confirmacion manual:
 ```powershell
 docker login
 .\scripts\push-docker-images.ps1
+```
+
+Validacion final recomendada:
+
+```powershell
+git status
+git diff --check
+mvn clean test-compile
+mvn clean test
+mvn -pl documento-service test
+mvn -pl comision-lambda test
+mvn -pl notificacion-service test
+```
+
+Si Docker Desktop no esta disponible, los tests Testcontainers pueden fallar con `Could not find a valid Docker environment`. En ese caso, ejecutar los focos sin Docker documentados en [docs/reporte-validacion-m7.md](docs/reporte-validacion-m7.md).
+
+Validacion Docker/LocalStack cuando el entorno este disponible:
+
+```powershell
+docker compose config
+docker compose build
+docker compose up -d
+docker compose ps
+curl http://localhost:8761/actuator/health
+curl http://localhost:8888/actuator/health
+curl http://localhost:8080/actuator/health
+curl http://localhost:4566/_localstack/health
+aws --endpoint-url=http://localhost:4566 s3 ls
+```
+
+Desplegar e invocar Lambda local:
+
+```powershell
+mvn -pl comision-lambda package
+.\scripts\deploy-comision-lambda-localstack.ps1
+.\scripts\invoke-comision-lambda-localstack.ps1
+```
+
+El uso de AWS real es opcional y no esta activado por defecto. La configuracion local usa LocalStack y credenciales dummy `test`.
+
+Comandos finales sugeridos, solo tras aprobar la PR final:
+
+```powershell
+git checkout develop
+git pull origin develop
+git checkout main
+git pull origin main
+git merge develop
+git tag v7.0.0
+git push origin main
+git push origin v7.0.0
 ```
 
 ## Estructura Del Repositorio

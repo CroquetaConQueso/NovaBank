@@ -142,7 +142,10 @@ public class OperacionController {
                                 request.cuentaDestinoId(),
                                 request.cantidad(),
                                 idempotencyKey,
-                                resolveCorrelationId(CorrelationIdSupport.fromContext(context))
+                                resolveCorrelationId(CorrelationIdSupport.fromContext(context)),
+                                request.internacional(),
+                                request.paisDestino(),
+                                request.tipoCliente()
                         )
                 ))
                 .map(this::toTransferenciaAceptadaResponse)
@@ -224,7 +227,9 @@ public class OperacionController {
                 result.cuentaOrigenId(),
                 result.cuentaDestinoId(),
                 result.importe(),
-                result.moneda()
+                result.moneda(),
+                result.comision(),
+                result.tasaComision()
         );
     }
 

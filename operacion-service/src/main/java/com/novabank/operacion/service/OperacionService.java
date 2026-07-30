@@ -199,7 +199,10 @@ public class OperacionService {
                                 request.cuentaDestinoId(),
                                 request.cantidad(),
                                 idempotencyKey,
-                                resolveCorrelationId(CorrelationIdSupport.fromContext(contextView))
+                                resolveCorrelationId(CorrelationIdSupport.fromContext(contextView)),
+                                request.internacional(),
+                                request.paisDestino(),
+                                request.tipoCliente()
                         )
                 ))
                 .map(this::toTransferenciaAceptadaResponse);
@@ -441,7 +444,9 @@ public class OperacionService {
                 result.cuentaOrigenId(),
                 result.cuentaDestinoId(),
                 result.importe(),
-                result.moneda()
+                result.moneda(),
+                result.comision(),
+                result.tasaComision()
         );
     }
 

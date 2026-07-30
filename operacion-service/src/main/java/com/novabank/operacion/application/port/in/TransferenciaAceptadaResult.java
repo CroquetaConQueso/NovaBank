@@ -11,6 +11,21 @@ public record TransferenciaAceptadaResult(
         Long cuentaOrigenId,
         Long cuentaDestinoId,
         BigDecimal importe,
-        String moneda
+        String moneda,
+        BigDecimal comision,
+        BigDecimal tasaComision
 ) {
+
+    public TransferenciaAceptadaResult(
+            UUID operationId,
+            String estado,
+            String mensaje,
+            String tipoOperacion,
+            Long cuentaOrigenId,
+            Long cuentaDestinoId,
+            BigDecimal importe,
+            String moneda
+    ) {
+        this(operationId, estado, mensaje, tipoOperacion, cuentaOrigenId, cuentaDestinoId, importe, moneda, null, null);
+    }
 }

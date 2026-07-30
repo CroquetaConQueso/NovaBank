@@ -535,6 +535,48 @@ Ejemplo de `MovimientoRegistradoEvent`:
 
 Nota: el contrato actual de `MovimientoRegistradoEvent` no incluye `operationId`; se mantiene compatible para que `mvn -pl cuenta-service test` funcione sin requerir instalar previamente el modulo comun. Si se versiona el contrato de eventos en una iteracion posterior, `operationId` puede anadirse de forma explicita.
 
+## Comisiones Internacionales Con Lambda Y LocalStack
+
+`operacion-service` invoca la Lambda `novabank-comision` para transferencias asincronas marcadas como internacionales. La integracion se mantiene hexagonal: el caso de uso depende de `ComisionCalculatorPort` y el SDK de AWS queda aislado en `adapter/out/lambda`.
+
+Configuracion local:
+
+```yaml
+novabank:
+  aws:
+    region: eu-west-1
+    endpoint-override: http://localhost:4566
+  lambda:
+    comision-function-name: novabank-comision
+```
+
+Ejemplo:
+
+```json
+{
+  "cuentaOrigenId": 10,
+  "cuentaDestinoId": 11,
+  "cantidad": 1000.00,
+  "internacional": true,
+  "paisDestino": "US",
+  "tipoCliente": "EMPRESA"
+}
+```
+
+Las transferencias ordinarias sin los campos nuevos siguen funcionando. Si la Lambda no esta disponible, la transferencia internacional falla con `503/LAMBDA_COMISION_UNAVAILABLE` antes de publicar eventos Kafka; `operacion-service` no calcula una comision por defecto y no usa AWS real.
+
+Preparacion local:
+
+```powershell
+$env:AWS_ACCESS_KEY_ID = "test"
+$env:AWS_SECRET_ACCESS_KEY = "test"
+$env:AWS_DEFAULT_REGION = "eu-west-1"
+.\scripts\deploy-comision-lambda-localstack.ps1
+mvn -pl operacion-service spring-boot:run
+```
+
+`operacion-service` usa `DefaultCredentialsProvider`; esas variables son credenciales ficticias para LocalStack, no credenciales AWS reales.
+
 ## Alertas De Saldo Bajo
 
 `cuenta-service` evalua el saldo resultante despues de cada movimiento confirmado. Si `saldoResultante` es menor que `novabank.alertas.saldo-bajo.umbral`, publica un `AlertaSaldoBajoEvent` en `novabank.alertas.saldo-bajo` mediante Spring Cloud Stream y `StreamBridge`.

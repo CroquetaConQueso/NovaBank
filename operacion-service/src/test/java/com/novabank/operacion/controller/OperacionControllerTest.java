@@ -1,11 +1,13 @@
 package com.novabank.operacion.controller;
 
 import com.novabank.operacion.adapter.in.web.OperacionController;
+import com.novabank.operacion.application.exception.ComisionNoDisponibleException;
 import com.novabank.operacion.application.port.in.ConsultarEstadoOperacionUseCase;
 import com.novabank.operacion.application.port.in.EstadoOperacionAsincronaResult;
 import com.novabank.operacion.application.port.in.OperacionAceptadaResult;
 import com.novabank.operacion.application.port.in.SolicitarDepositoUseCase;
 import com.novabank.operacion.application.port.in.SolicitarRetiradaUseCase;
+import com.novabank.operacion.application.port.in.SolicitarTransferenciaCommand;
 import com.novabank.operacion.application.port.in.SolicitarTransferenciaUseCase;
 import com.novabank.operacion.application.port.in.TransferenciaAceptadaResult;
 import com.novabank.operacion.dto.MovimientoResponseDTO;
@@ -42,7 +44,10 @@ import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.nullable;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import org.mockito.ArgumentCaptor;
 
 @WebFluxTest(OperacionController.class)
 @Import(GlobalExceptionHandler.class)
@@ -119,6 +124,114 @@ class OperacionControllerTest {
                 .jsonPath("$.cuentaOrigenId").isEqualTo(10)
                 .jsonPath("$.cuentaDestinoId").isEqualTo(11)
                 .jsonPath("$.moneda").isEqualTo("EUR");
+
+        ArgumentCaptor<SolicitarTransferenciaCommand> captor =
+                ArgumentCaptor.forClass(SolicitarTransferenciaCommand.class);
+        verify(solicitarTransferenciaUseCase).solicitarTransferencia(captor.capture());
+        assertThat(captor.getValue().esInternacional()).isFalse();
+        assertThat(captor.getValue().paisDestino()).isNull();
+        assertThat(captor.getValue().tipoCliente()).isNull();
+    }
+
+    @Test
+    void transferenciaInternacionalMapeaCamposAlCommand() {
+        when(solicitarTransferenciaUseCase.solicitarTransferencia(any()))
+                .thenReturn(Mono.just(new TransferenciaAceptadaResult(
+                        UUID.fromString("33333333-3333-3333-3333-333333333333"),
+                        "SOLICITADA",
+                        "TRANSFERENCIA solicitada para procesamiento asincrono",
+                        "TRANSFERENCIA",
+                        10L,
+                        11L,
+                        new BigDecimal("1000.00"),
+                        "EUR",
+                        new BigDecimal("16.00"),
+                        new BigDecimal("0.0160")
+                )));
+
+        webTestClient.post()
+                .uri("/api/operaciones/transferencia")
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(new TransferenciaRequestDTO(
+                        10L,
+                        11L,
+                        new BigDecimal("1000.00"),
+                        true,
+                        "US",
+                        "EMPRESA"
+                ))
+                .exchange()
+                .expectStatus().isAccepted()
+                .expectBody()
+                .jsonPath("$.comision").isEqualTo(16.00)
+                .jsonPath("$.tasaComision").isEqualTo(0.0160);
+
+        ArgumentCaptor<SolicitarTransferenciaCommand> captor =
+                ArgumentCaptor.forClass(SolicitarTransferenciaCommand.class);
+        verify(solicitarTransferenciaUseCase).solicitarTransferencia(captor.capture());
+        assertThat(captor.getValue().esInternacional()).isTrue();
+        assertThat(captor.getValue().paisDestino()).isEqualTo("US");
+        assertThat(captor.getValue().tipoCliente()).isEqualTo("EMPRESA");
+    }
+
+    @Test
+    void transferenciaInternacionalConLambdaFallidaDevuelve503() {
+        when(solicitarTransferenciaUseCase.solicitarTransferencia(any()))
+                .thenReturn(Mono.error(new ComisionNoDisponibleException("Lambda no disponible")));
+
+        webTestClient.post()
+                .uri("/api/operaciones/transferencia")
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(new TransferenciaRequestDTO(
+                        10L,
+                        11L,
+                        new BigDecimal("1000.00"),
+                        true,
+                        "US",
+                        "EMPRESA"
+                ))
+                .exchange()
+                .expectStatus().isEqualTo(503)
+                .expectBody()
+                .jsonPath("$.code").isEqualTo("LAMBDA_COMISION_UNAVAILABLE");
+    }
+
+    @Test
+    void transferenciaInternacionalSinPaisDestinoDevuelve400() {
+        webTestClient.post()
+                .uri("/api/operaciones/transferencia")
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(new TransferenciaRequestDTO(
+                        10L,
+                        11L,
+                        new BigDecimal("1000.00"),
+                        true,
+                        " ",
+                        "EMPRESA"
+                ))
+                .exchange()
+                .expectStatus().isBadRequest()
+                .expectBody()
+                .jsonPath("$.code").isEqualTo("VALIDATION_ERROR");
+    }
+
+    @Test
+    void transferenciaInternacionalSinTipoClienteDevuelve400() {
+        webTestClient.post()
+                .uri("/api/operaciones/transferencia")
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(new TransferenciaRequestDTO(
+                        10L,
+                        11L,
+                        new BigDecimal("1000.00"),
+                        true,
+                        "US",
+                        " "
+                ))
+                .exchange()
+                .expectStatus().isBadRequest()
+                .expectBody()
+                .jsonPath("$.code").isEqualTo("VALIDATION_ERROR");
     }
 
     @Test

@@ -2,7 +2,7 @@
 
 ## Proposito
 
-`comision-lambda` calcula la comision aplicable a una transferencia internacional. En esta rama solo se crea el artefacto Lambda independiente; la integracion con `operacion-service` queda para M7-06.
+`comision-lambda` calcula la comision aplicable a una transferencia internacional. `operacion-service` la invoca para transferencias asincronas marcadas como internacionales, antes de iniciar la SAGA Kafka.
 
 ## Por que no usa Spring Boot
 
@@ -98,3 +98,53 @@ Payload de ejemplo:
 ```
 
 La respuesta se escribe por defecto en `comision-lambda-response.json`.
+
+## Integracion con operacion-service
+
+`operacion-service` usa un puerto de aplicacion (`ComisionCalculatorPort`) y un adaptador de salida (`LambdaComisionCalculatorAdapter`). El dominio y la aplicacion no dependen del SDK de AWS; `LambdaAsyncClient`, `InvokeRequest` y los DTOs JSON quedan dentro de `adapter/out/lambda`.
+
+Configuracion local:
+
+```yaml
+novabank:
+  aws:
+    region: eu-west-1
+    endpoint-override: http://localhost:4566
+  lambda:
+    comision-function-name: novabank-comision
+```
+
+Endpoint:
+
+```http
+POST /api/operaciones/transferencia
+```
+
+Ejemplo de transferencia internacional:
+
+```json
+{
+  "cuentaOrigenId": 10,
+  "cuentaDestinoId": 11,
+  "cantidad": 1000.00,
+  "internacional": true,
+  "paisDestino": "US",
+  "tipoCliente": "EMPRESA"
+}
+```
+
+Si `internacional` es `false` o no se informa, el endpoint mantiene el comportamiento anterior y no invoca Lambda.
+
+Si `internacional` es `true`, `paisDestino` y `tipoCliente` son obligatorios. Si la Lambda no responde, devuelve error o el payload no se puede procesar, `operacion-service` devuelve `503` con codigo `LAMBDA_COMISION_UNAVAILABLE`. En ese caso no se inventa una comision por defecto, no se publica `OperacionSolicitadaEvent` y la SAGA no se inicia.
+
+Antes de probar una transferencia internacional en local:
+
+```powershell
+$env:AWS_ACCESS_KEY_ID = "test"
+$env:AWS_SECRET_ACCESS_KEY = "test"
+$env:AWS_DEFAULT_REGION = "eu-west-1"
+.\scripts\deploy-comision-lambda-localstack.ps1
+mvn -pl operacion-service spring-boot:run
+```
+
+`operacion-service` usa `DefaultCredentialsProvider`; las variables anteriores son credenciales ficticias para LocalStack, no credenciales AWS reales.

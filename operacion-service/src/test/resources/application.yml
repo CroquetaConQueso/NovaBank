@@ -12,3 +12,13 @@ spring:
 eureka:
   client:
     enabled: false
+
+novabank:
+  aws:
+    region: eu-west-1
+    endpoint-override: http://localhost:4566
+  lambda:
+    comision-function-name: novabank-comision
+  kafka-streams:
+    operaciones-sospechosas:
+      enabled: false

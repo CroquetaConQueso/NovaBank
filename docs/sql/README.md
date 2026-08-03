@@ -37,7 +37,7 @@ psql -U postgres -f docs/sql/04-novabank-operaciones.sql
 | `01-novabank-auth.sql` | `novabank_auth` | `auth-server` | `usuarios` |
 | `02-novabank-clientes.sql` | `novabank_clientes` | `cliente-service` | `clientes` |
 | `03-novabank-cuentas.sql` | `novabank_cuentas` | `cuenta-service` | `cuentas`, `account_number_sequence`, `operaciones_idempotentes` |
-| `04-novabank-operaciones.sql` | `novabank_operaciones` | `operacion-service` | `movimientos`, `operaciones_publicas_idempotentes` |
+| `04-novabank-operaciones.sql` | `novabank_operaciones` | `operacion-service` | `movimientos`, `operaciones_publicas_idempotentes`, `operaciones_asincronas` |
 
 ## Relacion Con R2DBC
 

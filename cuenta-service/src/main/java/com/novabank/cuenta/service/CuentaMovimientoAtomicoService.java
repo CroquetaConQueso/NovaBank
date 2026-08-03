@@ -4,6 +4,7 @@ import com.novabank.cuenta.dto.AplicarMovimientoRequestDTO;
 import com.novabank.cuenta.dto.AplicarMovimientoResponseDTO;
 import com.novabank.cuenta.dto.CuentaResponseDTO;
 import com.novabank.cuenta.dto.MovimientoEventDTO;
+import com.novabank.cuenta.application.port.out.MovimientoRegistradoPublisherPort;
 import com.novabank.cuenta.exception.IdempotencyConflictException;
 import com.novabank.cuenta.exception.InsufficientBalanceException;
 import com.novabank.cuenta.exception.ResourceNotFoundException;
@@ -36,18 +37,21 @@ public class CuentaMovimientoAtomicoService {
     private final CuentaRepository cuentaRepository;
     private final OperacionIdempotenteRepository operacionIdempotenteRepository;
     private final CuentaMapper cuentaMapper;
-    private final MovimientoEventService movimientoEventService;
+    private final MovimientoRegistradoPublisherPort movimientoRegistradoPublisherPort;
+    private final SaldoBajoAlertService saldoBajoAlertService;
 
     public CuentaMovimientoAtomicoService(
             CuentaRepository cuentaRepository,
             OperacionIdempotenteRepository operacionIdempotenteRepository,
             CuentaMapper cuentaMapper,
-            MovimientoEventService movimientoEventService
+            MovimientoRegistradoPublisherPort movimientoRegistradoPublisherPort,
+            SaldoBajoAlertService saldoBajoAlertService
     ) {
         this.cuentaRepository = cuentaRepository;
         this.operacionIdempotenteRepository = operacionIdempotenteRepository;
         this.cuentaMapper = cuentaMapper;
-        this.movimientoEventService = movimientoEventService;
+        this.movimientoRegistradoPublisherPort = movimientoRegistradoPublisherPort;
+        this.saldoBajoAlertService = saldoBajoAlertService;
     }
 
     /**
@@ -127,7 +131,7 @@ public class CuentaMovimientoAtomicoService {
                                 cuentas.origen(),
                                 cuentas.destino()
                         ))
-                        .doOnSuccess(response -> publicarEventos(datos, cuentas)));
+                        .flatMap(response -> publicarEventos(datos, cuentas).thenReturn(response)));
     }
 
     private Mono<AplicarMovimientoResponseDTO> resolverColisionIdempotente(
@@ -193,17 +197,17 @@ public class CuentaMovimientoAtomicoService {
         );
     }
 
-    private void publicarEventos(DatosMovimiento datos, CuentasMovimiento cuentas) {
+    private Mono<Void> publicarEventos(DatosMovimiento datos, CuentasMovimiento cuentas) {
         log.info("movimiento atomico completado operationId={} cuentaOrigenId={} cuentaDestinoId={}",
                 datos.operationId(),
                 datos.cuentaOrigenId(),
                 datos.cuentaDestinoId());
-        publicarEvento(cuentas.origen(), "TRANSFERENCIA_SALIENTE", datos);
-        publicarEvento(cuentas.destino(), "TRANSFERENCIA_ENTRANTE", datos);
+        return publicarEvento(cuentas.origen(), "TRANSFERENCIA_SALIENTE", datos)
+                .then(publicarEvento(cuentas.destino(), "TRANSFERENCIA_ENTRANTE", datos));
     }
 
-    private void publicarEvento(Cuenta cuenta, String tipo, DatosMovimiento datos) {
-        movimientoEventService.publicar(new MovimientoEventDTO(
+    private Mono<Void> publicarEvento(Cuenta cuenta, String tipo, DatosMovimiento datos) {
+        MovimientoEventDTO evento = new MovimientoEventDTO(
                 cuenta.getId(),
                 null,
                 tipo,
@@ -212,7 +216,36 @@ public class CuentaMovimientoAtomicoService {
                 datos.concepto().isBlank() ? "Movimiento atomico interno" : datos.concepto(),
                 LocalDateTime.now(),
                 datos.operationId()
-        ));
+        );
+
+        return publicarMovimientoRegistrado(evento)
+                .then(publicarAlertaSaldoBajo(evento));
+    }
+
+    private Mono<Void> publicarMovimientoRegistrado(MovimientoEventDTO evento) {
+        return movimientoRegistradoPublisherPort.publicar(evento)
+                .onErrorResume(error -> {
+                    log.error(
+                            "No se pudo publicar MovimientoRegistradoEvent atomico cuentaId={} operationId={}",
+                            evento.cuentaId(),
+                            evento.operationId(),
+                            error
+                    );
+                    return Mono.empty();
+                });
+    }
+
+    private Mono<Void> publicarAlertaSaldoBajo(MovimientoEventDTO evento) {
+        return saldoBajoAlertService.evaluarYPublicar(evento)
+                .onErrorResume(error -> {
+                    log.error(
+                            "No se pudo publicar alerta de saldo bajo atomica cuentaId={} saldoResultante={}",
+                            evento.cuentaId(),
+                            evento.saldoResultante(),
+                            error
+                    );
+                    return Mono.empty();
+                });
     }
 
     private DatosMovimiento validar(AplicarMovimientoRequestDTO request) {

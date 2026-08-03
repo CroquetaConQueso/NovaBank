@@ -1,6 +1,6 @@
-# NovaBank Digital Services - Modulo 5
+# NovaBank Digital Services - Modulo 7
 
-NovaBank es un proyecto Maven multi-modulo que simula una plataforma bancaria con servicios independientes, comunicacion reactiva y persistencia separada por dominio. El estado actual corresponde al cierre tecnico del Modulo 5: servicios de negocio sobre Spring WebFlux, Spring Data R2DBC, Project Reactor, WebClient, trazabilidad, resiliencia reactiva, idempotencia y tests con PostgreSQL real mediante Testcontainers.
+NovaBank es un proyecto Maven multi-modulo que simula una plataforma bancaria con servicios independientes, comunicacion reactiva y persistencia separada por dominio. El estado actual documenta el Modulo 7: mantiene la base Kafka/SAGA del Modulo 6 e incorpora `documento-service`, justificantes en S3 compatible con LocalStack, Lambda local para comisiones internacionales, Docker Compose y preparacion teorica para Kubernetes/AWS.
 
 ## Evolucion Del Proyecto
 
@@ -11,6 +11,8 @@ NovaBank es un proyecto Maven multi-modulo que simula una plataforma bancaria co
 | Modulo 3 | Aplicacion monolitica con seguridad y persistencia. |
 | Modulo 4 | Transicion a microservicios sincronicos con Spring Cloud. |
 | Modulo 5 | Migracion de Spring MVC a WebFlux, R2DBC, WebClient, SSE, idempotencia, resiliencia y observabilidad. |
+| Modulo 6 | Kafka, eventos compartidos, operaciones asincronas, SAGA basica, alertas y Swagger agregado. |
+| Modulo 7 | Estabilizacion final: `documento-service` integra justificantes JSON en S3 compatible con LocalStack, Lambda calcula comisiones internacionales, la plataforma local se dockeriza con Docker Compose y la entrega incluye documentacion AWS/Kubernetes/Docker Hub. |
 
 ## Capacidades Principales
 
@@ -42,6 +44,7 @@ flowchart LR
     operaciones --> cuentas
     cuentas --> clientes
     operaciones --> exchange["exchange-rate-mock-service :8084"]
+    documentos["documento-service :8086"]
 
     auth --> dbAuth[("novabank_auth")]
     clientes --> dbClientes[("novabank_clientes")]
@@ -54,6 +57,7 @@ flowchart LR
     config --> cuentas
     config --> operaciones
     config --> exchange
+    config --> documentos
 
     eureka["eureka-server :8761"] <--> gateway
     eureka <--> auth
@@ -61,6 +65,7 @@ flowchart LR
     eureka <--> cuentas
     eureka <--> operaciones
     eureka <--> exchange
+    eureka <--> documentos
 ```
 
 Los servicios de negocio se comunican mediante WebClient con resolucion por Eureka. Cada servicio propietario de datos usa su propia base PostgreSQL.
@@ -70,19 +75,200 @@ Los servicios de negocio se comunican mediante WebClient con resolucion por Eure
 | Servicio | Puerto | Tipo | Responsabilidad | Base de datos |
 | --- | ---: | --- | --- | --- |
 | `eureka-server` | 8761 | Infraestructura | Registro y descubrimiento de servicios. | No aplica |
-| `config-server` | 8888 | Infraestructura | Entrega configuracion desde un repositorio Git externo. | No aplica |
+| `config-server` | 8888 | Infraestructura | Entrega configuracion desde Config Server; en Docker usa configuracion nativa empaquetada. | No aplica |
 | `api-gateway` | 8080 | Edge reactivo | Entrada HTTP, validacion JWT perimetral y propagacion de trazas. | No aplica |
 | `auth-server` | 9000 | Servicio reactivo | Registro, login y validacion de tokens. | `novabank_auth` |
 | `cliente-service` | 8081 | Servicio reactivo | Alta, consulta y actualizacion de clientes. | `novabank_clientes` |
 | `cuenta-service` | 8082 | Servicio reactivo | Cuentas, saldos, endpoint atomico, idempotencia interna y SSE. | `novabank_cuentas` |
 | `operacion-service` | 8083 | Servicio reactivo | Depositos, retiros, transferencias, divisas e historial. | `novabank_operaciones` |
 | `exchange-rate-mock-service` | 8084 | Mock reactivo | Tasas de cambio predefinidas para pruebas locales. | No aplica |
+| `notificacion-service` | 8085 | Servicio reactivo | Consumidor Kafka para notificaciones de bienvenida. | No aplica |
+| `documento-service` | 8086 | Servicio reactivo | Generacion y consulta de justificantes JSON en S3 compatible con LocalStack. | S3 `novabank-justificantes` |
+
+## Swagger / OpenAPI
+
+Swagger documenta solo APIs HTTP REST. Los topics Kafka, producers, consumers, SAGA interna, consumer groups y state stores se documentan en este README y en la documentacion del modulo, no como rutas OpenAPI. El endpoint SSE de movimientos aparece como `text/event-stream`, pero su validacion real debe hacerse con `curl -N` o un cliente compatible.
+
+Las rutas agregadas tienen una sola fuente de verdad: `api-gateway.yml` en el repositorio de Config Server. El Gateway no declara rutas OpenAPI programaticas ni usa destinos `localhost`; cada ruta debe usar `lb://<spring.application.name>`. La convencion de discovery es lowercase kebab-case y coincide con el nombre del modulo Maven, incluido `exchange-rate-mock-service`.
+
+OpenAPI agregado desde Gateway:
+
+| Entrada | URL |
+| --- | --- |
+| OpenAPI auth-server | `http://localhost:8080/v3/api-docs/auth-server` |
+| OpenAPI cliente-service | `http://localhost:8080/v3/api-docs/cliente-service` |
+| OpenAPI cuenta-service | `http://localhost:8080/v3/api-docs/cuenta-service` |
+| OpenAPI operacion-service | `http://localhost:8080/v3/api-docs/operacion-service` |
+| OpenAPI exchange-rate-mock-service | `http://localhost:8080/v3/api-docs/exchange-rate-mock-service` |
+| OpenAPI documento-service | `http://localhost:8080/v3/api-docs/documento-service` |
+
+El Gateway expone los JSON OpenAPI agregados para evitar CORS al consultarlos desde el entorno local. La interfaz Swagger UI se mantiene en cada microservicio.
+
+Acceso directo por microservicio:
+
+| Servicio | Swagger UI | OpenAPI JSON |
+| --- | --- | --- |
+| `auth-server` | `http://localhost:9000/swagger-ui/index.html` | `http://localhost:9000/v3/api-docs` |
+| `cliente-service` | `http://localhost:8081/swagger-ui/index.html` | `http://localhost:8081/v3/api-docs` |
+| `cuenta-service` | `http://localhost:8082/swagger-ui/index.html` | `http://localhost:8082/v3/api-docs` |
+| `operacion-service` | `http://localhost:8083/swagger-ui/index.html` | `http://localhost:8083/v3/api-docs` |
+| `exchange-rate-mock-service` | `http://localhost:8084/swagger-ui/index.html` | `http://localhost:8084/v3/api-docs` |
+| `documento-service` | `http://localhost:8086/swagger-ui/index.html` | `http://localhost:8086/v3/api-docs` |
+
+`notificacion-service` no expone API REST funcional; consume eventos Kafka y registra notificaciones en logs. `documento-service` expone endpoints base del Modulo 7 e integra S3 mediante `S3AsyncClient`. Los endpoints de negocio publicados por el Gateway requieren JWT salvo login, registro, validacion de token, actuator health/info y documentacion Swagger/OpenAPI.
+
+## Modulo 7 Docker Cloud-Native
+
+La plataforma local se puede levantar con Docker Compose. Incluye PostgreSQL, Kafka, Kafka UI, LocalStack, Eureka, Config Server, API Gateway y los microservicios activos del Caso 7.
+
+Construir imagenes:
+
+```powershell
+docker compose build
+```
+
+o:
+
+```powershell
+.\scripts\build-docker-images.ps1
+```
+
+Levantar:
+
+```powershell
+docker compose up -d
+```
+
+o construyendo antes:
+
+```powershell
+.\scripts\start-local-platform.ps1 -Build
+```
+
+Parar:
+
+```powershell
+docker compose down
+```
+
+Limpiar volumenes locales:
+
+```powershell
+docker compose down -v
+```
+
+URLs utiles:
+
+| Recurso | URL |
+| --- | --- |
+| Eureka | `http://localhost:8761` |
+| API Gateway | `http://localhost:8080` |
+| Gateway health | `http://localhost:8080/actuator/health` |
+| Swagger UI agregado | `http://localhost:8080/swagger-ui/index.html` |
+| Kafka UI | `http://localhost:8090` |
+| LocalStack | `http://localhost:4566` |
+| Config Server | `http://localhost:8888` |
+
+Dentro de Docker se usan nombres de servicio (`kafka:9092`, `postgres:5432`, `localstack:4566`, `config-server:8888`, `eureka-server:8761`), no `localhost`. Config Server usa perfil `native` con configuracion interna en `config-server/src/main/resources/config-repo-docker`; no monta el `config-repo` externo del escritorio.
+
+LocalStack arranca con S3 y Lambda. El bucket `novabank-justificantes` se crea con `localstack-init/01-crear-buckets.sh`. La Lambda `novabank-comision` se despliega manualmente para mantener el compose estable:
+
+```powershell
+mvn -pl comision-lambda package
+.\scripts\deploy-comision-lambda-localstack.ps1
+```
+
+Detalle operativo: [docs/docker-cloud-native.md](docs/docker-cloud-native.md).
+
+Documentacion final del Modulo 7:
+
+| Documento | Contenido |
+| --- | --- |
+| [docs/modulo-7-cloud-native.md](docs/modulo-7-cloud-native.md) | Resumen funcional, flujos S3/Lambda, Docker Hub y validacion. |
+| [docs/docker-cloud-native.md](docs/docker-cloud-native.md) | Operativa Docker Compose, LocalStack, Kafka UI y servicios locales. |
+| [docs/lambda-comisiones.md](docs/lambda-comisiones.md) | Lambda Java de comisiones internacionales y pruebas LocalStack. |
+| [docs/kubernetes-eks-teorico.md](docs/kubernetes-eks-teorico.md) | Migracion teorica a Kubernetes/EKS. |
+| [docs/aws-deployment-options.md](docs/aws-deployment-options.md) | Comparativa EKS, ECS, App Runner, EC2, Lambda y API Gateway. |
+| [docs/aws-security-iam-secrets.md](docs/aws-security-iam-secrets.md) | IAM, secretos y criterios de seguridad. |
+| [docs/aws-api-gateway.md](docs/aws-api-gateway.md) | Relacion entre Spring Cloud Gateway y AWS API Gateway. |
+| [docs/aws-cost-model.md](docs/aws-cost-model.md) | Fuentes de coste y controles preventivos. |
+| [docs/checklist-entrega-m7.md](docs/checklist-entrega-m7.md) | Checklist de entrega. |
+| [docs/reporte-validacion-m7.md](docs/reporte-validacion-m7.md) | Resultado de la validacion final, bloqueos de entorno y comandos ejecutados. |
+
+La carpeta `k8s/` contiene manifiestos de ejemplo para una evolucion teorica a EKS. Usan imagenes placeholder `DOCKERHUB_USER/novabank-*:7.0.0` y secretos de ejemplo; no deben aplicarse en produccion sin sustitucion de valores, TLS, politicas IAM y configuracion de observabilidad.
+
+Preparar imagenes para Docker Hub:
+
+```powershell
+$env:DOCKERHUB_USER = "usuario-dockerhub"
+$env:VERSION = "7.0.0"
+.\scripts\tag-docker-images.ps1
+```
+
+Publicar requiere login y confirmacion manual:
+
+```powershell
+docker login
+.\scripts\push-docker-images.ps1
+```
+
+Validacion final recomendada:
+
+```powershell
+git status
+git diff --check
+mvn clean test-compile
+mvn clean test
+mvn -pl documento-service test
+mvn -pl comision-lambda test
+mvn -pl notificacion-service test
+```
+
+Si Docker Desktop no esta disponible, los tests Testcontainers pueden fallar con `Could not find a valid Docker environment`. En ese caso, ejecutar los focos sin Docker documentados en [docs/reporte-validacion-m7.md](docs/reporte-validacion-m7.md).
+
+Validacion Docker/LocalStack cuando el entorno este disponible:
+
+```powershell
+docker compose config
+docker compose build
+docker compose up -d
+docker compose ps
+curl http://localhost:8761/actuator/health
+curl http://localhost:8888/actuator/health
+curl http://localhost:8080/actuator/health
+curl http://localhost:4566/_localstack/health
+aws --endpoint-url=http://localhost:4566 s3 ls
+```
+
+Desplegar e invocar Lambda local:
+
+```powershell
+mvn -pl comision-lambda package
+.\scripts\deploy-comision-lambda-localstack.ps1
+.\scripts\invoke-comision-lambda-localstack.ps1
+```
+
+El uso de AWS real es opcional y no esta activado por defecto. La configuracion local usa LocalStack y credenciales dummy `test`.
+
+Comandos finales sugeridos, solo tras aprobar la PR final:
+
+```powershell
+git checkout develop
+git pull origin develop
+git checkout main
+git pull origin main
+git merge develop
+git tag v7.0.0
+git push origin main
+git push origin v7.0.0
+```
 
 ## Estructura Del Repositorio
 
 ```text
 NovaBank/
 |-- pom.xml
+|-- docker-compose.yml
 |-- eureka-server/
 |-- config-server/
 |-- api-gateway/
@@ -90,7 +276,9 @@ NovaBank/
 |-- cliente-service/
 |-- cuenta-service/
 |-- operacion-service/
+|-- documento-service/
 |-- exchange-rate-mock-service/
+|-- notificacion-service/
 |-- docs/
 |   |-- README.md
 |   |-- sql/
@@ -126,6 +314,762 @@ NovaBank/
 - PostgreSQL para ejecucion local.
 - Git.
 - Docker Desktop o runtime compatible para ejecutar Testcontainers.
+
+## Infraestructura Local Con Docker Compose
+
+El entorno local incluye Apache Kafka `apache/kafka:3.7.0` en modo KRaft, sin Zookeeper, y Kafka UI para inspeccion del cluster. Kafka no crea topics automaticamente.
+
+Levantar la infraestructura desde la raiz del proyecto:
+
+```powershell
+docker compose up -d
+```
+
+Comprobar el estado de los contenedores:
+
+```powershell
+docker compose ps
+```
+
+Comprobar Kafka listando topics desde el contenedor:
+
+```powershell
+docker compose exec kafka /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --list
+```
+
+Kafka UI queda disponible en:
+
+```text
+http://localhost:8090
+```
+
+La UI y otros contenedores se conectan al broker usando el listener interno de Docker Compose: `kafka:9092`. Los clientes locales desde el host deben usar `localhost:9092`, publicado contra el listener externo del contenedor.
+
+Ver logs:
+
+```powershell
+docker compose logs -f kafka
+docker compose logs -f kafka-ui
+```
+
+Apagar el entorno:
+
+```powershell
+docker compose down
+```
+
+## Documento Service Y LocalStack
+
+`documento-service` genera justificantes JSON al consumir `OperacionCompletadaEvent` desde el topic `novabank.operaciones.completadas` mediante el binding `generarJustificanteOperacion-in-0` y el grupo `documento-service`. El consumer solo convierte el evento a un comando de aplicacion; la generacion JSON y el almacenamiento quedan detras de puertos.
+
+El almacenamiento usa AWS SDK v2 con `S3AsyncClient`; no se usa `S3Client` sincrono. La configuracion local por defecto es:
+
+```yaml
+novabank:
+  aws:
+    region: eu-west-1
+    endpoint-override: http://localhost:4566
+  s3:
+    bucket-justificantes: novabank-justificantes
+    presigned-url-ttl: PT15M
+```
+
+En Docker, el endpoint previsto para una iteracion posterior es `http://localstack:4566`.
+
+El bucket esperado es:
+
+```text
+novabank-justificantes
+```
+
+Las claves se guardan con prefijo por cuenta para que `GET /api/documentos/cuentas/{cuentaId}` pueda resolverse sin base de datos adicional:
+
+```text
+cuentas/{cuentaId}/operaciones/{yyyy}/{MM}/{operationId}.json
+```
+
+`OperacionCompletadaEvent` incluye el contexto minimo de cuenta para asociar el justificante a una cuenta real: `cuentaOrigenId`, `cuentaDestinoId` y `cuentaIdPrincipal`. `documento-service` usa `cuentaIdPrincipal` para calcular la clave S3. Si un evento completado llega sin `cuentaIdPrincipal`, el consumer lo registra como error y no guarda justificante con una cuenta tecnica.
+
+Regla de `cuentaIdPrincipal`:
+
+- `DEPOSITO`: `cuentaOrigenId=null`, `cuentaDestinoId=<cuenta>`, `cuentaIdPrincipal=<cuenta>`.
+- `RETIRADA`/`RETIRO`: `cuentaOrigenId=<cuenta>`, `cuentaDestinoId=null`, `cuentaIdPrincipal=<cuenta>`.
+- `TRANSFERENCIA`: `cuentaOrigenId=<origen>`, `cuentaDestinoId=<destino>`, `cuentaIdPrincipal=<origen>`.
+
+Endpoints directos de `documento-service`:
+
+```text
+GET    /api/documentos/operaciones/{operationId}/url
+GET    /api/documentos/cuentas/{cuentaId}
+DELETE /api/documentos/operaciones/{operationId}
+```
+
+La URL de descarga es prefirmada y caduca segun `novabank.s3.presigned-url-ttl`. Si el documento no existe, se devuelve `404`.
+
+Arranque manual minimo de LocalStack si todavia no se usa el compose completo:
+
+```powershell
+docker run --rm -it -p 4566:4566 -e SERVICES=s3 -e DEFAULT_REGION=eu-west-1 localstack/localstack
+```
+
+Creacion idempotente del bucket:
+
+```powershell
+awslocal s3api head-bucket --bucket novabank-justificantes
+awslocal s3api create-bucket --bucket novabank-justificantes --create-bucket-configuration LocationConstraint=eu-west-1
+```
+
+Tambien queda disponible el script [localstack-init/01-crear-buckets.sh](localstack-init/01-crear-buckets.sh) para inicializacion futura.
+
+## Base Tecnica De Eventos Del Modulo 6
+
+Se incorporan las dependencias base de Spring Cloud Stream reactivo solo en los servicios que podran producir o consumir eventos:
+
+- `cliente-service`
+- `cuenta-service`
+- `operacion-service`
+
+Dependencias añadidas:
+
+- `spring-cloud-stream`
+- `spring-cloud-stream-binder-kafka-reactive`
+- `novabank-events`, modulo comun interno con contratos de eventos.
+
+No se declara `spring-kafka` de forma directa: llega transitivamente a traves de `spring-cloud-stream-binder-kafka-reactive` y se usa para `NewTopic` y `TopicBuilder`.
+
+Los contratos iniciales estan en `novabank-events` bajo `com.novabank.events`:
+
+- `ClienteRegistradoEvent`
+- `OperacionSolicitadaEvent`
+- `OperacionCompletadaEvent`
+- `OperacionFallidaEvent`
+- `MovimientoRegistradoEvent`
+- `AlertaSaldoBajoEvent`
+- `AlertaOperacionSospechosaEvent`
+
+Todos los eventos incluyen `eventId`, `correlationId` y `occurredAt`, y transportan solo datos simples del dominio.
+
+Topics previstos:
+
+| Topic | Particiones | Retencion local |
+| --- | ---: | --- |
+| `novabank.clientes.registrados` | 3 | 7 dias |
+| `novabank.operaciones.solicitadas` | 6 | 7 dias |
+| `novabank.operaciones.completadas` | 6 | 7 dias |
+| `novabank.operaciones.fallidas` | 6 | 30 dias |
+| `novabank.movimientos.registrados` | 6 | 7 dias |
+| `novabank.alertas.saldo-bajo` | 3 | 30 dias |
+| `novabank.alertas.operaciones-sospechosas` | 3 | 30 dias |
+
+Los nombres de topics estan centralizados en `NovaBankTopics`.
+
+La declaracion programatica de topics esta en `cliente-service`, clase `KafkaTopicsConfig`. Se ubica ahi de forma inicial porque `cliente-service` sera un productor de eventos del modulo y permite validar la creacion de topics sin introducir productores, consumidores ni cambios de flujo.
+
+`cliente-service` publica `ClienteRegistradoEvent` despues de guardar correctamente un cliente. La publicacion usa Spring Cloud Stream con `StreamBridge`, binding `clienteRegistrado-out-0`, y destino `novabank.clientes.registrados`. Si el cliente no se guarda, no se publica evento. Si Kafka rechaza la publicacion, el alta devuelve un error controlado `EVENT_NOT_PUBLISHED` para priorizar la consistencia del caso practico.
+
+Para validar la creacion de topics:
+
+```powershell
+docker compose up -d
+mvn -pl cliente-service spring-boot:run
+docker compose exec kafka /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --list
+```
+
+Tambien se pueden comprobar en Kafka UI:
+
+```text
+http://localhost:8090
+```
+
+La configuracion base local usa `localhost:9092` para `spring.kafka.bootstrap-servers` y `spring.cloud.stream.kafka.binder.brokers`. Si un repositorio externo de Config Server define estos mismos valores para los servicios, debe incluir la misma configuracion para no sobrescribir el entorno local.
+
+## notificacion-service
+
+`notificacion-service` es el primer consumidor Kafka del Modulo 6. No expone controladores REST de negocio y no usa base de datos. Por ahora consume `ClienteRegistradoEvent` desde el topic `novabank.clientes.registrados` y registra en logs una notificacion de bienvenida con `clienteId`, `nombre` y `email`.
+
+Configuracion local principal:
+
+- Aplicacion: `notificacion-service`
+- Puerto: `8085`
+- Funcion Spring Cloud Stream: `notificarBienvenida`
+- Binding de entrada: `notificarBienvenida-in-0`
+- Topic: `novabank.clientes.registrados`
+- Grupo consumidor: `notificacion-service`
+- Broker local: `localhost:9092`
+- Content type: `application/json`
+
+Si Config Server carga configuracion desde un repositorio externo, ese repositorio debe incluir estas mismas propiedades para `notificacion-service`:
+
+```yaml
+server:
+  port: 8085
+
+spring:
+  application:
+    name: notificacion-service
+  kafka:
+    bootstrap-servers: localhost:9092
+  cloud:
+    function:
+      definition: notificarBienvenida
+    stream:
+      bindings:
+        notificarBienvenida-in-0:
+          destination: novabank.clientes.registrados
+          group: notificacion-service
+          content-type: application/json
+      kafka:
+        binder:
+          brokers: localhost:9092
+```
+
+Arrancar el consumidor:
+
+```powershell
+docker compose up -d
+mvn -pl notificacion-service spring-boot:run
+```
+
+Publicar manualmente un `ClienteRegistradoEvent` desde consola:
+
+```powershell
+docker compose exec -i kafka /opt/kafka/bin/kafka-console-producer.sh --bootstrap-server kafka:9092 --topic novabank.clientes.registrados
+```
+
+JSON de ejemplo:
+
+```json
+{"eventId":"11111111-1111-1111-1111-111111111111","correlationId":"22222222-2222-2222-2222-222222222222","occurredAt":"2026-06-03T10:15:30Z","clienteId":1001,"dni":"12345678Z","nombre":"Ana Garcia","email":"ana.garcia@example.com"}
+```
+
+El log esperado en `notificacion-service` contiene:
+
+```text
+Notificacion de bienvenida preparada para clienteId=1001, nombre=Ana Garcia, email=ana.garcia@example.com
+```
+
+Tambien se puede publicar el mismo JSON desde Kafka UI en `http://localhost:8090`, topic `novabank.clientes.registrados`.
+
+## Validacion Manual Del Evento Cliente Registrado
+
+Precondicion: `cliente-service` necesita la configuracion R2DBC/PostgreSQL local del Modulo 5 o las propiedades equivalentes desde Config Server externo.
+
+Arrancar Kafka y los servicios implicados:
+
+```powershell
+docker compose up -d
+mvn -pl notificacion-service spring-boot:run
+mvn -pl cliente-service spring-boot:run
+```
+
+Crear un cliente directamente contra `cliente-service`:
+
+```powershell
+Invoke-RestMethod -Method Post `
+  -Uri http://localhost:8081/api/clientes `
+  -ContentType "application/json" `
+  -Headers @{ "X-Correlation-Id" = "33333333-3333-3333-3333-333333333333" } `
+  -Body '{"nombre":"Ana","apellidos":"Garcia","dni":"12345678Z","email":"ana.garcia@example.com","telefono":"600111222"}'
+```
+
+Comprobar el evento en Kafka UI:
+
+```text
+http://localhost:8090
+```
+
+Topic esperado:
+
+```text
+novabank.clientes.registrados
+```
+
+Comprobar en logs de `notificacion-service`:
+
+```text
+Notificacion de bienvenida preparada para clienteId=<id>, nombre=Ana, email=ana.garcia@example.com
+```
+
+## Procesamiento Kafka De Operaciones En cuenta-service
+
+`cuenta-service` incorpora el primer consumidor Kafka financiero del Modulo 6. Consume `OperacionSolicitadaEvent` desde `novabank.operaciones.solicitadas`, grupo `cuenta-service`, y aplica por ahora operaciones simples reutilizando la logica reactiva existente:
+
+- `DEPOSITO`: usa `cuentaDestinoId` y publica `OperacionCompletadaEvent`.
+- `RETIRO` o `RETIRADA`: usa `cuentaOrigenId`; si la cuenta no existe, no hay saldo suficiente o la solicitud es invalida, publica `OperacionFallidaEvent`.
+- `TRANSFERENCIA`: usa `cuentaOrigenId` y `cuentaDestinoId`; publica dos movimientos registrados, uno por cada cuenta afectada.
+
+No se cambian controladores ni respuestas HTTP. El consumidor se declara como `procesarOperacion` y delega en `CuentaService`. Los eventos se publican con `StreamBridge` en estos bindings:
+
+| Binding | Topic |
+| --- | --- |
+| `procesarOperacion-in-0` | `novabank.operaciones.solicitadas` |
+| `operacionCompletada-out-0` | `novabank.operaciones.completadas` |
+| `operacionFallida-out-0` | `novabank.operaciones.fallidas` |
+| `movimientoRegistrado-out-0` | `novabank.movimientos.registrados` |
+
+La configuracion local de `cuenta-service` usa Kafka en `localhost:9092`. Si Config Server sobrescribe propiedades desde un repositorio externo, ese repositorio debe incluir valores equivalentes:
+
+```yaml
+spring:
+  kafka:
+    bootstrap-servers: localhost:9092
+  cloud:
+    function:
+      definition: procesarOperacion;alimentarBusSse
+    stream:
+      bindings:
+        procesarOperacion-in-0:
+          destination: novabank.operaciones.solicitadas
+          group: cuenta-service
+          content-type: application/json
+        alimentarBusSse-in-0:
+          destination: novabank.movimientos.registrados
+          group: cuenta-service-sse
+          content-type: application/json
+        operacionCompletada-out-0:
+          destination: novabank.operaciones.completadas
+          content-type: application/json
+        operacionFallida-out-0:
+          destination: novabank.operaciones.fallidas
+          content-type: application/json
+        movimientoRegistrado-out-0:
+          destination: novabank.movimientos.registrados
+          content-type: application/json
+      kafka:
+        binder:
+          brokers: localhost:9092
+```
+
+## SSE De Movimientos Alimentado Desde Kafka
+
+El endpoint publico de SSE se mantiene igual:
+
+```text
+GET /api/cuentas/{id}/movimientos/stream
+```
+
+Sigue devolviendo `text/event-stream` y conserva el filtrado local por `cuentaId`. El cambio del Modulo 6 es la fuente del bus: `cuenta-service` ya no alimenta el `Sinks.Many` directamente desde la logica de negocio. Ahora publica `MovimientoRegistradoEvent` en `novabank.movimientos.registrados` despues de aplicar correctamente cada movimiento, y un consumer separado (`alimentarBusSse`, grupo `cuenta-service-sse`) consume ese topic para alimentar el fan-out local SSE.
+
+Flujo actual:
+
+```text
+cuenta-service aplica movimiento
+  -> publica MovimientoRegistradoEvent en novabank.movimientos.registrados
+  -> cuenta-service consume el topic con group cuenta-service-sse
+  -> MovimientoEventService / Sinks.Many emite a conexiones SSE activas
+```
+
+`Sinks.Many` se mantiene porque resuelve el fan-out local hacia clientes conectados. Kafka aporta persistencia del evento y desacopla el stream SSE de la logica de negocio. No se implementa todavia Kafka Streams.
+
+Validacion local:
+
+```powershell
+docker compose up -d
+mvn -pl cuenta-service spring-boot:run
+curl -N http://localhost:8082/api/cuentas/1/movimientos/stream
+```
+
+En otra terminal, provocar un movimiento mediante `operacion-service` o publicar un `OperacionSolicitadaEvent` en `novabank.operaciones.solicitadas`. Despues comprobar:
+
+- Kafka UI en `http://localhost:8090`, topic `novabank.movimientos.registrados`.
+- La terminal SSE recibe el movimiento de la cuenta conectada.
+
+Ejemplo de `MovimientoRegistradoEvent`:
+
+```json
+{"eventId":"<uuid>","correlationId":"22222222-2222-2222-2222-222222222222","occurredAt":"<instant>","movimientoId":null,"cuentaId":1,"tipoMovimiento":"DEPOSITO","importe":25.00,"saldoResultante":125.00,"moneda":"EUR"}
+```
+
+Nota: el contrato actual de `MovimientoRegistradoEvent` no incluye `operationId`; se mantiene compatible para que `mvn -pl cuenta-service test` funcione sin requerir instalar previamente el modulo comun. Si se versiona el contrato de eventos en una iteracion posterior, `operationId` puede anadirse de forma explicita.
+
+## Comisiones Internacionales Con Lambda Y LocalStack
+
+`operacion-service` invoca la Lambda `novabank-comision` para transferencias asincronas marcadas como internacionales. La integracion se mantiene hexagonal: el caso de uso depende de `ComisionCalculatorPort` y el SDK de AWS queda aislado en `adapter/out/lambda`.
+
+Configuracion local:
+
+```yaml
+novabank:
+  aws:
+    region: eu-west-1
+    endpoint-override: http://localhost:4566
+  lambda:
+    comision-function-name: novabank-comision
+```
+
+Ejemplo:
+
+```json
+{
+  "cuentaOrigenId": 10,
+  "cuentaDestinoId": 11,
+  "cantidad": 1000.00,
+  "internacional": true,
+  "paisDestino": "US",
+  "tipoCliente": "EMPRESA"
+}
+```
+
+Las transferencias ordinarias sin los campos nuevos siguen funcionando. Si la Lambda no esta disponible, la transferencia internacional falla con `503/LAMBDA_COMISION_UNAVAILABLE` antes de publicar eventos Kafka; `operacion-service` no calcula una comision por defecto y no usa AWS real.
+
+Preparacion local:
+
+```powershell
+$env:AWS_ACCESS_KEY_ID = "test"
+$env:AWS_SECRET_ACCESS_KEY = "test"
+$env:AWS_DEFAULT_REGION = "eu-west-1"
+.\scripts\deploy-comision-lambda-localstack.ps1
+mvn -pl operacion-service spring-boot:run
+```
+
+`operacion-service` usa `DefaultCredentialsProvider`; esas variables son credenciales ficticias para LocalStack, no credenciales AWS reales.
+
+## Alertas De Saldo Bajo
+
+`cuenta-service` evalua el saldo resultante despues de cada movimiento confirmado. Si `saldoResultante` es menor que `novabank.alertas.saldo-bajo.umbral`, publica un `AlertaSaldoBajoEvent` en `novabank.alertas.saldo-bajo` mediante Spring Cloud Stream y `StreamBridge`.
+
+Configuracion local del umbral:
+
+```yaml
+novabank:
+  alertas:
+    saldo-bajo:
+      umbral: 100.00
+```
+
+Binding productor en `cuenta-service`:
+
+```yaml
+spring:
+  cloud:
+    stream:
+      bindings:
+        alertaSaldoBajo-out-0:
+          destination: novabank.alertas.saldo-bajo
+          content-type: application/json
+```
+
+`notificacion-service` consume el mismo topic con el binding `notificarSaldoBajo-in-0`, destino `novabank.alertas.saldo-bajo` y grupo `notificacion-service`. En esta iteracion solo registra la alerta en logs; no persiste notificaciones, no expone endpoints nuevos y no modifica el flujo SSE.
+
+Ejemplo de evento:
+
+```json
+{"eventId":"<uuid>","correlationId":"22222222-2222-2222-2222-222222222222","occurredAt":"<instant>","cuentaId":1,"saldoActual":75.00,"umbral":100.00,"moneda":"EUR"}
+```
+
+Validacion local:
+
+```powershell
+docker compose up -d
+mvn -pl cuenta-service spring-boot:run
+mvn -pl notificacion-service spring-boot:run
+docker compose exec kafka /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --list
+docker compose logs -f kafka
+docker compose logs -f kafka-ui
+```
+
+Despues, provocar un retiro o transferencia que deje una cuenta con saldo menor que `100.00`. Resultado esperado:
+
+- aparece un mensaje en `novabank.alertas.saldo-bajo`;
+- `notificacion-service` registra `cuentaId`, `saldoActual`, `umbral`, `moneda` y `correlationId`;
+- si el saldo queda exactamente en `100.00`, no se publica alerta.
+
+## Kafka Streams Para Operaciones Sospechosas
+
+`operacion-service` incorpora una topologia Kafka Streams local para detectar actividad sospechosa de retiradas. La regla didactica es: si una misma cuenta acumula mas de 5 operaciones `RETIRADA` o `RETIRO` en una ventana de 10 minutos, se publica `AlertaOperacionSospechosaEvent`.
+
+La ventana se materializa en un store en memoria para mantener esta iteracion local y portable. En un entorno productivo se deberia revisar durabilidad, restauracion de estado y reglas antifraude reales.
+
+Flujo:
+
+```text
+novabank.operaciones.solicitadas
+  -> operacion-service Kafka Streams
+  -> filtra RETIRADA/RETIRO con cuentaOrigenId
+  -> agrupa por cuentaOrigenId y ventana de 10 minutos
+  -> publica en novabank.alertas.operaciones-sospechosas si count > 5
+  -> notificacion-service registra la alerta en logs
+```
+
+Configuracion local:
+
+```yaml
+novabank:
+  kafka-streams:
+    operaciones-sospechosas:
+      application-id: operacion-service-suspicious-streams
+      bootstrap-servers: localhost:9092
+      input-topic: novabank.operaciones.solicitadas
+      output-topic: novabank.alertas.operaciones-sospechosas
+      ventana-minutos: 10
+      umbral-operaciones: 5
+```
+
+Ejemplo de alerta generada:
+
+```json
+{"eventId":"<uuid>","correlationId":"22222222-2222-2222-2222-222222222222","occurredAt":"<instant>","cuentaId":1,"tipoOperacion":"RETIRADA","numeroOperaciones":6,"ventanaMinutos":10,"descripcion":"Mas de 5 retiradas en 10 minutos"}
+```
+
+Validacion local:
+
+```powershell
+docker compose up -d
+mvn -pl operacion-service spring-boot:run
+mvn -pl notificacion-service spring-boot:run
+docker compose exec -i kafka /opt/kafka/bin/kafka-console-producer.sh --bootstrap-server kafka:9092 --topic novabank.operaciones.solicitadas
+```
+
+Publicar 6 eventos como este, cambiando `eventId` y `operationId` en cada envio:
+
+```json
+{"eventId":"11111111-1111-1111-1111-111111111111","correlationId":"22222222-2222-2222-2222-222222222222","occurredAt":"2026-06-04T10:15:30Z","operationId":"33333333-3333-3333-3333-333333333333","tipoOperacion":"RETIRADA","cuentaOrigenId":1,"cuentaDestinoId":null,"importe":10.00,"moneda":"EUR"}
+```
+
+Comprobar:
+
+- Kafka UI en `http://localhost:8090`, topics `novabank.operaciones.solicitadas` y `novabank.alertas.operaciones-sospechosas`.
+- Logs de `operacion-service`: `Alerta de operacion sospechosa generada`.
+- Logs de `notificacion-service`: `Alerta de operacion sospechosa recibida`.
+
+Con solo 5 retiradas no debe generarse alerta. Los depositos y eventos sin `cuentaOrigenId` no cuentan. Esta deteccion es local y didactica: no sustituye reglas antifraude reales, no persiste alertas y `notificacion-service` solo registra logs.
+
+Arrancar infraestructura y `cuenta-service`:
+
+```powershell
+docker compose up -d
+mvn -pl cuenta-service spring-boot:run
+```
+
+Publicar un deposito manualmente:
+
+```powershell
+docker compose exec -i kafka /opt/kafka/bin/kafka-console-producer.sh --bootstrap-server kafka:9092 --topic novabank.operaciones.solicitadas
+```
+
+JSON de deposito:
+
+```json
+{"eventId":"11111111-1111-1111-1111-111111111111","correlationId":"22222222-2222-2222-2222-222222222222","occurredAt":"2026-06-03T10:15:30Z","operationId":"33333333-3333-3333-3333-333333333333","tipoOperacion":"DEPOSITO","cuentaOrigenId":null,"cuentaDestinoId":1,"importe":25.00,"moneda":"EUR"}
+```
+
+Resultado esperado: mensaje en `novabank.operaciones.completadas` con el mismo `operationId`, `correlationId`, `tipoOperacion`, `importe` y `moneda`, mas contexto de cuenta (`cuentaOrigenId=null`, `cuentaDestinoId=1`, `cuentaIdPrincipal=1`).
+
+JSON de retirada fallida por saldo insuficiente:
+
+```json
+{"eventId":"44444444-4444-4444-4444-444444444444","correlationId":"55555555-5555-5555-5555-555555555555","occurredAt":"2026-06-03T10:16:30Z","operationId":"66666666-6666-6666-6666-666666666666","tipoOperacion":"RETIRADA","cuentaOrigenId":1,"cuentaDestinoId":null,"importe":9999.00,"moneda":"EUR"}
+```
+
+Resultado esperado: mensaje en `novabank.operaciones.fallidas` con `codigoError` como `SALDO_INSUFICIENTE` si la cuenta existe pero no tiene saldo suficiente. Si la cuenta no existe, el codigo esperado es `CUENTA_NO_ENCONTRADA`.
+
+Comprobar topics desde Kafka:
+
+```powershell
+docker compose exec kafka /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --list
+```
+
+Consumir resultados desde consola:
+
+```powershell
+docker compose exec kafka /opt/kafka/bin/kafka-console-consumer.sh --bootstrap-server kafka:9092 --topic novabank.operaciones.completadas --from-beginning --timeout-ms 10000
+docker compose exec kafka /opt/kafka/bin/kafka-console-consumer.sh --bootstrap-server kafka:9092 --topic novabank.operaciones.fallidas --from-beginning --timeout-ms 10000
+```
+
+Tambien se pueden revisar los topics y mensajes desde Kafka UI:
+
+```text
+http://localhost:8090
+```
+
+## Publicacion Asincrona De Operaciones Desde operacion-service
+
+`operacion-service` publica solicitudes de operaciones simples en Kafka. Los endpoints de deposito y retiro pasan a ser asincronos: validan la peticion HTTP, publican `OperacionSolicitadaEvent` en `novabank.operaciones.solicitadas` y responden `202 Accepted` con un identificador de operacion.
+
+Flujo actual:
+
+```text
+POST /api/operaciones/deposito
+POST /api/operaciones/retiro
+    -> operacion-service publica OperacionSolicitadaEvent
+    -> cuenta-service consume la solicitud
+    -> cuenta-service publica OperacionCompletadaEvent u OperacionFallidaEvent
+```
+
+Binding de salida en `operacion-service`:
+
+| Binding | Topic |
+| --- | --- |
+| `operacionSolicitada-out-0` | `novabank.operaciones.solicitadas` |
+
+Respuesta HTTP esperada:
+
+```http
+HTTP/1.1 202 Accepted
+```
+
+Ejemplo de respuesta:
+
+```json
+{"operationId":"33333333-3333-3333-3333-333333333333","estado":"SOLICITADA","mensaje":"DEPOSITO solicitada para procesamiento asincrono","tipoOperacion":"DEPOSITO","cuentaId":1,"importe":25.00}
+```
+
+Request de deposito:
+
+```powershell
+Invoke-RestMethod -Method Post `
+  -Uri http://localhost:8083/api/operaciones/deposito `
+  -ContentType "application/json" `
+  -Headers @{ "X-Correlation-Id" = "22222222-2222-2222-2222-222222222222" } `
+  -Body '{"cuentaId":1,"cantidad":25.00}'
+```
+
+Evento esperado en `novabank.operaciones.solicitadas`:
+
+```json
+{"eventId":"<uuid>","correlationId":"22222222-2222-2222-2222-222222222222","occurredAt":"<instant>","operationId":"<uuid>","tipoOperacion":"DEPOSITO","cuentaOrigenId":null,"cuentaDestinoId":1,"importe":25.00,"moneda":"EUR"}
+```
+
+Request de retiro:
+
+```powershell
+Invoke-RestMethod -Method Post `
+  -Uri http://localhost:8083/api/operaciones/retiro `
+  -ContentType "application/json" `
+  -Headers @{ "X-Correlation-Id" = "55555555-5555-5555-5555-555555555555" } `
+  -Body '{"cuentaId":1,"cantidad":9999.00}'
+```
+
+Evento esperado en `novabank.operaciones.solicitadas`:
+
+```json
+{"eventId":"<uuid>","correlationId":"55555555-5555-5555-5555-555555555555","occurredAt":"<instant>","operationId":"<uuid>","tipoOperacion":"RETIRADA","cuentaOrigenId":1,"cuentaDestinoId":null,"importe":9999.00,"moneda":"EUR"}
+```
+
+Para comprobar el flujo completo:
+
+```powershell
+docker compose up -d
+mvn -pl cuenta-service spring-boot:run
+mvn -pl operacion-service spring-boot:run
+```
+
+Despues de hacer los POST, revisar en Kafka UI:
+
+```text
+http://localhost:8090
+```
+
+Topics esperados:
+
+- `novabank.operaciones.solicitadas`: eventos publicados por `operacion-service`.
+- `novabank.operaciones.completadas`: resultado de deposito correcto procesado por `cuenta-service`.
+- `novabank.operaciones.fallidas`: resultado de retiro fallido, por ejemplo por saldo insuficiente.
+
+## Transferencia Ordinaria Asincrona
+
+`POST /api/operaciones/transferencia` migra al flujo Kafka/SAGA del Modulo 6. `operacion-service` genera un `operationId`, persiste la operacion como `SOLICITADA`, publica `OperacionSolicitadaEvent` con `tipoOperacion=TRANSFERENCIA` en `novabank.operaciones.solicitadas` y responde `202 Accepted`.
+
+`cuenta-service` consume la solicitud y reutiliza su transaccion local de transferencia para debitar la cuenta origen y acreditar la cuenta destino. Si la operacion termina correctamente publica `OperacionCompletadaEvent` en `novabank.operaciones.completadas`; si falla por saldo insuficiente, cuenta inexistente u otro error controlado publica `OperacionFallidaEvent` en `novabank.operaciones.fallidas`.
+
+Request de transferencia valida:
+
+```powershell
+$transferencia = Invoke-RestMethod -Method Post `
+  -Uri http://localhost:8083/api/operaciones/transferencia `
+  -ContentType "application/json" `
+  -Headers @{ "X-Correlation-Id" = "66666666-6666-6666-6666-666666666666" } `
+  -Body '{"cuentaOrigenId":1,"cuentaDestinoId":2,"cantidad":25.00}'
+```
+
+Respuesta inicial esperada:
+
+```http
+HTTP/1.1 202 Accepted
+```
+
+```json
+{"operationId":"<uuid>","estado":"SOLICITADA","mensaje":"TRANSFERENCIA solicitada para procesamiento asincrono","tipoOperacion":"TRANSFERENCIA","cuentaOrigenId":1,"cuentaDestinoId":2,"importe":25.00,"moneda":"EUR"}
+```
+
+Evento esperado en `novabank.operaciones.solicitadas`:
+
+```json
+{"eventId":"<uuid>","correlationId":"66666666-6666-6666-6666-666666666666","occurredAt":"<instant>","operationId":"<uuid>","tipoOperacion":"TRANSFERENCIA","cuentaOrigenId":1,"cuentaDestinoId":2,"importe":25.00,"moneda":"EUR"}
+```
+
+Request de transferencia fallida por saldo insuficiente:
+
+```powershell
+$fallida = Invoke-RestMethod -Method Post `
+  -Uri http://localhost:8083/api/operaciones/transferencia `
+  -ContentType "application/json" `
+  -Headers @{ "X-Correlation-Id" = "77777777-7777-7777-7777-777777777777" } `
+  -Body '{"cuentaOrigenId":1,"cuentaDestinoId":2,"cantidad":9999.00}'
+```
+
+Consultar el estado final:
+
+```powershell
+Invoke-RestMethod -Method Get `
+  -Uri "http://localhost:8083/api/operaciones/sagas/$($transferencia.operationId)"
+Invoke-RestMethod -Method Get `
+  -Uri "http://localhost:8083/api/operaciones/sagas/$($fallida.operationId)"
+```
+
+En Kafka UI revisar:
+
+- `novabank.operaciones.solicitadas`: solicitud `TRANSFERENCIA`.
+- `novabank.operaciones.completadas`: resultado de transferencia valida.
+- `novabank.operaciones.fallidas`: resultado de transferencia invalida.
+
+## Estado Persistido De Operaciones Asincronas
+
+`operacion-service` persiste el estado inicial de cada deposito, retiro o transferencia ordinaria asincrona en la tabla `operaciones_asincronas` antes de publicar `OperacionSolicitadaEvent`. Despues consume los resultados publicados por `cuenta-service` y actualiza la misma operacion a `COMPLETADA` o `FALLIDA`.
+
+Bindings de entrada en `operacion-service`:
+
+| Binding | Topic | Grupo |
+| --- | --- | --- |
+| `consumirOperacionCompletada-in-0` | `novabank.operaciones.completadas` | `operacion-service` |
+| `consumirOperacionFallida-in-0` | `novabank.operaciones.fallidas` | `operacion-service` |
+
+Consultar el estado persistido:
+
+```powershell
+Invoke-RestMethod -Method Get `
+  -Uri http://localhost:8083/api/operaciones/sagas/<operationId>
+```
+
+Respuesta de deposito completado:
+
+```json
+{"operationId":"<uuid>","correlationId":"22222222-2222-2222-2222-222222222222","tipoOperacion":"DEPOSITO","estado":"COMPLETADA","cuentaId":1,"cuentaOrigenId":null,"cuentaDestinoId":1,"importe":25.00,"moneda":"EUR","motivoFallo":null,"creadaEn":"<local-date-time>","actualizadaEn":"<local-date-time>"}
+```
+
+Respuesta de retiro fallido:
+
+```json
+{"operationId":"<uuid>","correlationId":"55555555-5555-5555-5555-555555555555","tipoOperacion":"RETIRADA","estado":"FALLIDA","cuentaId":1,"cuentaOrigenId":1,"cuentaDestinoId":null,"importe":9999.00,"moneda":"EUR","motivoFallo":"<motivo>","creadaEn":"<local-date-time>","actualizadaEn":"<local-date-time>"}
+```
+
+Validacion minima del cierre asincrono:
+
+```powershell
+docker compose up -d
+mvn -pl cuenta-service spring-boot:run
+mvn -pl operacion-service spring-boot:run
+docker compose exec kafka /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --list
+```
+
+Tras ejecutar un deposito y un retiro, usar los `operationId` devueltos por los POST para consultar `GET /api/operaciones/sagas/{operationId}`. El deposito debe evolucionar de `SOLICITADA` a `COMPLETADA`; un retiro sin saldo suficiente debe evolucionar a `FALLIDA`.
+
+Notas pendientes del Modulo 6:
+
+- La transferencia ordinaria ya usa el flujo Kafka/SAGA basico, sin compensacion avanzada.
+- La idempotencia publica de las operaciones asincronas queda pendiente de consolidacion sobre el estado persistido.
+- Transferencias en divisa conservan por ahora el flujo sincronico existente.
+- Reglas antifraude avanzadas y persistencia de alertas quedan pendientes.
 
 ## Bases De Datos Y SQL
 
@@ -184,6 +1128,7 @@ mvn -pl cliente-service spring-boot:run
 mvn -pl cuenta-service spring-boot:run
 mvn -pl exchange-rate-mock-service spring-boot:run
 mvn -pl operacion-service spring-boot:run
+mvn -pl notificacion-service spring-boot:run
 mvn -pl api-gateway spring-boot:run
 ```
 
@@ -373,7 +1318,21 @@ Cada servicio es propietario de sus tablas. No hay claves foraneas entre bases d
 | `novabank_auth` | `usuarios` |
 | `novabank_clientes` | `clientes` |
 | `novabank_cuentas` | `cuentas`, `account_number_sequence`, `operaciones_idempotentes` |
-| `novabank_operaciones` | `movimientos`, `operaciones_publicas_idempotentes` |
+| `novabank_operaciones` | `movimientos`, `operaciones_publicas_idempotentes`, `operaciones_asincronas` |
+
+## Diagnostico De Operaciones Kafka
+
+`cuenta-service` distingue la aplicacion de la operacion financiera de la publicacion de su resultado. Un error de negocio durante la aplicacion publica `OperacionFallidaEvent` con un codigo como `SALDO_INSUFICIENTE`, `CUENTA_NO_ENCONTRADA` o `SOLICITUD_INVALIDA`.
+
+Si la operacion ya fue aplicada pero falla la publicacion de `OperacionCompletadaEvent`, se registra un error tecnico y no se publica `OperacionFallidaEvent`, porque eso declararia incorrectamente que el movimiento financiero no ocurrio. Los logs incluyen `operationId`, `tipoOperacion`, `cuentaOrigenId`, `cuentaDestinoId` y el motivo del error.
+
+Una operacion que permanece en `SOLICITADA` debe investigarse revisando primero los logs de publicacion de `cuenta-service` y despues el topic `novabank.operaciones.completadas`. Una estrategia outbox queda pendiente para reintentar de forma durable estos fallos tecnicos.
+
+## Evolucion A Arquitectura Hexagonal
+
+La migracion sera gradual y por casos de uso verticales. No se han movido paquetes en bloque durante esta estabilizacion porque el procesamiento financiero combina transaccion local, eventos de movimiento, alertas y resultados Kafka.
+
+La estructura objetivo, el mapeo de paquetes y el primer corte recomendado estan documentados en [docs/arquitectura-hexagonal.md](docs/arquitectura-hexagonal.md). `documento-service` del Modulo 7 nace ya con estructura hexagonal; S3 vive bajo `adapter/out/storage` y queda detras de puertos de aplicacion.
 
 ## Testing
 
@@ -384,6 +1343,7 @@ mvn clean test
 mvn -pl cliente-service test
 mvn -pl cuenta-service test
 mvn -pl operacion-service test
+mvn -pl documento-service test
 ```
 
 Los tests de persistencia relevantes usan PostgreSQL mediante Testcontainers. Es necesario tener Docker Desktop o un runtime compatible en ejecucion para el reactor completo.
@@ -410,6 +1370,8 @@ Los servicios devuelven respuestas de error controladas con codigo, mensaje, tim
 
 ## Mejoras Futuras
 
+- Incorporar outbox o entrega transaccional para reintentar resultados Kafka sin confundir fallos tecnicos con fallos de negocio.
+- Ejecutar la migracion hexagonal vertical del procesamiento de operaciones en `cuenta-service`.
 - Persistencia durable de eventos de movimientos.
 - Integracion con un proveedor real de tipo de cambio.
 - Observabilidad centralizada con backend de trazas y metricas.
@@ -418,4 +1380,4 @@ Los servicios devuelven respuestas de error controladas con codigo, mensaje, tim
 
 ## Repositorio Y Autor
 
-Proyecto academico NovaBank Digital Services para la formacion Backend Java NTT. El PDF de entrega del Modulo 5 se prepara aparte a partir del estado final documentado en este repositorio.
+Proyecto academico NovaBank Digital Services para la formacion Backend Java NTT.

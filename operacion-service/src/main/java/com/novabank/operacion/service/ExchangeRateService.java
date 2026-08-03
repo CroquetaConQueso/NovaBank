@@ -42,7 +42,7 @@ public class ExchangeRateService {
     @Autowired
     public ExchangeRateService(
             WebClient.Builder webClientBuilder,
-            @Value("${novabank.clients.exchange-rate-service.base-url:http://EXCHANGE-RATE-SERVICE}") String baseUrl,
+            @Value("${novabank.clients.exchange-rate-service.base-url:http://exchange-rate-mock-service}") String baseUrl,
             @Value("${novabank.clients.exchange-rate-service.timeout:3s}") Duration timeout,
             ExchangeRateCache exchangeRateCache
     ) {

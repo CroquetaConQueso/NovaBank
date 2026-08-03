@@ -126,3 +126,23 @@ CREATE TABLE IF NOT EXISTS operaciones_publicas_idempotentes (
 
 CREATE INDEX IF NOT EXISTS idx_operaciones_publicas_idempotentes_estado
     ON operaciones_publicas_idempotentes (estado);
+
+CREATE TABLE IF NOT EXISTS operaciones_asincronas (
+    operation_id UUID PRIMARY KEY,
+    correlation_id UUID,
+    tipo_operacion VARCHAR(50) NOT NULL,
+    cuenta_id BIGINT NOT NULL,
+    cuenta_origen_id BIGINT,
+    cuenta_destino_id BIGINT,
+    importe NUMERIC(15,2) NOT NULL,
+    moneda VARCHAR(3) NOT NULL,
+    estado VARCHAR(20) NOT NULL,
+    motivo_fallo VARCHAR(500),
+    creada_en TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    actualizada_en TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT chk_operaciones_asincronas_estado
+        CHECK (estado IN ('SOLICITADA', 'COMPLETADA', 'FALLIDA'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_operaciones_asincronas_estado
+    ON operaciones_asincronas (estado);

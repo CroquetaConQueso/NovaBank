@@ -44,6 +44,20 @@ class MovimientoEventServiceTest {
     }
 
     @Test
+    void desconexionDeClienteNoCierraElBusParaNuevosSuscriptores() {
+        StepVerifier.create(movimientoEventService.streamDeCuenta(1L))
+                .thenCancel()
+                .verify();
+
+        StepVerifier.create(movimientoEventService.streamDeCuenta(1L))
+                .then(() -> movimientoEventService.publicar(evento(1L, "DEPOSITO")))
+                .expectNextMatches(evento -> evento.cuentaId().equals(1L)
+                        && evento.tipo().equals("DEPOSITO"))
+                .thenCancel()
+                .verify();
+    }
+
+    @Test
     void consumidorSinDemandaDescartaEventoPorBackpressure() {
         StepVerifier.create(movimientoEventService.streamDeCuenta(1L), 0)
                 .then(() -> movimientoEventService.publicar(evento(1L, "DEPOSITO")))

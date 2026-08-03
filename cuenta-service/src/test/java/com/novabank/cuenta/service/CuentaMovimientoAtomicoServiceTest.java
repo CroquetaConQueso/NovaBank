@@ -1,6 +1,7 @@
 package com.novabank.cuenta.service;
 
 import com.novabank.cuenta.dto.AplicarMovimientoRequestDTO;
+import com.novabank.cuenta.application.port.out.MovimientoRegistradoPublisherPort;
 import com.novabank.cuenta.exception.IdempotencyConflictException;
 import com.novabank.cuenta.exception.InsufficientBalanceException;
 import com.novabank.cuenta.exception.ResourceNotFoundException;
@@ -43,11 +44,17 @@ class CuentaMovimientoAtomicoServiceTest extends PostgresTestContainerSupport {
     private OperacionIdempotenteRepository operacionIdempotenteRepository;
 
     @MockBean
-    private MovimientoEventService movimientoEventService;
+    private MovimientoRegistradoPublisherPort movimientoRegistradoEventPublisher;
+
+    @MockBean
+    private SaldoBajoAlertService saldoBajoAlertService;
 
     @BeforeEach
     void setUp() {
-        reset(movimientoEventService);
+        reset(movimientoRegistradoEventPublisher);
+        reset(saldoBajoAlertService);
+        org.mockito.Mockito.when(movimientoRegistradoEventPublisher.publicar(any())).thenReturn(Mono.empty());
+        org.mockito.Mockito.when(saldoBajoAlertService.evaluarYPublicar(any())).thenReturn(Mono.empty());
         operacionIdempotenteRepository.deleteAll()
                 .then(cuentaRepository.deleteAll())
                 .block();
@@ -124,7 +131,8 @@ class CuentaMovimientoAtomicoServiceTest extends PostgresTestContainerSupport {
                 .expectNextCount(1)
                 .verifyComplete();
 
-        verify(movimientoEventService, times(2)).publicar(any());
+        verify(movimientoRegistradoEventPublisher, times(2)).publicar(any());
+        verify(saldoBajoAlertService, times(2)).evaluarYPublicar(any());
     }
 
     @Test
@@ -145,7 +153,8 @@ class CuentaMovimientoAtomicoServiceTest extends PostgresTestContainerSupport {
                 .expectNextCount(1)
                 .verifyComplete();
 
-        verify(movimientoEventService, times(2)).publicar(any());
+        verify(movimientoRegistradoEventPublisher, times(2)).publicar(any());
+        verify(saldoBajoAlertService, times(2)).evaluarYPublicar(any());
     }
 
     @Test
@@ -221,6 +230,8 @@ class CuentaMovimientoAtomicoServiceTest extends PostgresTestContainerSupport {
 
         StepVerifier.create(operacionIdempotenteRepository.findByOperationId("op-6"))
                 .verifyComplete();
+
+        verify(saldoBajoAlertService, org.mockito.Mockito.never()).evaluarYPublicar(any());
     }
 
     @Test

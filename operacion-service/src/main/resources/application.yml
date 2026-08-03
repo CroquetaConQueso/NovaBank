@@ -3,6 +3,27 @@ spring:
     name: operacion-service
   config:
     import: optional:configserver:http://localhost:8888
+  kafka:
+    bootstrap-servers: localhost:9092
+  cloud:
+    function:
+      definition: consumirOperacionCompletada;consumirOperacionFallida
+    stream:
+      bindings:
+        operacionSolicitada-out-0:
+          destination: novabank.operaciones.solicitadas
+          content-type: application/json
+        consumirOperacionCompletada-in-0:
+          destination: novabank.operaciones.completadas
+          group: operacion-service
+          content-type: application/json
+        consumirOperacionFallida-in-0:
+          destination: novabank.operaciones.fallidas
+          group: operacion-service
+          content-type: application/json
+      kafka:
+        binder:
+          brokers: localhost:9092
 
 eureka:
   client:
@@ -21,3 +42,19 @@ management:
 logging:
   pattern:
     level: "%5p [traceId=%X{traceId:-},spanId=%X{spanId:-}]"
+
+novabank:
+  aws:
+    region: eu-west-1
+    endpoint-override: http://localhost:4566
+  lambda:
+    comision-function-name: novabank-comision
+  kafka-streams:
+    operaciones-sospechosas:
+      enabled: true
+      application-id: operacion-service-suspicious-streams
+      bootstrap-servers: localhost:9092
+      input-topic: novabank.operaciones.solicitadas
+      output-topic: novabank.alertas.operaciones-sospechosas
+      ventana-minutos: 10
+      umbral-operaciones: 5

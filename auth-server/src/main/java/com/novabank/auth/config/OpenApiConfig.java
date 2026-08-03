@@ -8,12 +8,12 @@ import org.springframework.context.annotation.Configuration;
 @Configuration
 @OpenAPIDefinition(
         info = @Info(
-                title = "NovaBank - Autenticacion",
+                title = "NovaBank Auth API",
                 version = "4.0-SNAPSHOT",
-                description = "Registro, login y validacion de tokens JWT."
+                description = "API HTTP para registro, login y validacion de tokens JWT."
         ),
         servers = {
-                @Server(url = "/", description = "API Gateway")
+                @Server(url = "/", description = "Servicio local o ruta publicada por Gateway")
         }
 )
 public class OpenApiConfig {

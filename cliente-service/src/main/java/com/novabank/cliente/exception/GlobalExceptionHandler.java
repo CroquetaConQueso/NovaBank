@@ -33,6 +33,11 @@ public class GlobalExceptionHandler {
         return response(HttpStatus.CONFLICT, "CONFLICT", "Ya existe un cliente con alguno de los datos unicos indicados");
     }
 
+    @ExceptionHandler(EventoNoPublicadoException.class)
+    public Mono<ResponseEntity<ErrorResponseDTO>> handleEventoNoPublicado(EventoNoPublicadoException ex) {
+        return response(HttpStatus.SERVICE_UNAVAILABLE, "EVENT_NOT_PUBLISHED", ex.getMessage());
+    }
+
     @ExceptionHandler({
             IllegalArgumentException.class,
             ValidationException.class

@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: novabank-config
+data:
+  SPRING_PROFILES_ACTIVE: "docker"
+  SPRING_CONFIG_IMPORT: "optional:configserver:http://config-server:8888"
+  EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: "http://eureka-server:8761/eureka/"
+  SPRING_KAFKA_BOOTSTRAP_SERVERS: "kafka:9092"
+  SPRING_CLOUD_STREAM_KAFKA_BINDER_BROKERS: "kafka:9092"
+  POSTGRES_HOST: "postgres"
+  POSTGRES_PORT: "5432"
+  AWS_REGION: "eu-west-1"
+  AWS_ENDPOINT_URL: "http://localstack:4566"
+  NOVABANK_DOCUMENTOS_BUCKET: "novabank-justificantes"
+  NOVABANK_COMISION_LAMBDA_NAME: "novabank-comision"

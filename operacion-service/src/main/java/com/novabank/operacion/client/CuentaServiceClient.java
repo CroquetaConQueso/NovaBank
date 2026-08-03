@@ -35,7 +35,7 @@ public class CuentaServiceClient {
     @Autowired
     public CuentaServiceClient(
             WebClient.Builder webClientBuilder,
-            @Value("${novabank.clients.cuenta-service.base-url:http://CUENTA-SERVICE}") String baseUrl
+            @Value("${novabank.clients.cuenta-service.base-url:http://cuenta-service}") String baseUrl
     ) {
         this(
                 webClientBuilder,

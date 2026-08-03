@@ -1,0 +1,37 @@
+spring:
+  application:
+    name: documento-service
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.r2dbc.R2dbcAutoConfiguration
+      - org.springframework.boot.autoconfigure.data.r2dbc.R2dbcDataAutoConfiguration
+  cloud:
+    config:
+      enabled: false
+    discovery:
+      enabled: false
+    stream:
+      enabled: false
+      function:
+        autodetect: false
+      bindings:
+        generarJustificanteOperacion-in-0:
+          consumer:
+            auto-startup: false
+            autoStartup: false
+    function:
+      definition: ""
+
+eureka:
+  client:
+    enabled: false
+
+novabank:
+  aws:
+    region: eu-west-1
+    endpoint-override: http://localhost:4566
+  s3:
+    bucket-justificantes: novabank-justificantes
+    presigned-url-ttl: PT15M
+  storage:
+    type: s3

@@ -8,12 +8,12 @@ import org.springframework.context.annotation.Configuration;
 @Configuration
 @OpenAPIDefinition(
         info = @Info(
-                title = "NovaBank - Tipo de Cambio Mock",
+                title = "NovaBank Exchange Rate Mock API",
                 version = "4.0-SNAPSHOT",
-                description = "Proveedor externo simulado de tasas de cambio."
+                description = "API HTTP mock para tasas de cambio usadas por transferencias en divisa."
         ),
         servers = {
-                @Server(url = "/", description = "API Gateway")
+                @Server(url = "/", description = "Servicio local o ruta publicada por Gateway")
         }
 )
 public class OpenApiConfig {

@@ -5,12 +5,14 @@ import com.novabank.auth.tracing.CorrelationIdSupport;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.ConstraintViolationException;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.bind.support.WebExchangeBindException;
 import org.springframework.web.server.ServerWebInputException;
+import org.springframework.web.server.ResponseStatusException;
 import reactor.core.publisher.Mono;
 
 import java.util.LinkedHashMap;
@@ -76,13 +78,30 @@ public class GlobalExceptionHandler {
         return response(HttpStatus.BAD_REQUEST, "BAD_REQUEST", "La peticion no contiene los datos requeridos");
     }
 
+    @ExceptionHandler(ResponseStatusException.class)
+    public Mono<ResponseEntity<ErrorResponseDTO>> handleResponseStatus(ResponseStatusException ex) {
+        HttpStatusCode status = ex.getStatusCode();
+        String message = ex.getReason() != null ? ex.getReason() : resolveStatusMessage(status);
+        return response(status, resolveStatusCode(status), message);
+    }
+
     @ExceptionHandler(Exception.class)
     public Mono<ResponseEntity<ErrorResponseDTO>> handleGeneric(Exception ex) {
         return response(HttpStatus.INTERNAL_SERVER_ERROR, "INTERNAL_SERVER_ERROR", "Se ha producido un error inesperado");
     }
 
-    private Mono<ResponseEntity<ErrorResponseDTO>> response(HttpStatus status, String code, String message) {
+    private Mono<ResponseEntity<ErrorResponseDTO>> response(HttpStatusCode status, String code, String message) {
         return Mono.deferContextual(contextView -> Mono.just(ResponseEntity.status(status)
                 .body(ErrorResponseDTO.of(code, message, CorrelationIdSupport.fromContext(contextView)))));
+    }
+
+    private String resolveStatusCode(HttpStatusCode status) {
+        HttpStatus httpStatus = HttpStatus.resolve(status.value());
+        return httpStatus != null ? httpStatus.name() : "HTTP_" + status.value();
+    }
+
+    private String resolveStatusMessage(HttpStatusCode status) {
+        HttpStatus httpStatus = HttpStatus.resolve(status.value());
+        return httpStatus != null ? httpStatus.getReasonPhrase() : "HTTP " + status.value();
     }
 }
